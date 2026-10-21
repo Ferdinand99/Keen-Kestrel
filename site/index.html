@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'sha256-WZRJfWvsnNCPcxzZwvyhovnZGqhZaC+8gPGPRbx6wTk='; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Keen Kestrel — self-hosted error tracking and privacy-friendly analytics</title>
+    <meta
+      name="description"
+      content="Keen Kestrel is a self-hosted, Sentry-compatible error tracker with cookieless analytics, in one small Rust binary with SQLite. In development: follow along on GitHub."
+    />
+    <script>document.documentElement.classList.add("js");</script>
+    <link rel="canonical" href="https://ferdinand99.github.io/Keen-Kestrel/" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon.png" type="image/png" sizes="48x48" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0b0b0d" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ferdinand99.github.io/Keen-Kestrel/" />
+    <meta property="og:site_name" content="Keen Kestrel" />
+    <meta property="og:title" content="Keen Kestrel — self-hosted error tracking and privacy-friendly analytics" />
+    <meta
+      property="og:description"
+      content="Sentry-compatible error tracking and cookieless analytics in one small Rust binary with SQLite. In development."
+    />
+    <meta property="og:image" content="https://ferdinand99.github.io/Keen-Kestrel/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Keen Kestrel logo, an amber kestrel on a dark tile, with the tagline “Know what broke. See how it’s used.”" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Keen Kestrel — self-hosted error tracking and privacy-friendly analytics" />
+    <meta
+      name="twitter:description"
+      content="Sentry-compatible error tracking and cookieless analytics in one small Rust binary with SQLite. In development."
+    />
+    <meta name="twitter:image" content="https://ferdinand99.github.io/Keen-Kestrel/og-image.png" />
+    <link rel="preload" href="fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Keen Kestrel",
+        "description": "Self-hosted error tracking compatible with the official Sentry SDKs, plus privacy-friendly analytics without cookies, in one Rust binary with SQLite. In development.",
+        "url": "https://ferdinand99.github.io/Keen-Kestrel/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Linux (Docker)",
+        "image": "https://ferdinand99.github.io/Keen-Kestrel/og-image.png",
+        "license": "https://github.com/Ferdinand99/Keen-Kestrel/blob/main/LICENSE",
+        "sameAs": ["https://github.com/Ferdinand99/Keen-Kestrel"]
+      }
+    </script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <svg width="0" height="0" class="vh" aria-hidden="true" focusable="false">
+      <symbol id="gh" viewBox="0 0 16 16">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+      </symbol>
+    </svg>
+
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="topbar" id="top">
+      <div class="wrap topbar-inner">
+        <a class="brand" href="#top">
+          <img src="favicon.svg" alt="" width="28" height="28" />
+          <span>Keen Kestrel</span>
+        </a>
+
+        <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="topnav" hidden>
+          <span></span><span></span>
+        </button>
+
+        <nav class="topnav" id="topnav" aria-label="Main">
+          <a class="topnav-link" href="#errors">Errors</a>
+          <a class="topnav-link" href="#analytics">Analytics</a>
+          <a class="topnav-link" href="#sdks">SDKs</a>
+          <a class="topnav-link" href="#roadmap">Roadmap</a>
+          <a class="topnav-link" href="#faq">FAQ</a>
+          <a class="topnav-link" href="https://github.com/Ferdinand99/Keen-Kestrel/blob/main/docs/design.md">Design</a>
+          <a class="btn btn-ghost btn-sm" href="https://github.com/Ferdinand99/Keen-Kestrel" aria-label="Follow Keen Kestrel on GitHub">
+            <svg class="gh-mark" aria-hidden="true"><use href="#gh"></use></svg>
+            <span>Follow on GitHub</span>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Hero ============================================================ -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap">
+          <div class="hero-copy">
+            <div class="hero-icon">
+              <img src="favicon.svg" width="96" height="96" alt="" />
+            </div>
+            <a class="live-pill" href="#roadmap">
+              <span class="dot is-live" aria-hidden="true"></span>
+              <span>In development · nothing to install yet</span>
+              <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg>
+            </a>
+            <h1 class="display" id="hero-title">Know what broke.<br class="br-wide" /> See how it’s used.</h1>
+            <p class="lead">
+              Keen Kestrel is self-hosted error tracking and privacy-friendly analytics in one small
+              Rust binary. Point the Sentry SDKs you already use at your own server, and count your
+              users without cookies.
+            </p>
+            <p class="hero-fine">One binary and SQLite. No Kafka, ClickHouse, Redis or Postgres.</p>
+            <div class="hero-actions">
+              <a class="btn btn-primary btn-lg" href="https://github.com/Ferdinand99/Keen-Kestrel">
+                <svg class="gh-mark" aria-hidden="true"><use href="#gh"></use></svg>
+                <span>Follow on GitHub</span>
+              </a>
+              <a class="btn btn-ghost btn-lg" href="https://github.com/Ferdinand99/Keen-Kestrel/blob/main/docs/design.md">
+                <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file"></use></svg>
+                <span>Read the design</span>
+              </a>
+            </div>
+            <p class="hero-meta"><span>MIT licensed</span><span>Built in Rust</span><span>Sibling of Vigilant Vole</span></p>
+          </div>
+
+          <figure class="hero-shot">
+            <div
+              class="mock mock-wide"
+              role="img"
+              aria-label="Concept illustration of a project overview for an example notes app. On the left, three issues: a new EXC_BAD_ACCESS crash in ImageCache.decode, a regressed DecodingError, and an ongoing JavaScript TypeError. On the right, a week of active users as bars, and the crash-free users rate for the latest release. The data is made up."
+            >
+              <div class="mock-bar">
+                <span class="mock-title">Notes · project overview</span>
+                <span class="pill status-accent"><span class="dot"></span>Concept</span>
+              </div>
+              <div class="overview">
+                <div class="overview-col">
+                  <p class="mock-label">Unresolved issues</p>
+                  <ul class="list">
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon status-down"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#alert"></use></svg></span>
+                        <span class="list-main"><span class="list-title mono">EXC_BAD_ACCESS</span><span class="list-sub">ImageCache.decode(_:)</span></span>
+                        <span class="pill status-info">New</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon status-warning"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#refresh"></use></svg></span>
+                        <span class="list-main"><span class="list-title mono">DecodingError</span><span class="list-sub">keyNotFound in SyncClient.pull()</span></span>
+                        <span class="pill status-warning">Regressed</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon status-none"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#code"></use></svg></span>
+                        <span class="list-main"><span class="list-title mono">TypeError</span><span class="list-sub">Cannot read properties of undefined</span></span>
+                        <span class="pill">Ongoing</span>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+                <div class="overview-col">
+                  <p class="mock-label">Active users this week</p>
+                  <div class="bars" aria-hidden="true">
+                    <span class="bar h5"></span><span class="bar h6"></span><span class="bar h6"></span><span class="bar h7"></span><span class="bar h8"></span><span class="bar h4"></span><span class="bar h3 is-today"></span>
+                  </div>
+                  <div class="bars-axis" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+                  <div class="health">
+                    <span class="health-label">Crash-free users, latest release</span>
+                    <span class="health-meter"><span class="health-fill"></span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <figcaption>Concept illustration with made-up data. Kestrel has no interface yet; it will follow the Vigilant Vole design system.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Two questions ===================================================== -->
+      <section class="section" id="overview" aria-labelledby="overview-title">
+        <div class="wrap">
+          <header class="section-head center reveal">
+            <h2 class="headline" id="overview-title">Two questions, one place.</h2>
+            <p class="sub">
+              Most small teams need a crash reporter and an analytics service, and end up with two
+              hosted accounts, two dashboards and two places their users’ data goes. Kestrel puts both
+              on your own server, in the same project.
+            </p>
+          </header>
+
+          <ul class="pair">
+            <li class="card question reveal">
+              <span class="list-icon status-down"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#alert-circle"></use></svg></span>
+              <h3 class="title">What broke?</h3>
+              <p>
+                Errors and crashes from the <strong>official Sentry SDKs</strong>, grouped into issues,
+                with readable stack traces, iOS symbolication, release health and alerts.
+              </p>
+              <a class="link-arrow" href="#errors">Error tracking <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg></a>
+            </li>
+            <li class="card question reveal d1">
+              <span class="list-icon status-accent"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chart"></use></svg></span>
+              <h3 class="title">How is it used?</h3>
+              <p>
+                Signals from your apps and pageviews from your sites, <strong>without cookies or stored
+                IP addresses</strong>: users, versions, devices, pages and referrers.
+              </p>
+              <a class="link-arrow" href="#analytics">Analytics <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg></a>
+            </li>
+          </ul>
+
+          <div class="callout status-accent together reveal">
+            <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#link"></use></svg>
+            <p>
+              <span class="callout-title">Better together</span>
+              One project is one app or site, with the same keys and releases for both. A Sentry release
+              like <code>notes@1.4.0+52</code> matches the app version your analytics see, so a release
+              page can show how many people have updated next to its crash-free rate and new issues.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Errors ============================================================ -->
+      <section class="section section-alt" id="errors" aria-labelledby="errors-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <p class="eyebrow">Error tracking</p>
+            <h2 class="headline" id="errors-title">Crashes you can read, issues you can act on.</h2>
+            <p class="sub">
+              Kestrel speaks the Sentry protocol, so the SDKs you know send their events here without a
+              fork or a plugin. It is built to cover what a small team uses every day, and to leave out
+              the rest.
+            </p>
+          </header>
+
+          <div class="rows">
+            <!-- Symbolication -->
+            <article class="row" id="symbolication">
+              <div class="row-copy reveal">
+                <h3 class="title">Readable Swift stacks from real crashes.</h3>
+                <p>
+                  Upload your dSYMs with the official <code class="nw">sentry-cli</code>, so the Xcode build phase
+                  and fastlane keep working. Kestrel turns each one into a symbol cache once, then maps
+                  every frame of an iOS or macOS crash back to <strong>function, file and line</strong>,
+                  expands inlined frames and demangles Swift.
+                </p>
+                <p>
+                  No dSYM yet? The frames keep their image and offset and the issue is marked
+                  <em>not symbolicated</em>, so you know what’s missing. Rust, Python, Go and JavaScript
+                  SDKs send readable frames already; Kestrel highlights your own code.
+                </p>
+              </div>
+              <div class="row-art reveal">
+                <div
+                  class="mock"
+                  role="img"
+                  aria-label="Concept illustration of a symbolicated crash: EXC_BAD_ACCESS in the example Notes app. Frame 0, highlighted as app code, is ImageCache.decode at ImageCache.swift line 87; frame 1 is a closure in ThumbnailView.load at ThumbnailView.swift line 42, inlined; frames 2 and 3 are system frames in libdispatch."
+                >
+                  <div class="mock-bar">
+                    <span class="mock-title mono">EXC_BAD_ACCESS</span>
+                    <span class="pill status-up"><span class="dot"></span>Symbolicated</span>
+                  </div>
+                  <p class="mock-caption">KERN_INVALID_ADDRESS · Thread 3 crashed · Notes 1.4.0 (52)</p>
+                  <ol class="trace">
+                    <li class="frame is-app">
+                      <span class="frame-n">0</span>
+                      <span class="frame-main"><span class="frame-fn">ImageCache.decode(_:)</span><span class="frame-loc">ImageCache.swift:87</span></span>
+                      <span class="frame-img">Notes</span>
+                    </li>
+                    <li class="frame is-app">
+                      <span class="frame-n">1</span>
+                      <span class="frame-main"><span class="frame-fn">closure #1 in ThumbnailView.load()</span><span class="frame-loc">ThumbnailView.swift:42 · inlined</span></span>
+                      <span class="frame-img">Notes</span>
+                    </li>
+                    <li class="frame">
+                      <span class="frame-n">2</span>
+                      <span class="frame-main"><span class="frame-fn">_dispatch_call_block_and_release</span></span>
+                      <span class="frame-img">libdispatch</span>
+                    </li>
+                    <li class="frame">
+                      <span class="frame-n">3</span>
+                      <span class="frame-main"><span class="frame-fn">_dispatch_client_callout</span></span>
+                      <span class="frame-img">libdispatch</span>
+                    </li>
+                  </ol>
+                  <ul class="chips">
+                    <li class="chip chip-on">Only app code</li>
+                    <li class="chip">Breadcrumbs</li>
+                    <li class="chip">Why grouped</li>
+                    <li class="chip">Raw JSON</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <!-- Grouping -->
+            <article class="row row-flip" id="grouping">
+              <div class="row-copy reveal">
+                <h3 class="title">Grouped into issues, not a flood of events.</h3>
+                <p>
+                  Events are grouped by the SDK’s <code>fingerprint</code> when you set one, otherwise by
+                  the exception type and your own frames, with addresses, generics and hash suffixes
+                  stripped. Each issue can show <strong>why</strong> its events were grouped together.
+                </p>
+                <p>
+                  Resolve, resolve in the next release, ignore or merge. When a resolved issue comes back
+                  it is marked <strong>regressed</strong> and you hear about it. Search the way you think:
+                  <code>is:unresolved release:1.4 os:iOS</code>.
+                </p>
+              </div>
+              <div class="row-art reveal">
+                <div
+                  class="mock"
+                  role="img"
+                  aria-label="Concept illustration of the issue list filtered by is:unresolved release:1.4. Four example issues: a new EXC_BAD_ACCESS, a regressed DecodingError, an ongoing URLError timeout and an ongoing JavaScript TypeError, each with a count of events."
+                >
+                  <div class="searchbar">
+                    <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#search"></use></svg>
+                    <span class="mono">is:unresolved release:1.4</span>
+                  </div>
+                  <ul class="list">
+                    <li>
+                      <div class="list-row">
+                        <span class="list-main"><span class="list-title mono">EXC_BAD_ACCESS</span><span class="list-sub">ImageCache.decode(_:) · iOS</span></span>
+                        <span class="pill status-info">New</span>
+                        <span class="list-value">12</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-main"><span class="list-title mono">DecodingError</span><span class="list-sub">keyNotFound in SyncClient.pull() · iOS</span></span>
+                        <span class="pill status-warning">Regressed</span>
+                        <span class="list-value">31</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-main"><span class="list-title mono">URLError</span><span class="list-sub">timedOut in UploadQueue.flush() · macOS</span></span>
+                        <span class="pill">Ongoing</span>
+                        <span class="list-value">87</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-main"><span class="list-title mono">TypeError</span><span class="list-sub">Cannot read properties of undefined · web</span></span>
+                        <span class="pill">Ongoing</span>
+                        <span class="list-value">204</span>
+                      </div>
+                    </li>
+                  </ul>
+                  <p class="mock-caption">Illustration with made-up issues and counts.</p>
+                </div>
+              </div>
+            </article>
+
+            <!-- Alerts -->
+            <article class="row" id="alerts">
+              <div class="row-copy reveal">
+                <h3 class="title">Alerts where you already are.</h3>
+                <p>
+                  Per-project rules for a <strong>new issue</strong>, a <strong>regression</strong>, a
+                  <strong>spike</strong> above the usual hourly level, and the <strong>first crash in a
+                  new release</strong>. A cooldown per issue and a digest mode keep it calm.
+                </p>
+                <p>
+                  Delivery uses the same notification providers as Vigilant Vole: about 40 of them, from
+                  Discord and Slack to ntfy, email and webhooks.
+                </p>
+              </div>
+              <div class="row-art reveal">
+                <div
+                  class="mock"
+                  role="img"
+                  aria-label="Concept illustration of four alert rules: new issue to Discord, regression to Slack and email, spike to ntfy, and first crash in a new release to Pushover."
+                >
+                  <div class="mock-bar">
+                    <span class="mock-title">Alert rules</span>
+                    <span class="pill status-accent"><span class="dot"></span>Concept</span>
+                  </div>
+                  <ul class="list">
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon status-info"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"></use></svg></span>
+                        <span class="list-main"><span class="list-title">New issue</span><span class="list-sub">Discord</span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon status-warning"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#refresh"></use></svg></span>
+                        <span class="list-main"><span class="list-title">Regression</span><span class="list-sub">Slack, email</span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon status-down"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#pulse"></use></svg></span>
+                        <span class="list-main"><span class="list-title">Spike</span><span class="list-sub">ntfy · above the 7-day hourly baseline</span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-icon status-accent"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#tag"></use></svg></span>
+                        <span class="list-main"><span class="list-title">First crash in a new release</span><span class="list-sub">Pushover</span></span>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div class="more">
+            <h3 class="title reveal">And the rest of a proper error tracker.</h3>
+          </div>
+          <ul class="grid">
+            <li class="card feature reveal">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#heart"></use></svg></span>
+              <h3>Release health</h3>
+              <p>Crash-free sessions and crash-free users per release, rolled up from the sessions your SDK already sends.</p>
+            </li>
+            <li class="card feature reveal d1">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#eye-off"></use></svg></span>
+              <h3>Scrubbed before it’s stored</h3>
+              <p>No IP is ever derived. Authorization and cookie headers, secret-looking keys and card numbers are removed; emails and usernames are hashed unless you opt in.</p>
+            </li>
+            <li class="card feature reveal d2">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#mail"></use></svg></span>
+              <h3>Feedback and screenshots</h3>
+              <p>User feedback from the SDK, and screenshots and view hierarchies attached to an event, shown with the issue.</p>
+            </li>
+            <li class="card feature reveal">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#code"></use></svg></span>
+              <h3>API and MCP</h3>
+              <p>A REST API with OpenAPI docs, and MCP tools so a coding agent can list issues, read a stack trace and resolve what it fixed.</p>
+            </li>
+            <li class="card feature reveal d1">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#archive"></use></svg></span>
+              <h3>Retention you choose</h3>
+              <p>By default, event details for 30 days and issues until 90 days after they were last seen, while counters and rollups stay. Per project.</p>
+            </li>
+            <li class="card feature reveal d2">
+              <span class="list-icon"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#globe"></use></svg></span>
+              <h3>26 languages</h3>
+              <p>The same interface languages as Vigilant Vole, with a glossary per language so every term says the same thing.</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Analytics ========================================================= -->
+      <section class="section" id="analytics" aria-labelledby="analytics-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <p class="eyebrow">Analytics</p>
+            <h2 class="headline" id="analytics-title">How your apps and sites are used, and nothing more.</h2>
+            <p class="sub">
+              Counts and trends, not profiles. Kestrel answers “how many people use version 1.4?” and
+              “where do visitors come from?”, and it is built so it can’t answer “what did this person
+              do?”.
+            </p>
+          </header>
+
+          <div class="rows">
+            <article class="row" id="apps">
+              <div class="row-copy reveal">
+                <h3 class="title">App signals from a small Swift package.</h3>
+                <p>
+                  <strong>KestrelKit</strong> is a Swift package for iOS and macOS with no dependencies.
+                  Send a signal such as <code>App.launched</code> or <code>Paywall.shown</code>; it queues
+                  on disk when you’re offline and sends in batches.
+                </p>
+                <p>
+                  Dashboards show daily, weekly and monthly users, sessions, version adoption, OS
+                  versions, devices and locales, with one filter bar for date, version, platform and
+                  signal type.
+                </p>
+              </div>
+              <div class="row-art reveal">
+                <div
+                  class="mock"
+                  role="img"
+                  aria-label="Concept illustration of version adoption for the example Notes app: version 1.4.0 is the largest share, 1.3.2 is second, and older versions are a small remainder. Below, the top signal types App.launched, Note.created and Paywall.shown."
+                >
+                  <div class="mock-bar">
+                    <span class="mock-title">Version adoption</span>
+                    <span class="pill status-accent"><span class="dot"></span>Concept</span>
+                  </div>
+                  <div class="adoption" aria-hidden="true">
+                    <span class="seg seg-1"></span><span class="seg seg-2"></span><span class="seg seg-3"></span>
+                  </div>
+                  <ul class="legend" aria-hidden="true">
+                    <li><span class="swatch seg-1"></span>1.4.0</li>
+                    <li><span class="swatch seg-2"></span>1.3.2</li>
+                    <li><span class="swatch seg-3"></span>Older</li>
+                  </ul>
+                  <ul class="list">
+                    <li>
+                      <div class="list-row">
+                        <span class="list-main"><span class="list-title mono">App.launched</span></span>
+                        <span class="meter"><span class="meter-fill w9"></span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-main"><span class="list-title mono">Note.created</span></span>
+                        <span class="meter"><span class="meter-fill w6"></span></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="list-row">
+                        <span class="list-main"><span class="list-title mono">Paywall.shown</span></span>
+                        <span class="meter"><span class="meter-fill w2"></span></span>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="row row-flip" id="web">
+              <div class="row-copy reveal">
+                <h3 class="title">Website pageviews from a script under 2&nbsp;KB.</h3>
+                <p>
+                  Add one small script to your site. It follows single-page apps, sends with
+                  <code>sendBeacon</code>, and never sets a cookie or stores anything in the visitor’s
+                  browser.
+                </p>
+                <p>
+                  See visitors and pageviews over time, top pages, referrers, UTM campaigns, browsers,
+                  operating systems and device classes.
+                </p>
+              </div>
+              <div class="row-art reveal">
+                <div
+                  class="mock"
+                  role="img"
+                  aria-label="Concept illustration of web analytics: top pages, with the home page first, then the docs and the pricing page, and top referrers, with a search engine first, then GitHub and a newsletter."
+                >
+                  <div class="mock-bar">
+                    <span class="mock-title">Top pages</span>
+                    <span class="pill status-accent"><span class="dot"></span>Concept</span>
+                  </div>
+                  <ul class="list">
+                    <li><div class="list-row"><span class="list-main"><span class="list-title mono">/</span></span><span class="meter"><span class="meter-fill w9"></span></span></div></li>
+                    <li><div class="list-row"><span class="list-main"><span class="list-title mono">/docs/getting-started</span></span><span class="meter"><span class="meter-fill w5"></span></span></div></li>
+                    <li><div class="list-row"><span class="list-main"><span class="list-title mono">/pricing</span></span><span class="meter"><span class="meter-fill w3"></span></span></div></li>
+                  </ul>
+                  <div class="mock-bar"><span class="mock-title">Referrers</span></div>
+                  <ul class="list">
+                    <li><div class="list-row"><span class="list-main"><span class="list-title">Search engines</span></span><span class="meter"><span class="meter-fill w8"></span></span></div></li>
+                    <li><div class="list-row"><span class="list-main"><span class="list-title">github.com</span></span><span class="meter"><span class="meter-fill w4"></span></span></div></li>
+                    <li><div class="list-row"><span class="list-main"><span class="list-title">utm_source=newsletter</span></span><span class="meter"><span class="meter-fill w2"></span></span></div></li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <!-- Privacy model -->
+          <div class="privacy" id="privacy">
+            <header class="section-head center reveal">
+              <h3 class="headline" id="privacy-title">Counting without cookies.</h3>
+              <p class="sub">
+                To count unique visitors, a site has to recognise a repeat visit, but it doesn’t have to
+                remember who you are. Here is the whole trick, in plain words.
+              </p>
+            </header>
+
+            <ol class="flow reveal" aria-labelledby="privacy-title">
+              <li class="flow-step">
+                <span class="flow-n" aria-hidden="true">1</span>
+                <h4>A visit arrives</h4>
+                <p>The server briefly sees the visitor’s IP address and browser, as every web server does.</p>
+              </li>
+              <li class="flow-step">
+                <span class="flow-n" aria-hidden="true">2</span>
+                <h4>It becomes a scrambled number</h4>
+                <p>IP, browser, site and <strong>today’s secret salt</strong> go through a one-way hash. Only the short result is kept.</p>
+              </li>
+              <li class="flow-step">
+                <span class="flow-n" aria-hidden="true">3</span>
+                <h4>The originals are dropped</h4>
+                <p>The IP address and the browser string are never written to disk. Neither is a cookie set.</p>
+              </li>
+              <li class="flow-step">
+                <span class="flow-n" aria-hidden="true">4</span>
+                <h4>At midnight, the salt is gone</h4>
+                <p>The salt lives only in memory and is replaced every day at midnight UTC. Tomorrow, the same visitor is a new, unrelated number.</p>
+              </li>
+            </ol>
+
+            <div class="ledger">
+              <div class="card ledger-col reveal">
+                <h4><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x-circle"></use></svg> Never stored</h4>
+                <ul class="ticks ticks-no">
+                  <li>IP addresses, for analytics and for errors</li>
+                  <li>Cookies, or anything else kept in the visitor’s browser</li>
+                  <li>The full user-agent string</li>
+                  <li>Advertising or vendor ids (IDFA, IDFV)</li>
+                  <li>An app’s raw install id</li>
+                  <li>Values that look like an email, phone or card number</li>
+                </ul>
+              </div>
+              <div class="card ledger-col reveal d1">
+                <h4><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check-circle"></use></svg> What is kept</h4>
+                <ul class="ticks">
+                  <li>The page path, without its query string except <code>utm_*</code></li>
+                  <li>The referring domain and a screen-width bucket</li>
+                  <li>Browser, OS and device class, worked out on the server</li>
+                  <li>App version, OS, device model and locale for app signals</li>
+                  <li>
+                    For apps, a keyed hash of a random install id, so weekly and monthly users can be
+                    counted. A strict mode rotates it daily too.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SDKs ============================================================== -->
+      <section class="section section-alt" id="sdks" aria-labelledby="sdks-title">
+        <div class="wrap">
+          <div class="split">
+            <header class="split-copy reveal">
+              <p class="eyebrow">Setup</p>
+              <h2 class="headline" id="sdks-title">Works with the SDKs you already use.</h2>
+              <p class="sub">
+                Kestrel ships no error SDK of its own. Keep the official Sentry SDK in your app and
+                change one thing: the DSN, which points at your own server instead.
+              </p>
+              <ul class="chips sdk-chips" aria-label="Platforms">
+                <li class="chip">iOS and macOS (Swift)</li>
+                <li class="chip">JavaScript</li>
+                <li class="chip">Rust</li>
+                <li class="chip">Python</li>
+                <li class="chip">Go</li>
+                <li class="chip">…and other official Sentry SDKs</li>
+              </ul>
+              <p class="split-note">
+                For analytics, <strong>KestrelKit</strong> (Swift) and the <strong>k.js</strong> web
+                script are Kestrel’s own, and small.
+              </p>
+            </header>
+
+            <div class="split-art reveal">
+              <div class="code-card">
+                <div class="code-head">
+                  <span>Point a Sentry SDK at Kestrel</span>
+                  <span class="pill status-warning"><span class="dot"></span>Planned</span>
+                </div>
+                <pre tabindex="0" role="region" translate="no" aria-label="Planned example: configuring Sentry SDKs with a Kestrel DSN"><code><span class="c">// The DSN comes from your project’s settings in Kestrel</span>
+<span class="c">// https://&lt;public key&gt;@kestrel.example.com/&lt;project id&gt;</span>
+
+<span class="c">// Swift</span>
+SentrySDK.start { options <span class="k">in</span>
+    options.dsn = <span class="s">"https://abc123@kestrel.example.com/1"</span>
+}
+
+<span class="c">// JavaScript</span>
+Sentry.init({ dsn: <span class="s">"https://abc123@kestrel.example.com/2"</span> });
+
+<span class="c"># Python</span>
+sentry_sdk.init(dsn=<span class="s">"https://abc123@kestrel.example.com/3"</span>)</code></pre>
+              </div>
+
+              <div class="code-card">
+                <div class="code-head">
+                  <span>Upload dSYMs with sentry-cli</span>
+                  <span class="pill status-warning"><span class="dot"></span>Planned</span>
+                </div>
+                <pre tabindex="0" role="region" translate="no" aria-label="Planned example: uploading dSYMs to Kestrel with sentry-cli"><code><span class="k">export</span> SENTRY_URL=https://kestrel.example.com
+<span class="k">export</span> SENTRY_AUTH_TOKEN=kk_…   <span class="c"># a Kestrel API token with difs:write</span>
+sentry-cli debug-files upload --org any --project notes build/</code></pre>
+              </div>
+
+              <div class="callout status-warning">
+                <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#alert"></use></svg>
+                <p>
+                  <span class="callout-title">Not working yet</span>
+                  These snippets show how setup is meant to work once Kestrel exists. There is no server
+                  to point them at today.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Architecture ======================================================= -->
+      <section class="section" id="architecture" aria-labelledby="architecture-title">
+        <div class="wrap">
+          <header class="section-head center reveal">
+            <p class="eyebrow">Architecture</p>
+            <h2 class="headline" id="architecture-title">One binary. SQLite. That’s the stack.</h2>
+            <p class="sub">
+              Error trackers and analytics tools often need a queue, a column store, a cache and a
+              database before they show a single event. Kestrel is one Rust process with two SQLite
+              files, like Vigilant Vole.
+            </p>
+          </header>
+
+          <figure class="arch reveal">
+            <div class="arch-col">
+              <p class="arch-label">In</p>
+              <ul class="arch-list">
+                <li>Sentry SDKs</li>
+                <li><code class="nw">sentry-cli</code> (dSYMs)</li>
+                <li>KestrelKit · k.js</li>
+              </ul>
+            </div>
+            <div class="arch-arrow" aria-hidden="true"><svg class="icon"><use href="assets/icons.svg#chevron-right"></use></svg></div>
+            <div class="arch-core">
+              <div class="arch-core-head">
+                <img src="assets/kestrel-mark.svg" alt="" width="28" height="25" />
+                <span>kestrel <small>one Rust binary</small></span>
+              </div>
+              <ol class="arch-pipe">
+                <li>Ingest</li>
+                <li>Bounded queue</li>
+                <li>One batch writer</li>
+              </ol>
+              <div class="arch-dbs">
+                <div class="db">
+                  <span class="db-name">kestrel.sqlite</span>
+                  <span class="db-sub">Issues, releases, rollups, settings</span>
+                </div>
+                <div class="db">
+                  <span class="db-name">store.sqlite</span>
+                  <span class="db-sub">Event details and raw signals; safe to throw away</span>
+                </div>
+              </div>
+            </div>
+            <div class="arch-arrow" aria-hidden="true"><svg class="icon"><use href="assets/icons.svg#chevron-right"></use></svg></div>
+            <div class="arch-col">
+              <p class="arch-label">Out</p>
+              <ul class="arch-list">
+                <li>Web interface (live updates)</li>
+                <li>REST API · OpenAPI</li>
+                <li>MCP tools</li>
+                <li>Alerts to ~40 channels</li>
+              </ul>
+            </div>
+            <figcaption class="vh">
+              Diagram: Sentry SDKs, sentry-cli and Kestrel’s own analytics SDKs send to one Kestrel
+              binary. Inside, ingest feeds a bounded queue and a single batch writer, which writes to two
+              SQLite files: kestrel.sqlite for issues, releases, rollups and settings, and store.sqlite for
+              event details and raw signals. Out come the web interface, the REST API, MCP tools and
+              alerts.
+            </figcaption>
+          </figure>
+
+          <div class="not-needed reveal">
+            <p class="not-needed-label" id="not-needed-label">Not needed:</p>
+            <ul class="chips" aria-labelledby="not-needed-label">
+              <li class="chip">Kafka</li>
+              <li class="chip">ClickHouse</li>
+              <li class="chip">Redis</li>
+              <li class="chip">Postgres</li>
+              <li class="chip">Extra containers</li>
+            </ul>
+          </div>
+
+          <ul class="stats targets">
+            <li class="stat reveal">
+              <span class="stat-label">Designed for</span>
+              <span class="stat-value">2<small>vCPU</small> 2<small>GB</small></span>
+              <span class="stat-meta">A small VPS or home server</span>
+            </li>
+            <li class="stat reveal d1">
+              <span class="stat-label">Memory when idle</span>
+              <span class="stat-value">&lt;150<small>MB</small></span>
+              <span class="stat-meta">Target</span>
+            </li>
+            <li class="stat reveal d2">
+              <span class="stat-label">Container image</span>
+              <span class="stat-value">&lt;40<small>MB</small></span>
+              <span class="stat-meta">Target, amd64 and arm64</span>
+            </li>
+            <li class="stat reveal d3">
+              <span class="stat-label">Runs on</span>
+              <span class="stat-value stat-text">Docker · Unraid · Proxmox · Linux</span>
+              <span class="stat-meta">Like Vigilant Vole</span>
+            </li>
+          </ul>
+          <p class="targets-note reveal">These are design targets from the plan, not measurements. They’ll be load-tested before v1.0.</p>
+        </div>
+      </section>
+
+      <!-- Compare ========================================================= -->
+      <section class="section section-alt" id="compare" aria-labelledby="compare-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <h2 class="headline" id="compare-title">Why Kestrel, and why not.</h2>
+            <p class="sub">
+              Sentry is an excellent, far bigger product, and the hosted analytics services are good at
+              what they do. Kestrel is for when you’d rather run something small yourself. Here is the
+              honest version, comparing Kestrel’s plan for v1 with what exists today.
+            </p>
+          </header>
+
+          <div class="table-wrap reveal">
+            <table class="compare">
+              <caption class="vh">Comparison of Keen Kestrel’s planned v1 with hosted services and self-hosted Sentry</caption>
+              <thead>
+                <tr>
+                  <th scope="col"><span class="vh">Topic</span></th>
+                  <th scope="col">Keen Kestrel <span class="th-sub">planned v1</span></th>
+                  <th scope="col">Hosted Sentry and analytics</th>
+                  <th scope="col">Self-hosted Sentry</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><th scope="row">Where the data lives</th><td data-label="Keen Kestrel">Your server</td><td data-label="Hosted">The provider’s cloud</td><td data-label="Self-hosted Sentry">Your server</td></tr>
+                <tr><th scope="row">What you run</th><td data-label="Keen Kestrel">One binary and SQLite</td><td data-label="Hosted">Nothing</td><td data-label="Self-hosted Sentry">Many containers, including Kafka, ClickHouse, Redis and Postgres</td></tr>
+                <tr><th scope="row">Official Sentry SDKs</th><td data-label="Keen Kestrel"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Unchanged</span></td><td data-label="Hosted"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td><td data-label="Self-hosted Sentry"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+                <tr><th scope="row">Errors and analytics together</th><td data-label="Keen Kestrel"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Same projects and releases</span></td><td data-label="Hosted">Usually two services</td><td data-label="Self-hosted Sentry">Analytics needs another tool</td></tr>
+                <tr><th scope="row">Cookieless analytics, no stored IPs</th><td data-label="Keen Kestrel"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>By design</span></td><td data-label="Hosted">Depends on the service</td><td data-label="Self-hosted Sentry">Not applicable</td></tr>
+                <tr><th scope="row">Performance tracing, profiling, session replay</th><td data-label="Keen Kestrel"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x"></use></svg>Not in v1</span></td><td data-label="Hosted"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td><td data-label="Self-hosted Sentry"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+                <tr><th scope="row">JavaScript source maps</th><td data-label="Keen Kestrel"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#clock"></use></svg>Planned for v1.1</span></td><td data-label="Hosted"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td><td data-label="Self-hosted Sentry"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+                <tr><th scope="row">Android and native minidumps</th><td data-label="Keen Kestrel"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x"></use></svg>Not in v1</span></td><td data-label="Hosted"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td><td data-label="Self-hosted Sentry"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+                <tr><th scope="row">Funnels, cohorts, countries</th><td data-label="Keen Kestrel"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x"></use></svg>Not in v1</span></td><td data-label="Hosted">Depends on the service</td><td data-label="Self-hosted Sentry">Not applicable</td></tr>
+                <tr><th scope="row">Organisations, SSO, billing</th><td data-label="Keen Kestrel"><span class="mark mark-no"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#x"></use></svg>One owner or team per instance</span></td><td data-label="Hosted"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td><td data-label="Self-hosted Sentry"><span class="mark mark-yes"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"></use></svg>Yes</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout status-info compare-note reveal">
+            <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#info"></use></svg>
+            <p>
+              <span class="callout-title">When something else is the better fit</span>
+              If you need tracing, replay, profiling, Android crashes or source maps, or you’re a larger
+              organisation, use Sentry. And today, use anything that exists: Kestrel is still a design.
+              Keen Kestrel is not affiliated with Sentry; it implements the open Sentry protocol so
+              their SDKs can talk to it.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Roadmap ========================================================= -->
+      <section class="section" id="roadmap" aria-labelledby="roadmap-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <h2 class="headline" id="roadmap-title">Where it stands.</h2>
+            <p class="sub">
+              Kestrel is built in phases, riskiest part first. There are no dates: each step is done when
+              it works, and the <a href="https://github.com/Ferdinand99/Keen-Kestrel/blob/main/docs/design.md#11-phases">phase table in the design</a>
+              says what “works” means.
+            </p>
+          </header>
+
+          <ol class="roadmap">
+            <li class="milestone is-done reveal">
+              <span class="ms-marker" aria-hidden="true"><svg class="icon"><use href="assets/icons.svg#check"></use></svg></span>
+              <div class="ms-body">
+                <p class="ms-status"><span class="pill status-up"><span class="dot"></span>Done</span></p>
+                <h3>Design</h3>
+                <p>Scope, data model, Sentry protocol coverage, privacy model and phases, written down and approved.</p>
+              </div>
+            </li>
+            <li class="milestone is-done reveal">
+              <span class="ms-marker" aria-hidden="true"><svg class="icon"><use href="assets/icons.svg#check"></use></svg></span>
+              <div class="ms-body">
+                <p class="ms-status"><span class="pill status-up"><span class="dot"></span>Done</span></p>
+                <h3>Spike: symbolication first</h3>
+                <p>
+                  A throwaway <a href="https://github.com/Ferdinand99/kestrel-spike">spike</a> proved it: real
+                  sentry-cocoa crashes, dSYMs uploaded with <code class="nw">sentry-cli</code>, symbolicated with
+                  Swift names, files, lines and inlined frames, also in a 5.5 MiB static Rust image.
+                </p>
+              </div>
+            </li>
+            <li class="milestone is-now reveal">
+              <span class="ms-marker" aria-hidden="true"><span class="dot is-live"></span></span>
+              <div class="ms-body">
+                <p class="ms-status"><span class="pill status-accent"><span class="dot"></span>In progress</span></p>
+                <h3>Shared foundation: vole-kit</h3>
+                <p>
+                  Sign-in, users, API tokens, settings, translations, notifications and the design system
+                  move out of Vigilant Vole into a shared crate, with Vigilant Vole’s behaviour unchanged.
+                </p>
+              </div>
+            </li>
+            <li class="milestone reveal">
+              <span class="ms-marker" aria-hidden="true"></span>
+              <div class="ms-body">
+                <p class="ms-status"><span class="pill">Then</span></p>
+                <h3>v0.1 “errors”</h3>
+                <p>Ingest, grouping, issues and search, symbolication, alerts, release health, API and MCP tools.</p>
+              </div>
+            </li>
+            <li class="milestone reveal">
+              <span class="ms-marker" aria-hidden="true"></span>
+              <div class="ms-body">
+                <p class="ms-status"><span class="pill">Then</span></p>
+                <h3>v0.2 “analytics”</h3>
+                <p>Web analytics with k.js, then KestrelKit for apps, and release pages that show adoption next to crashes.</p>
+              </div>
+            </li>
+            <li class="milestone reveal">
+              <span class="ms-marker" aria-hidden="true"></span>
+              <div class="ms-body">
+                <p class="ms-status"><span class="pill">Then</span></p>
+                <h3>v1.0</h3>
+                <p>Load tests against the targets, installers, Unraid and Proxmox templates, and all 26 languages.</p>
+              </div>
+            </li>
+          </ol>
+
+          <p class="later reveal">
+            <strong>Later, from v1.1:</strong> JavaScript source maps, Apple <code>.ips</code> and MetricKit
+            reports, minidumps, funnels and retention cohorts, countries from your own GeoIP database, and
+            performance tracing.
+          </p>
+        </div>
+      </section>
+
+      <!-- FAQ ============================================================= -->
+      <section class="section" id="faq" aria-labelledby="faq-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <h2 class="headline" id="faq-title">Questions.</h2>
+          </header>
+          <ul class="faq reveal">
+            <li>
+              <details>
+                <summary>When can I use it?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    Not yet, and there’s no date. The design is done, the symbolication spike worked, and the shared foundation is being built now. The first
+                    usable release will be v0.1 “errors”; analytics follow in v0.2. Watch or star the
+                    <a href="https://github.com/Ferdinand99/Keen-Kestrel">repository</a> to hear when it
+                    ships.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Is it open source?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    Yes, under the <a href="https://github.com/Ferdinand99/Keen-Kestrel/blob/main/LICENSE">MIT license</a>,
+                    like Vigilant Vole and Nimble Newt. No paid tier, no account.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Which SDKs will work?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    For errors, the official Sentry SDKs, unchanged: Swift (sentry-cocoa), JavaScript,
+                    Rust, Python, Go and others that speak the same protocol. Kestrel is tested against
+                    recorded requests from real SDKs, and a nightly job will run current SDKs and
+                    <code class="nw">sentry-cli</code> against it.
+                  </p>
+                  <p>
+                    Kestrel keeps errors, sessions, user feedback and attachments. Traces, profiles,
+                    replays, logs and metrics are accepted and dropped, so an SDK with those switched on
+                    keeps working.
+                  </p>
+                  <p>For analytics: KestrelKit for Swift apps and the k.js script for websites.</p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>How much server does it need?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    It is designed to run comfortably on 2 vCPU and 2 GB of memory, as one container or
+                    one binary, with data in SQLite. The targets for that size are 500 events and 3,000
+                    signals a second and under 150 MB of memory when idle. They are targets until the
+                    load tests say otherwise.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Is it a fork of Sentry?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    No. It is a new Rust program that speaks the Sentry protocol, so Sentry’s SDKs and
+                    <code class="nw">sentry-cli</code> can talk to it. For symbolication it uses
+                    <code>symbolic</code>, the open-source library Sentry publishes for that job.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Do I need a cookie banner for the analytics?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    Kestrel sets no cookies, stores nothing in the visitor’s browser and keeps no IP
+                    addresses, which is what usually makes a banner necessary. Whether you need one in
+                    the end depends on your site and your jurisdiction, so check your own situation.
+                  </p>
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>How can I help?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
+                <div class="faq-body">
+                  <p>
+                    Read the <a href="https://github.com/Ferdinand99/Keen-Kestrel/blob/main/docs/design.md">design</a>
+                    and open an issue with questions or objections. If you speak one of the 26 languages,
+                    the draft <a href="https://github.com/Ferdinand99/Keen-Kestrel/tree/main/locales/glossary">glossaries</a>
+                    would benefit from a native speaker’s eye.
+                  </p>
+                </div>
+              </details>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div class="footer-top">
+          <a class="brand" href="#top">
+            <img src="favicon.svg" alt="" width="24" height="24" loading="lazy" />
+            <span>Keen Kestrel</span>
+          </a>
+          <span>Made in Norway</span>
+        </div>
+        <nav aria-label="Project links">
+          <ul class="footer-links">
+            <li><a href="https://github.com/Ferdinand99/Keen-Kestrel">GitHub</a></li>
+            <li><a href="https://github.com/Ferdinand99/Keen-Kestrel/blob/main/docs/design.md">Design</a></li>
+            <li><a href="https://github.com/Ferdinand99/Keen-Kestrel#readme">README</a></li>
+            <li><a href="https://github.com/Ferdinand99/Keen-Kestrel/issues">Issues</a></li>
+            <li><a href="https://github.com/Ferdinand99/Keen-Kestrel/blob/main/LICENSE">MIT license</a></li>
+          </ul>
+        </nav>
+        <p class="sibling">
+          From the maker of <a href="https://ferdinand99.github.io/Vigilant-Vole/">Vigilant Vole</a>, a
+          lightweight, self-hosted uptime monitor, and <a href="https://ferdinand99.github.io/Nimble-Newt/">Nimble Newt</a>,
+          a fast, modern text editor.
+        </p>
+        <p>
+          Keen Kestrel is open source under the MIT license and not affiliated with Sentry. This site uses
+          no cookies or analytics and makes no requests to other sites.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

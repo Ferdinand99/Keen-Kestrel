@@ -7,8 +7,14 @@
 
 <p align="center"><strong>Self-hosted error tracking and privacy-friendly analytics in one small binary.</strong></p>
 
-> **Status: in design.** Nothing to install yet. The design is in [`docs/design.md`](docs/design.md), and a
-> throwaway [spike](https://github.com/Ferdinand99/kestrel-spike) is testing crash symbolication first.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://ferdinand99.github.io/Keen-Kestrel/"><img src="https://img.shields.io/badge/website-ferdinand99.github.io%2FKeen--Kestrel-black.svg" alt="Website"></a>
+</p>
+
+> **Status: early development.** Nothing to install yet. The design is in [`docs/design.md`](docs/design.md),
+> and a throwaway [spike](https://github.com/Ferdinand99/kestrel-spike) has proved iOS crash symbolication.
+> The shared foundation with Vigilant Vole is being built next.
 
 Keen Kestrel answers two questions about the apps and sites you run:
 
