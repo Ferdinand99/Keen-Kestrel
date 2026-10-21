@@ -1,0 +1,43 @@
+# Rust build output
+/target/
+
+# Local override that points the vole-kit dependency at a sibling checkout
+# ([patch] → ../Vigilant-Vole/kit). Each developer creates their own; CI and
+# releases use the git tag from Cargo.toml.
+/.cargo/config.toml
+
+# vole-kit's shared askama templates, copied in at build time. The source of
+# truth lives in vole-kit; never edit or commit the copies.
+/templates/kit/
+
+# Node tooling (CSS/JS checks, Playwright)
+node_modules/
+playwright-report/
+test-results/
+
+# Runtime data: databases, uploaded debug files, captured SDK requests
+# (KESTREL_CAPTURE_DIR). Recorded fixtures go to tests/fixtures/ on purpose.
+/data/
+*.sqlite*
+# ...except the upgrade-test fixture databases, one folder per release
+!/tests/fixtures/upgrade/*/*.sqlite
+/captures/
+
+# Load-test output
+/tools/loadtest/results/
+
+# Claude Code local state
+.claude/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS files
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
