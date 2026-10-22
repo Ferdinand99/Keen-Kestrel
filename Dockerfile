@@ -19,8 +19,12 @@ RUN apk add --no-cache build-base
 
 WORKDIR /app
 
-# Smaller binary without touching Cargo.toml.
+# Smaller binary without touching Cargo.toml: no symbols, and link-time
+# optimisation across all crates in one unit (keeps the image under the
+# 40 MB the design sets, docs/design.md §8).
 ENV CARGO_PROFILE_RELEASE_STRIP=symbols \
+    CARGO_PROFILE_RELEASE_LTO=true \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
     CARGO_TERM_COLOR=never
 
 # Everything the build reads: templates, static files, migrations and locales

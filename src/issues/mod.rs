@@ -240,7 +240,7 @@ pub struct Paging {
 }
 
 impl Paging {
-    fn new(page: i64, size: i64, total: i64, href: impl Fn(i64) -> String) -> Paging {
+    pub fn new(page: i64, size: i64, total: i64, href: impl Fn(i64) -> String) -> Paging {
         let pages = ((total + size - 1) / size).max(1);
         let page = page.clamp(1, pages);
         Paging {
@@ -925,6 +925,9 @@ pub struct IssueView {
     pub last_seen: String,
     pub first_release: String,
     pub last_release: String,
+    /// Links to the releases' pages ("" without a release).
+    pub first_release_href: String,
+    pub last_release_href: String,
     pub events: i64,
     pub users: i64,
     pub platform: String,
@@ -972,6 +975,14 @@ fn issue_view(project_id: i64, i: &IssueRow, now: &str) -> IssueView {
         last_seen: i.last_seen.clone(),
         first_release: i.first_release.clone().unwrap_or_default(),
         last_release: i.last_release.clone().unwrap_or_default(),
+        first_release_href: crate::releases::href(
+            project_id,
+            i.first_release.as_deref().unwrap_or(""),
+        ),
+        last_release_href: crate::releases::href(
+            project_id,
+            i.last_release.as_deref().unwrap_or(""),
+        ),
         events: i.times_seen,
         users: i.users_seen,
         platform: i.platform.clone(),
@@ -991,6 +1002,7 @@ pub struct EventDetail {
     pub timestamp: String,
     pub received_at: String,
     pub release: String,
+    pub release_href: String,
     pub environment: String,
     pub level_status: &'static str,
     pub level_label: &'static str,
@@ -1004,7 +1016,7 @@ pub struct EventDetail {
     pub difs_href: String,
 }
 
-async fn load_payload(ingest: &Ingest, payload_id: i64) -> Option<Value> {
+pub async fn load_payload(ingest: &Ingest, payload_id: i64) -> Option<Value> {
     let conn = ingest.store().get().await.ok()?;
     let data: Option<Vec<u8>> = conn
         .interact(move |c| {
@@ -1046,6 +1058,7 @@ async fn event_detail(
         timestamp: e.timestamp.clone(),
         received_at: e.received_at.clone(),
         release: e.release.clone().unwrap_or_default(),
+        release_href: crate::releases::href(project_id, e.release.as_deref().unwrap_or("")),
         environment: e.environment.clone().unwrap_or_default(),
         level_status: level_status(&e.level),
         level_label: i18n::t(level_key(&e.level)),
@@ -1064,6 +1077,7 @@ pub struct EventListRow {
     pub short_id: String,
     pub timestamp: String,
     pub release: String,
+    pub release_href: String,
     pub environment: String,
     pub level_status: &'static str,
     pub level_label: &'static str,
@@ -1245,6 +1259,7 @@ fn event_list_row(project_id: i64, issue_id: i64, e: &EventRow) -> EventListRow 
         short_id: e.event_id.chars().take(8).collect(),
         timestamp: e.timestamp.clone(),
         release: e.release.clone().unwrap_or_default(),
+        release_href: crate::releases::href(project_id, e.release.as_deref().unwrap_or("")),
         environment: e.environment.clone().unwrap_or_default(),
         level_status: level_status(&e.level),
         level_label: i18n::t(level_key(&e.level)),

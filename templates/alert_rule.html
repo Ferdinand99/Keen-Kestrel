@@ -1,0 +1,118 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{%- if is_new %}
+{% call m::page_header(tr("alerts.new_rule"), project.name.as_str(), back_href.as_str(), tr("alerts.tab")) %}{% endcall %}
+{%- else %}
+{% call m::page_header(form.name.as_str(), project.name.as_str(), back_href.as_str(), tr("alerts.tab")) %}
+  <form method="post" action="{{ delete_action }}" data-confirm="{{ tr1("alerts.delete_q", "name", form.name) }}" data-confirm-message="{{ tr("alerts.delete_msg") }}" data-confirm-label="{{ tr("common.delete") }}">
+    {{ m::button(tr("common.delete"), "danger", "trash", "submit", "sm") }}
+  </form>
+{% endcall %}
+{%- endif %}
+
+<form class="form form-narrow" method="post" action="{{ action }}" data-warn-unsaved>
+  <section class="form-section" aria-labelledby="sec-when">
+    <h2 class="form-section-title" id="sec-when">{{ tr("alerts.when") }}</h2>
+    <div class="choices" role="radiogroup" aria-labelledby="sec-when">
+      {%- for k in form.kinds %}
+      <label class="choice">
+        <input type="radio" name="kind" value="{{ k.value }}"{% if k.checked %} checked{% endif %}>
+        <span class="choice-body"><span class="choice-title">{{ k.label }}</span><span class="choice-sub">{{ k.help }}</span></span>
+      </label>
+      {%- endfor %}
+    </div>
+    <div class="card">
+      <div data-show-when="kind=spike" class="stack-sm">
+        <div class="field{% if !form.error("threshold").is_empty() %} is-invalid{% endif %}">
+          <label class="label" for="f-threshold">{{ tr("alerts.threshold") }}</label>
+          <div class="input-group">
+            <input id="f-threshold" name="threshold" type="number" inputmode="numeric" min="1" max="10000000" step="1" value="{{ form.threshold }}" aria-describedby="f-threshold-help">
+            <span class="input-addon" aria-hidden="true">{{ tr("alerts.per_hour") }}</span>
+          </div>
+          <p class="help" id="f-threshold-help">{{ tr("alerts.threshold_help") }}</p>
+          {%- if !form.error("threshold").is_empty() %}<p class="field-error">{{ m::icon("alert-circle") }}{{ form.error("threshold") }}</p>{% endif %}
+        </div>
+        <div class="field{% if !form.error("multiplier").is_empty() %} is-invalid{% endif %}">
+          <label class="label" for="f-multiplier">{{ tr("alerts.multiplier") }}</label>
+          <div class="input-group">
+            <input id="f-multiplier" name="multiplier" type="number" inputmode="decimal" min="1" max="1000" step="0.5" value="{{ form.multiplier }}" aria-describedby="f-multiplier-help">
+            <span class="input-addon" aria-hidden="true">×</span>
+          </div>
+          <p class="help" id="f-multiplier-help">{{ tr("alerts.multiplier_help") }}</p>
+          {%- if !form.error("multiplier").is_empty() %}<p class="field-error">{{ m::icon("alert-circle") }}{{ form.error("multiplier") }}</p>{% endif %}
+        </div>
+      </div>
+      <div data-show-when="kind!=spike">
+        <div class="field{% if !form.error("environment").is_empty() %} is-invalid{% endif %}">
+          <label class="label" for="f-environment">{{ tr("alerts.environment") }} <span class="label-optional">{{ tr("common.optional") }}</span></label>
+          <input id="f-environment" name="environment" type="text" value="{{ form.environment }}" list="environments" maxlength="200" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="production…" aria-describedby="f-environment-help">
+          <datalist id="environments">{% for e in form.environments %}<option value="{{ e }}"></option>{% endfor %}</datalist>
+          <p class="help" id="f-environment-help">{{ tr("alerts.environment_help") }}</p>
+          {%- if !form.error("environment").is_empty() %}<p class="field-error">{{ m::icon("alert-circle") }}{{ form.error("environment") }}</p>{% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="form-section" aria-labelledby="sec-where">
+    <h2 class="form-section-title" id="sec-where">{{ tr("alerts.where") }}</h2>
+    {%- if form.channels.is_empty() %}
+    {{ m::callout("info", tr("alerts.no_channels_text"), tr("alerts.no_channels_title")) }}
+    <p><a class="btn btn-secondary btn-sm" href="/settings/notifications">{{ m::icon("bell") }}<span>{{ tr("alerts.add_channel") }}</span></a></p>
+    {%- else %}
+    <div class="card{% if !form.error("channels").is_empty() %} is-invalid{% endif %}">
+      <fieldset class="stack-sm">
+        <legend class="vh">{{ tr("alerts.where") }}</legend>
+        {%- for c in form.channels %}
+        <label class="check">
+          <input type="checkbox" name="channels" value="{{ c.id }}"{% if c.checked %} checked{% endif %}>
+          <span class="check-text">
+            <span class="check-label">{{ c.name }}</span>
+            <span class="help">{{ c.kind_label }}{% if !c.active %} · {{ tr("common.paused") }}{% endif %}</span>
+          </span>
+        </label>
+        {%- endfor %}
+      </fieldset>
+      {%- if !form.error("channels").is_empty() %}<p class="field-error">{{ m::icon("alert-circle") }}{{ form.error("channels") }}</p>{% endif %}
+    </div>
+    <p class="form-section-sub"><a href="/settings/notifications">{{ tr("alerts.manage_channels") }}</a></p>
+    {%- endif %}
+  </section>
+
+  <section class="form-section" aria-labelledby="sec-how">
+    <h2 class="form-section-title" id="sec-how">{{ tr("alerts.how") }}</h2>
+    <div class="card">
+      {%- let name_error = form.error("name") %}
+      {{ m::field_text("name", tr("alerts.name"), form.name.as_str(), "text", tr("alerts.name_placeholder"), "", true, "off", name_error.as_str()) }}
+      <div class="field{% if !form.error("cooldown_minutes").is_empty() %} is-invalid{% endif %}">
+        <label class="label" for="f-cooldown">{{ tr("alerts.cooldown") }}</label>
+        <select id="f-cooldown" name="cooldown_minutes" aria-describedby="f-cooldown-help">
+          {%- for c in form.cooldown %}
+          <option value="{{ c.value }}"{% if c.selected %} selected{% endif %}>{{ c.label }}</option>
+          {%- endfor %}
+        </select>
+        <p class="help" id="f-cooldown-help">{{ tr("alerts.cooldown_help") }}</p>
+        {%- if !form.error("cooldown_minutes").is_empty() %}<p class="field-error">{{ m::icon("alert-circle") }}{{ form.error("cooldown_minutes") }}</p>{% endif %}
+      </div>
+      {{ m::switch("digest", tr("alerts.digest"), form.digest, tr("alerts.digest_help")) }}
+      <div class="field" data-show-when="digest=true">
+        <label class="label" for="f-digest-minutes">{{ tr("alerts.digest_every") }}</label>
+        <select id="f-digest-minutes" name="digest_minutes">
+          {%- for c in form.digest_choices %}
+          <option value="{{ c.value }}"{% if c.selected %} selected{% endif %}>{{ c.label }}</option>
+          {%- endfor %}
+        </select>
+        {%- if !form.error("digest_minutes").is_empty() %}<p class="field-error">{{ m::icon("alert-circle") }}{{ form.error("digest_minutes") }}</p>{% endif %}
+      </div>
+      {{ m::switch("enabled", tr("alerts.enabled"), form.enabled, tr("alerts.enabled_help")) }}
+    </div>
+  </section>
+
+  <div class="form-actions">
+    {{ m::link_button(back_href.as_str(), tr("common.cancel"), "secondary") }}
+    {%- if is_new %}{{ m::button(tr("alerts.create")) }}{% else %}{{ m::button(tr("alerts.save")) }}{% endif %}
+  </div>
+</form>
+{% endblock %}

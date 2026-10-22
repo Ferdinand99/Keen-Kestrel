@@ -58,5 +58,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | サンプル / サンプリング | sample rate: 「サンプルレート」 |
 | tag | タグ | VV |
 | analytics | アナリティクス | VV: 「アナリティクス」 |
+| notification channel / channel | 通知チャンネル / チャンネル | vole-kit: 「チャンネル」 |
+| digest | ダイジェスト | alerts gathered into one message; status pill 「ダイジェスト内」 |
+| cooldown (“at most every … per issue”) | 問題ごとの最短間隔 | summary: 「問題ごとに{time}に1回まで」 |
+| threshold | しきい値 | spike form reads 「1時間に [100] 件を超えるイベント」; message field 「アラートのしきい値」 |
+| multiplier (× the usual) | 倍 | 「通常の{k}倍超」; the form shows 「かつ平均の [5] ×」 |
+| adoption | 普及率 | share of the sessions in the last 7 days |
+| crash-free rate | クラッシュフリー率 | |
+| errored (session) | エラーあり、クラッシュなし | |
+| abnormal (session ended abnormally) | 異常終了 | |
+| finalized (release) | 確定済み | lowercase status after a date in English |
+| header (webhook) | ヘッダー | vole-kit: 「カスタムヘッダー」 |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer 「シンボル化済み」 phrasing in sentences |

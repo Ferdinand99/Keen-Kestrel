@@ -6,8 +6,8 @@ title: KestrelSpike.SpikeError: handled(code: 42) (Code: 0)
 culprit: KestrelSpike +0x57168
 level: error
 platform: cocoa
-config: kestrel:v1
-hash: 92df621100e2a566430383332c186799
+config: kestrel:v2
+hash: 08c69dc15ca15128c35667718c0ecaf8
 unsymbolicated: false
 tags: level=error, environment=production, release=com.example.kestrelspike@1.0+1, dist=1, os.name=iOS, os=iOS 26.2, device=iPhone17,3, device.family=iOS, mechanism=NSError
 components:

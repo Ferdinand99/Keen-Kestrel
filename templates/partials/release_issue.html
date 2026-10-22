@@ -1,0 +1,14 @@
+{#- An issue on a release's page. Expects `i` (releases::IssueLink) and `m`. -#}
+<li class="list-row">
+  <span class="dot status-{{ i.level_status }}" role="img" aria-label="{{ i.level_label }}"></span>
+  <div class="list-main">
+    <a class="list-title list-title-wrap stretched" href="{{ i.href }}">{{ i.title }}</a>
+    {%- if !i.culprit.is_empty() %}<span class="list-sub break">{{ i.culprit }}</span>{% endif %}
+    <span class="list-sub">{{ tr("issues.last_seen") }} {{ m::time_ago(&i.last_seen) }}</span>
+  </div>
+  <div class="list-value">
+    <strong class="num">{{ num(i.events) }}</strong>
+    <small>{{ tr("issues.events") }}</small>
+  </div>
+  {{ m::icon("chevron-right", "list-chevron") }}
+</li>

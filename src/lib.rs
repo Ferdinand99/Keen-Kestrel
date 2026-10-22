@@ -2,14 +2,16 @@
 //! privacy-friendly analytics, built on vole-kit.
 //!
 //! Sign-in, users, API tokens, Security and the API reference come from the
-//! kit; Kestrel adds projects and their DSN keys (pages, REST API, one MCP
-//! tool), Sentry-compatible ingest (normalisation, privacy scrubbing,
-//! grouping into issues, the single batch writer), the issue pages with
-//! search and triage, retention, and debug files with symbolication of
-//! native crashes (docs/design.md §4).
+//! kit; Kestrel adds projects and their DSN keys, Sentry-compatible ingest
+//! (normalisation, privacy scrubbing, grouping into issues, the single batch
+//! writer), the issue pages with search and triage, retention, debug files
+//! with symbolication of native crashes, alerts through the kit's
+//! notification providers, release health and the releases pages, and the
+//! REST API and MCP tools for all of it (docs/design.md §4, §6).
 
 #![forbid(unsafe_code)]
 
+pub mod alerts;
 pub mod api;
 pub mod config;
 pub mod db;
@@ -22,6 +24,7 @@ pub mod mcp;
 pub mod pages;
 pub mod product;
 pub mod project;
+pub mod releases;
 pub mod retention;
 pub mod server;
 pub mod store;
@@ -41,11 +44,22 @@ pub use product::{VERSION, install};
 /// Why Kestrel could not start.
 pub type StartError = Box<dyn std::error::Error + Send + Sync>;
 
-/// A running Kestrel: the kit's state and ingest's (writer, store, buckets).
+/// A running Kestrel: the kit's state, ingest's (writer, store, buckets)
+/// and the alerts.
 #[derive(Clone)]
 pub struct Kestrel {
     pub core: Core,
     pub ingest: ingest::Ingest,
+    pub alerts: alerts::Alerts,
+}
+
+impl Kestrel {
+    /// Waits until everything ingest accepted is written and the alert
+    /// rules have seen it (sending happens on its own).
+    pub async fn flush(&self) {
+        self.ingest.flush().await;
+        self.alerts.flush().await;
+    }
 }
 
 /// [`start_with`] with the default ingest settings.
@@ -87,8 +101,14 @@ pub async fn start_with(
     let public_url = public_url.map(str::to_string);
     core.with_conn(move |c| settings::set_opt(c, settings::BASE_URL, public_url.as_deref()))
         .await?;
-    let ingest = ingest::Ingest::start(core.clone(), data_dir, settings).await?;
-    Ok(Kestrel { core, ingest })
+    let alerts = alerts::Alerts::start(core.clone(), settings.alerts.clone());
+    let ingest =
+        ingest::Ingest::start(core.clone(), data_dir, settings, Some(alerts.sink())).await?;
+    Ok(Kestrel {
+        core,
+        ingest,
+        alerts,
+    })
 }
 
 /// The whole app: Kestrel's pages and API, ingest, the kit's pages, static
@@ -100,16 +120,24 @@ pub fn router(app: Kestrel) -> Router {
     let protected = Router::new()
         .merge(pages::router())
         .merge(issues::router())
+        .merge(releases::router())
+        .merge(releases::cli::router())
+        .merge(alerts::pages::router())
+        .merge(alerts::channels::router())
         .merge(difs::pages::router())
         .merge(difs::upload::router())
         .merge(api::router())
         .merge(kit_pages::router())
         .route_layer(from_fn_with_state(core.clone(), guard::require_auth))
+        .layer(Extension(app.ingest.clone()))
+        .layer(Extension(app.alerts.clone()));
+    let mcp = Router::new()
+        .route("/mcp", post(mcp::endpoint).get(vole_kit::mcp::not_offered))
         .layer(Extension(app.ingest.clone()));
     let public = Router::new()
         .route("/healthz", get(vole_kit::http::healthz))
         .route("/static/{*path}", get(vole_kit::http::assets::static_asset))
-        .route("/mcp", post(mcp::endpoint).get(vole_kit::mcp::not_offered))
+        .merge(mcp)
         .merge(app.ingest.router())
         .merge(kit_pages::public_router());
     protected

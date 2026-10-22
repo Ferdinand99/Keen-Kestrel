@@ -17,12 +17,12 @@
   <div class="stat">
     <span class="stat-label">{{ tr("issues.first_seen") }}</span>
     <span class="stat-value">{{ m::time_ago(&issue.first_seen) }}</span>
-    {%- if !issue.first_release.is_empty() %}<span class="stat-meta break">{{ issue.first_release }}</span>{% endif %}
+    {%- if !issue.first_release.is_empty() %}<a class="stat-meta break" href="{{ issue.first_release_href }}">{{ issue.first_release }}</a>{% endif %}
   </div>
   <div class="stat">
     <span class="stat-label">{{ tr("issues.last_seen") }}</span>
     <span class="stat-value">{{ m::time_ago(&issue.last_seen) }}</span>
-    {%- if !issue.last_release.is_empty() %}<span class="stat-meta break">{{ issue.last_release }}</span>{% endif %}
+    {%- if !issue.last_release.is_empty() %}<a class="stat-meta break" href="{{ issue.last_release_href }}">{{ issue.last_release }}</a>{% endif %}
   </div>
 </div>
 
@@ -110,7 +110,7 @@
           <tr>
             <td class="td-primary" data-label="{{ tr("event.time") }}"><a href="{{ e.href }}">{{ m::time_ago(&e.timestamp) }}</a>{% if !e.has_details %} <span class="badge" data-tip="{{ tr("event.details_gone_title") }}">{{ tr("issue.no_details") }}</span>{% endif %}</td>
             <td class="mono" data-label="{{ tr("event.id") }}">{{ e.short_id }}</td>
-            <td class="break" data-label="{{ tr("issues.release") }}">{% if e.release.is_empty() %}—{% else %}{{ e.release }}{% endif %}</td>
+            <td class="break" data-label="{{ tr("issues.release") }}">{% if e.release.is_empty() %}—{% else %}<a href="{{ e.release_href }}">{{ e.release }}</a>{% endif %}</td>
             <td data-label="{{ tr("issues.environment") }}">{% if e.environment.is_empty() %}—{% else %}{{ e.environment }}{% endif %}</td>
             <td class="mono" data-label="{{ tr("event.user") }}">{% if e.user.is_empty() %}—{% else %}{{ e.user }}{% endif %}</td>
             <td data-label="{{ tr("issues.level") }}"><span class="pill status-{{ e.level_status }}"><span class="dot"></span>{{ e.level_label }}</span></td>

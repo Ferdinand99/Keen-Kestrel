@@ -60,3 +60,18 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | statistiques | VV : « Statistiques » |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; « le DSN », « le dSYM », « le SDK » |
 | symbolication | symbolication (f.) | unchanged noun; prefer « symbolisé » phrasing in sentences |
+| notification channel / channel | canal de notification / canal (m.; pl. canaux) | VV: « Canaux de notification » |
+| digest | récapitulatif (m.) | « Envoyer un récapitulatif »; status pill « Dans le récapitulatif » |
+| cooldown (at most every … per issue) | intervalle minimal | « Par problème, intervalle minimal de [1 h] »; avoids « toutes les 1 h » |
+| digest interval (one message every …) | un message par période de … | same reason as above |
+| threshold / alert above | seuil (m.) / seuil d’alerte | form label « Plus de [100] événements par heure » |
+| adoption | adoption (f.) | share of the last 7 days’ sessions |
+| errored (session) | avec erreurs, sans plantage | session row label |
+| abnormal (session ended abnormally) | fin anormale | session row label |
+| crashed (session) | plantée | « Plantées » as row label (f.: session) |
+| finalized (release) | finalisée | lowercase status after a date |
+| culprit (“Where” in alert messages) | origine (f.) | as in the issue search help |
+| skipped (alert delivery) | non envoyée | not « ignorée », which is the issue status |
+| attempt (delivery) | tentative (f.) | « Les envois échoués sont retentés » |
+| header (HTTP) | en-tête (m.) | VV |
+| AI assistant | assistant IA | |

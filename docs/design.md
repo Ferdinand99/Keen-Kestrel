@@ -1,7 +1,7 @@
 # Keen Kestrel – design
 
-Status: approved design, not yet implemented. A throwaway spike (`Ferdinand99/kestrel-spike`) is
-de-risking symbolication first. This document is the reference for everyone building Kestrel, people and
+Status: approved design. Phases 1–7 are built (v0.1 "errors" is feature-complete, its release pending);
+the phase table in §11 has the state. This document is the reference for everyone building Kestrel, people and
 agents alike; change it when a decision changes.
 
 ## 1. What and why
@@ -130,7 +130,10 @@ numbers (Luhn); hash `user.email` and `user.username` unless the project opts in
 
 Native frames are grouped after symbolication. Without a dSYM the fallback is image name plus offset and
 the issue is marked "unsymbolicated". The grouping components are stored so the UI can explain why
-events were grouped. Changing the algorithm means a new config version; old issues keep theirs.
+events were grouped. Changing the algorithm means a new config version; old issues keep theirs. `kestrel:v2` (phase 7) adds one
+rule: frames of the Sentry SDKs themselves (`SentrySDK…`, `SentryCrash…`, `-[Sentry…]`, `@sentry/…`, `sentry_sdk`, the
+Rust crates) are never in-app. Each event is grouped by both versions; an event whose v2 hash is unknown joins the issue
+its v1 hash points at, which keeps `kestrel:v1` and gets the v2 hash as well.
 
 ### 4.5 Issue lifecycle and search
 - Resolve, resolve in the next release, ignore (forever, until a count, until a time), merge.
@@ -147,7 +150,9 @@ days. All configurable per project.
 ### 4.7 Alerts
 Per-project rules: new issue, regression, spike (events in one hour above
 `max(threshold, k × 7-day hourly baseline)`), first crash in a new release. Per-issue cooldown and a
-digest mode. Delivery through the vole-kit notification providers (the same ~40 as Vigilant Vole).
+digest mode. Delivery through the vole-kit notification providers (the same ~40 as Vigilant Vole). Channels
+are the instance's (Settings → Notifications), each with its message language; rules are evaluated after the writer
+commits and messages are sent by a task of their own, with retries and a per-project history.
 
 ### 4.8 iOS / macOS symbolication
 - getsentry `symbolic` (`debuginfo` with Mach-O and DWARF, `symcache`, `demangle` with Swift).
@@ -282,7 +287,7 @@ on GHCR, a Linux installer, Proxmox and Unraid templates, a GitHub Pages site in
 | 4 | Kestrel skeleton: auth, users, tokens, settings, i18n, layout, projects and keys, Docker, CI | Sign-in and projects in the family design, 26 languages |
 | 5 | Ingest, normalisation, grouping, issues and events UI, search, retention, writer | All SDK fixtures grouped correctly; load targets met |
 | 6 | Debug file upload, SymCache, symbolication | Xcode build phase uploads; crashes symbolicated |
-| 7 | Alerts, release health, releases, API and MCP for errors | **v0.1 "errors"** |
+| 7 | Alerts, release health, releases, API and MCP for errors | **v0.1 "errors"** (done, release pending) |
 | 8 | Analytics ingest, rollups, dashboards, `k.js`, privacy tests | Web analytics on the owner's sites |
 | 9 | KestrelKit, adoption in the owner's apps, linked release view, analytics API and MCP | **v0.2 "analytics"** |
 | 10 | Hardening: load tests, site, installers, templates, translations | **v1.0** |

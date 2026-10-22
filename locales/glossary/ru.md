@@ -57,3 +57,17 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | аналитика | VV: «Аналитика» |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; don't decline them, rephrase instead |
 | symbolication | symbolication | unchanged noun; prefer «с символами» phrasing in sentences |
+| notification channel / channel | канал уведомлений / канал (m.) | VV and the kit: «Каналы», settings page «Уведомления» |
+| webhook (in channel lists) | вебхук | follows the kit's channel pages («вебхуки»); keep «webhook» elsewhere |
+| email (as a channel) | почта | the kit: «Почта» |
+| digest | сводка (f.) | «Отправлять сводкой», status «В сводке» |
+| cooldown ("at most every … per issue") | не чаще раза в … для проблемы | label «Для одной проблемы не чаще раза в [1 ч]» |
+| threshold / alert above | больше / порог (m.) | form «Больше [100] событий в час»; message field «Порог» |
+| multiplier ("and more than … ×") | и больше чем … × | summary «{k}× от обычного» |
+| adoption | охват (m.) | share of the sessions in the last 7 days |
+| crashed / errored / abnormal (sessions) | со сбоем / с ошибками, без сбоя / завершены аномально | session outcome rows |
+| finalized (release) | завершен | lowercase status after a date |
+| attempt (delivery) | попытка (f.) | |
+| instance | экземпляр (m.) | the Kestrel server; as in the existing strings |
+| header (HTTP) | заголовок (m.) | webhook headers |
+| sessions_meta and similar captions | из {n} сеанса / сеансов | after «из» the number takes the genitive: one/other «сеанса», few/many «сеансов» |

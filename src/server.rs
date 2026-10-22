@@ -17,7 +17,8 @@ pub async fn run(config: Config) -> Result<(), crate::StartError> {
     .await?;
     // Notifications and other work outside a request use the site language.
     vole_kit::i18n::site_language(&kestrel.core).await;
-    // Retention, daily, and the end of ignoring that ran out by time.
+    // Retention, daily; every minute the end of ignoring that ran out by
+    // time and the release-health rollup.
     crate::retention::spawn(
         kestrel.ingest.writer().clone(),
         kestrel.ingest.difs().clone(),

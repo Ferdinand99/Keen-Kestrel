@@ -60,3 +60,17 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | analisi | VV: «Analisi» |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; «il DSN», «il dSYM», «l’SDK» |
 | symbolication | symbolication (f.) | unchanged noun; prefer «simbolizzato» phrasing in sentences |
+| notification channel / channel | canale di notifica / canale (m.) | VV: «Canali di notifica» |
+| digest | riepilogo (m.) | «Invia come riepilogo»; status pill «Nel riepilogo» |
+| cooldown (at most every … per issue) | al massimo ogni … | «Per problema, al massimo ogni [1 h]» |
+| threshold / alert above | soglia (f.) / soglia di avviso | form label «Più di [100] eventi l’ora» |
+| adoption | adozione (f.) | share of the last 7 days’ sessions |
+| errored (session) | con errori, senza crash | session row label |
+| abnormal (session ended abnormally) | chiusura anomala | session row label |
+| crashed (session) | con crash | session row label |
+| finalized (release) | finalizzata | lowercase status after a date |
+| culprit (“Where” in alert messages) | origine (f.) | as in the issue search help |
+| skipped (alert delivery) | saltato | not «ignorato», which is the issue status |
+| attempt (delivery) | tentativo (m.) | failed deliveries «vengono ritentati» |
+| header (HTTP) | intestazione (f.) | VV |
+| AI assistant | assistente IA | |

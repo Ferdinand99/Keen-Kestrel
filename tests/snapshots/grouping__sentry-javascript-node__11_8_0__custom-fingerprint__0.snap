@@ -6,8 +6,8 @@ title: Error: Invalid order 99
 culprit: app in placeOrder
 level: error
 platform: node
-config: kestrel:v1
-hash: a34f61e4e1e12517c4705b144c19cc72
+config: kestrel:v2
+hash: f6949eefed026aaf01c75aa8a5f6cc60
 unsymbolicated: false
 tags: level=error, environment=fixtures, release=fixture-node@1.0.0, server_name=fixture-host, os.name=Alpine Linux, os=Alpine Linux 3.24.3, runtime.name=node, runtime=node v22.23.4, handled=yes, mechanism=generic
 components:

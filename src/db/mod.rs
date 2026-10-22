@@ -4,9 +4,11 @@
 //! [`issues`] is the writer's side (one event at a time); [`triage`] holds
 //! what the pages read and the lifecycle actions they take.
 
+pub mod alerts;
 pub mod difs;
 pub mod issues;
 pub mod projects;
+pub mod releases;
 pub mod triage;
 
 use rusqlite::Connection;
@@ -29,6 +31,10 @@ const MIGRATION_FILES: &[(&str, &str)] = &[
     (
         "0004_debug_files.sql",
         include_str!("../../migrations/0004_debug_files.sql"),
+    ),
+    (
+        "0005_alerts_releases.sql",
+        include_str!("../../migrations/0005_alerts_releases.sql"),
     ),
 ];
 

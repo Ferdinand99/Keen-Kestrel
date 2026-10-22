@@ -65,6 +65,8 @@ pub struct Settings {
     pub writer: WriterSettings,
     /// The symbolication queue (docs/design.md §4.8).
     pub symbolication: WorkerSettings,
+    /// Alert delivery after the writer (docs/design.md §4.7).
+    pub alerts: crate::alerts::Settings,
 }
 
 impl Default for Settings {
@@ -74,6 +76,7 @@ impl Default for Settings {
             ip_rate_limit_per_minute: 6000,
             writer: WriterSettings::default(),
             symbolication: WorkerSettings::default(),
+            alerts: crate::alerts::Settings::default(),
         }
     }
 }
@@ -189,11 +192,13 @@ struct Incoming {
 }
 
 impl Ingest {
-    /// Opens the store, loads (or makes) the hash key and starts the writer.
+    /// Opens the store, loads (or makes) the hash key and starts the writer,
+    /// which reports to `alerts`.
     pub async fn start(
         core: Core,
         data_dir: &Path,
         settings: Settings,
+        alerts: Option<crate::alerts::Sink>,
     ) -> Result<Ingest, crate::StartError> {
         let store = crate::store::open(data_dir).await?;
         let hash_key = core
@@ -215,6 +220,7 @@ impl Ingest {
             &data_dir.join(crate::product::DB_FILE),
             &data_dir.join(crate::store::STORE_FILE),
             settings.writer,
+            alerts,
         )?;
         let dif_ids = core
             .with_conn(|c| crate::db::difs::all_ids(c))
@@ -268,6 +274,11 @@ impl Ingest {
     pub async fn flush(&self) {
         self.inner.symbolicator.flush().await;
         self.inner.writer.flush().await;
+    }
+
+    /// The key session device ids and user ids are hashed with.
+    pub fn hash_key(&self) -> &[u8; 32] {
+        &self.inner.hash_key
     }
 
     /// The ingest routes, for the main router and the ingest port.

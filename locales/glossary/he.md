@@ -58,5 +58,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | דגימה / דגימה | sample rate: “קצב דגימה” |
 | tag | תגית | VV: “תגיות” |
 | analytics | אנליטיקה | VV: “אנליטיקה” |
+| notification channel / channel | ערוץ התראות / ערוץ | vole-kit: “ערוץ”; plural “ערוצי התראות” |
+| digest | סיכום | alerts gathered into one message; “שליחה כסיכום” |
+| cooldown (“at most every … per issue”) | לכל היותר פעם ב-… לכל בעיה | form label “לכל בעיה, לכל היותר פעם ב-” |
+| threshold | סף | message field “סף התראה” |
+| multiplier (× the usual) | פי | “פי {k} מהרגיל” |
+| adoption | אימוץ | share of the sessions in the last 7 days |
+| crash-free rate | שיעור ללא קריסות | |
+| errored (session) | עם שגיאות, בלי קריסה | |
+| abnormal (session ended abnormally) | הסתיימו באופן חריג | plural, agrees with סשנים |
+| finalized (release) | סופית | lowercase status after a date in English (feminine: גרסה) |
+| header (webhook) | כותרת | vole-kit: “כותרות מותאמות” |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer “עם סמלים” phrasing in sentences |

@@ -6,8 +6,8 @@ title: Error: Could not parse quantity
 culprit: app
 level: error
 platform: node
-config: kestrel:v1
-hash: 956a6d73479f125c277f6df0592f39b4
+config: kestrel:v2
+hash: 21fb41146a5ef2e65224aa795e978f8b
 unsymbolicated: false
 tags: level=error, environment=fixtures, release=fixture-node@1.0.0, server_name=fixture-host, os.name=Alpine Linux, os=Alpine Linux 3.24.3, runtime.name=node, runtime=node v22.23.4, handled=yes, mechanism=generic
 components:

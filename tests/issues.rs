@@ -308,7 +308,7 @@ async fn every_fixture_has_issue_and_event_pages() {
             stacks += 1;
         }
         let grouping = b.get(&format!("{base}?tab=grouping")).await;
-        assert!(grouping.body.contains("kestrel:v1"), "{title}");
+        assert!(grouping.body.contains("kestrel:v2"), "{title}");
         assert!(grouping.body.contains("Why these events are grouped"));
         // The latest event's own page, with paging between events.
         let event_id: String = app

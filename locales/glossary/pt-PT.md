@@ -61,3 +61,19 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | análises | VV: «Análises» |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; «o DSN», «o dSYM», «o SDK» |
 | symbolication | symbolication (f.) | unchanged noun; prefer «simbolizado» phrasing in sentences |
+| notification channel / channel | canal de notificação / canal (m.; pl. canais) | VV: «Canais de notificação» |
+| digest | resumo (m.) | «Enviar como resumo»; status pill «No resumo» |
+| cooldown (at most every … per issue) | no máximo a cada … | «Por problema, no máximo a cada [1 h]» |
+| threshold / alert above | limite (m.) / limite do alerta | form label «Mais de [100] eventos por hora» |
+| adoption | adoção (f.) | share of the last 7 days’ sessions |
+| errored (session) | com erros, sem falha | session row label |
+| abnormal (session ended abnormally) | fim anómalo | session row label |
+| crashed (session) | com falha | session row label |
+| finalized (release) | finalizada | lowercase status after a date |
+| culprit (“Where” in alert messages) | origem (f.) | as in the issue search help |
+| failed (alert delivery) | não enviado | avoids «falha», which means crash here |
+| skipped (alert delivery) | omitido | not «ignorado», which is the issue status |
+| attempt (delivery) | tentativa (f.) | |
+| link | ligação (f.) | alert message field label |
+| header (HTTP) | cabeçalho (m.) | VV |
+| AI assistant | assistente de IA | |

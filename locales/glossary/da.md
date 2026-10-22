@@ -55,5 +55,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | stikprøve / sampling | sample rate: »samplingrate« |
 | tag | tag (et; pl. tags) | VV |
 | analytics | statistik | VV: »Statistik« |
+| notification channel / channel | notifikationskanal / kanal | kit/VV: »Indstillinger → Notifikationer«; short »kanal« in rules and tables |
+| digest | sammendrag (et) | »Send som sammendrag«; status pill »I sammendrag« |
+| cooldown (at most every … per issue) | højst én gang pr. … pr. problem | label »Pr. problem, højst én gang pr.« |
+| threshold | grænse (en) | in the form: »Mere end [100] begivenheder i timen« |
+| adoption | udbredelse | the release's share of sessions |
+| abnormal (session ended abnormally) | afsluttet unormalt | |
+| errored (session) | med fejl, uden nedbrud | |
+| finalized (release) | færdiggjort | lowercase status after a date |
+| attempt (delivery) | forsøg (et; pl. forsøg) | |
+| header (HTTP) | header (en; pl. headers) | as the kit: »Headernavn«, »Tilføj header« |
+| AI assistant | AI-assistent | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer »symboliseret« phrasing in sentences |

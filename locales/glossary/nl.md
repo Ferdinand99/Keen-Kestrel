@@ -56,5 +56,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | steekproef / sampling | sample rate: “samplefrequentie” |
 | tag | tag (de) | VV |
 | analytics | analyse | VV: “Analyse” |
+| notification channel / channel | meldingskanaal / kanaal (het; mv. kanalen) | kit/VV: “Instellingen → Meldingen”; short “kanaal” in rules and tables |
+| digest | overzicht (het) | “Als overzicht versturen”; status pill “In overzicht” |
+| cooldown (at most every … per issue) | hoogstens elke … per probleem | label “Per probleem hoogstens elke” |
+| threshold | drempel (de) | in the form: “Meer dan [100] gebeurtenissen per uur”; message field “Melden boven” |
+| adoption | verspreiding | the release's share of sessions |
+| abnormal (session ended abnormally) | abnormaal beëindigd | |
+| errored (session) | met fouten, geen crash | |
+| finalized (release) | afgerond | lowercase status after a date |
+| attempt (delivery) | poging (de; mv. pogingen) | |
+| header (HTTP) | header (de; mv. headers) | as the kit: “Eigen headers” |
+| AI assistant | AI-assistent | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer “gesymboliseerd” phrasing in sentences |

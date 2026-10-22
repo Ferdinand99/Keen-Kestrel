@@ -58,3 +58,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | analytika | VV: "Analytika" |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; avoid declining them, rephrase instead |
 | symbolication | symbolication | unchanged noun; prefer "se symboly" phrasing in sentences |
+| notification channel / channel | kanál oznámení / kanál (m.; pl. kanály / kanálů) | kit: "Přidat kanál", settings page "Oznámení" |
+| digest | souhrn (m.) | "Posílat jako souhrn", "souhrn jednou za {time}"; status pill "V souhrnu" |
+| cooldown ("at most every … per issue") | nejvýše jednou za … na problém | select label "Pro problém nejvýše jednou za [1 h]" |
+| threshold / alert above | víc než … / upozornit nad | "Víc než [100] událostí za hodinu"; message field "Upozornit nad" |
+| multiplier | … × víc než obvykle | "A víc než [5] ×" |
+| adoption | podíl (m.) | share of the sessions in the last 7 days |
+| crashed / errored / abnormal (session) | s pádem / s chybami, bez pádu / abnormálně ukončené | session outcomes |
+| finalized (release) | dokončena | lowercase status, agrees with "verze" |
+| attempt (delivery) | pokus (m.; pl. pokusy / pokusů) | |
+| culprit | místo | message field label; "místo chyby" in search help |
+| instance | instance (f.) | kit: "pojmenujte svou instanci" |
+| header (webhook) | hlavička (f.) | |
+| secrets | tajné údaje | channel form footer |

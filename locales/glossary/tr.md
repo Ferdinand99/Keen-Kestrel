@@ -60,3 +60,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | analiz | VV: “Analiz” |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; suffixes with an apostrophe only if unavoidable (“SDK’yı”), better rephrase |
 | symbolication | symbolication | unchanged noun; prefer “sembollü” phrasing in sentences |
+| notification channel / channel | bildirim kanalı / kanal | VV: “bildirim kanalı”; short “Kanal” in tables and buttons |
+| digest | özet | “Özet olarak gönder”; status pill “Özette” |
+| cooldown (at most every … per issue) | “sorun başına en sık … aralıkla” | label “Sorun başına en sık şu aralıkla”, then the duration |
+| threshold / alert above | eşik / uyarı eşiği | form label “Şundan fazla”, addon “etkinlik / saat” |
+| multiplier (× the usual) | normalin … katı | |
+| adoption | benimsenme | the release's share of sessions in the last 7 days |
+| errored (session) | hatalı, çökme yok | |
+| abnormal (session) | anormal sonlandı | |
+| finalized (release) | tamamlandı | lowercase status after a date |
+| culprit (alert message field) | hata kaynağı | as in the issue search help |
+| attempt (delivery) | deneme | “{n} deneme” |
+| header (webhook) | başlık | VV kit: “Özel başlıklar” |
+| instance | örnek | as in VV; “bu örneğin dili” = the instance's language |

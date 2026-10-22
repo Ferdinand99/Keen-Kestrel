@@ -6,8 +6,8 @@ title: ValueError: Invalid order 5678
 culprit: __main__ in place_order
 level: error
 platform: python
-config: kestrel:v1
-hash: eb66f87709dd566993ffb8692470fbc4
+config: kestrel:v2
+hash: d2e4abaf54f956f80ceb2cba3b079a1c
 unsymbolicated: false
 tags: level=error, environment=fixtures, release=fixture-python@1.0.0, server_name=fixture-host, runtime.name=CPython, runtime=CPython 3.13.17, handled=yes, mechanism=generic
 components:

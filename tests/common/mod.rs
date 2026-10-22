@@ -254,9 +254,10 @@ impl App {
         self.send(f.request(self.project_id, &self.key)).await
     }
 
-    /// Waits until the writer has written everything accepted so far.
+    /// Waits until the writer has written everything accepted so far and
+    /// the alert rules have seen it (sending is separate).
     pub async fn flush(&self) {
-        self.kestrel.ingest.flush().await;
+        self.kestrel.flush().await;
     }
 
     pub async fn count(&self, sql: &'static str) -> i64 {
@@ -330,4 +331,239 @@ pub fn envelope_request(project_id: i64, key: &str, body: Vec<u8>) -> Request<Bo
 /// A fresh random event id.
 pub fn new_id() -> String {
     keen_kestrel::event::normalize::new_event_id()
+}
+
+// ---------------------------------------------------------------------------
+// People, tokens and a signed-in browser
+// ---------------------------------------------------------------------------
+
+/// The password of every user the tests add.
+pub const PASSWORD: &str = "Kestrel-Owner-Pass-2026!";
+const HOST: &str = "kestrel.test:3002";
+
+/// Sign-ins one at a time: the kit's sign-in limiter is process-wide and
+/// keyed by user name.
+static SIGN_IN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Adds a user with `role` (`viewer`, `editor`, `admin`); its id.
+pub async fn add_user(app: &App, name: &'static str, role: &'static str) -> i64 {
+    let hash = vole_kit::auth::hash_password(PASSWORD);
+    app.kestrel
+        .core
+        .with_conn(move |c| {
+            c.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, ?3)",
+                rusqlite::params![name, hash, role],
+            )?;
+            Ok(c.last_insert_rowid())
+        })
+        .await
+        .unwrap()
+}
+
+/// An API token of `user_id` with `scope`.
+pub async fn api_token(app: &App, user_id: i64, scope: vole_kit::auth::TokenScope) -> String {
+    use vole_kit::auth::tokens;
+    let token = tokens::generate();
+    let (hash, prefix) = (tokens::hash(&token), tokens::display_prefix(&token));
+    app.kestrel
+        .core
+        .with_conn(move |c| {
+            vole_kit::db::api_tokens::insert(c, user_id, "t", &prefix, &hash, scope, None)?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    token
+}
+
+/// A request with `Authorization: Bearer <token>` and an optional JSON body.
+pub async fn bearer(app: &App, method: &str, path: &str, token: &str, json: Option<Value>) -> Res {
+    let mut req = Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"));
+    let body = match json {
+        Some(v) => {
+            req = req.header(header::CONTENT_TYPE, "application/json");
+            Body::from(v.to_string())
+        }
+        None => Body::empty(),
+    };
+    app.send(req.body(body).unwrap()).await
+}
+
+/// A signed-in browser.
+pub struct Web<'a> {
+    app: &'a App,
+    cookies: std::collections::BTreeMap<String, String>,
+}
+
+impl<'a> Web<'a> {
+    /// Adds a user with `role` and signs in.
+    pub async fn new(app: &'a App, name: &'static str, role: &'static str) -> Web<'a> {
+        add_user(app, name, role).await;
+        let mut b = Web {
+            app,
+            cookies: std::collections::BTreeMap::new(),
+        };
+        let guard = SIGN_IN.lock().await;
+        let res = b
+            .post("/login", &[("username", name), ("password", PASSWORD)])
+            .await;
+        drop(guard);
+        assert_eq!(res.status, StatusCode::SEE_OTHER, "{}", res.body);
+        b
+    }
+
+    pub async fn send(&mut self, mut req: Request<Body>) -> Res {
+        use axum::http::HeaderValue;
+        let h = req.headers_mut();
+        h.insert(header::HOST, HeaderValue::from_static(HOST));
+        if !self.cookies.is_empty() {
+            let cookie = self
+                .cookies
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join("; ");
+            h.insert(header::COOKIE, HeaderValue::from_str(&cookie).unwrap());
+        }
+        let peer: SocketAddr = "127.0.0.1:40000".parse().unwrap();
+        req.extensions_mut().insert(ConnectInfo(peer));
+        let res = self.app.router.clone().oneshot(req).await.unwrap();
+        for v in res.headers().get_all(header::SET_COOKIE) {
+            let v = v.to_str().unwrap();
+            if let Some((k, val)) = v.split(';').next().unwrap().split_once('=') {
+                if val.is_empty() || v.contains("Max-Age=0") {
+                    self.cookies.remove(k);
+                } else {
+                    self.cookies.insert(k.into(), val.into());
+                }
+            }
+        }
+        let (status, headers) = (res.status(), res.headers().clone());
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        Res {
+            status,
+            headers,
+            body: String::from_utf8_lossy(&body).into_owned(),
+        }
+    }
+
+    pub async fn get(&mut self, path: &str) -> Res {
+        self.send(Request::get(path).body(Body::empty()).unwrap())
+            .await
+    }
+
+    /// A form post from the app's own pages (with `HX-Request` when `htmx`).
+    pub async fn post_with(&mut self, path: &str, form: &[(&str, &str)], htmx: bool) -> Res {
+        let body = url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(form)
+            .finish();
+        let mut req = Request::post(path)
+            .header(header::ORIGIN, format!("http://{HOST}"))
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+        if htmx {
+            req = req.header("hx-request", "true");
+        }
+        self.send(req.body(Body::from(body)).unwrap()).await
+    }
+
+    pub async fn post(&mut self, path: &str, form: &[(&str, &str)]) -> Res {
+        self.post_with(path, form, false).await
+    }
+
+    pub async fn delete(&mut self, path: &str) -> Res {
+        let req = Request::delete(path)
+            .header(header::ORIGIN, format!("http://{HOST}"))
+            .header("hx-request", "true")
+            .body(Body::empty())
+            .unwrap();
+        self.send(req).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A webhook receiver
+// ---------------------------------------------------------------------------
+
+/// A tiny HTTP server that records what is posted to it, for the alerts
+/// (a webhook channel pointed at it). It can answer slowly or with errors.
+#[derive(Clone)]
+pub struct Hook {
+    pub url: String,
+    received: std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
+    state: std::sync::Arc<HookState>,
+}
+
+#[derive(Default)]
+pub struct HookState {
+    /// Answer 500 to this many requests first.
+    pub fail_next: AtomicUsize,
+    /// Wait this many milliseconds before answering.
+    pub delay_ms: std::sync::atomic::AtomicU64,
+}
+
+impl Hook {
+    pub async fn start() -> Hook {
+        use axum::routing::post;
+        let received = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let state = std::sync::Arc::new(HookState::default());
+        let (r, s) = (received.clone(), state.clone());
+        let app = Router::new().route(
+            "/hook",
+            post(move |body: axum::body::Bytes| {
+                let (r, s) = (r.clone(), s.clone());
+                async move {
+                    let delay = s.delay_ms.load(Ordering::SeqCst);
+                    if delay > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                    }
+                    let fail = s.fail_next.load(Ordering::SeqCst) > 0;
+                    if fail {
+                        s.fail_next.fetch_sub(1, Ordering::SeqCst);
+                    }
+                    if fail {
+                        return StatusCode::INTERNAL_SERVER_ERROR;
+                    }
+                    let v: Value = serde_json::from_slice(&body)
+                        .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&body).into()));
+                    r.lock().unwrap().push(v);
+                    StatusCode::OK
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        Hook {
+            url: format!("http://{addr}/hook"),
+            received,
+            state,
+        }
+    }
+
+    pub fn state(&self) -> &HookState {
+        &self.state
+    }
+
+    /// Everything received so far.
+    pub fn received(&self) -> Vec<Value> {
+        self.received.lock().unwrap().clone()
+    }
+
+    /// Waits up to `secs` seconds until at least `n` messages arrived.
+    pub async fn wait_for(&self, n: usize, secs: u64) -> Vec<Value> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+        loop {
+            let got = self.received();
+            if got.len() >= n || std::time::Instant::now() > deadline {
+                return got;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
 }

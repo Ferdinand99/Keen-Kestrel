@@ -57,5 +57,17 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | عيّنة / أخذ العينات | sample rate: «معدل أخذ العينات» |
 | tag | وسم (pl. وسوم) | VV: «الوسوم» |
 | analytics | التحليلات | VV: «التحليلات» |
+| notification channel / channel | قناة إشعارات / قناة | vole-kit: «القنوات»; feminine; plural «قنوات الإشعارات» |
+| digest | ملخص | alerts gathered into one message; «إرسال كملخص» |
+| cooldown (“at most every … per issue”) | مرة على الأكثر كل … لكل مشكلة | form label «لكل مشكلة، مرة على الأكثر كل» |
+| threshold | حد | message field «حد التنبيه» |
+| multiplier (× the usual) | أضعاف / × | summary keeps «{k}× المعتاد» |
+| adoption | الاعتماد | share of the sessions in the last 7 days |
+| crash-free rate | نسبة الجلسات بلا أعطال | |
+| errored (session) | بأخطاء دون عطل | |
+| abnormal (session ended abnormally) | انتهت بشكل غير طبيعي | |
+| finalized (release) | نهائي | lowercase status after a date in English (masculine: إصدار) |
+| header (webhook) | ترويسة (pl. ترويسات) | vole-kit: «ترويسات مخصصة» |
+| instance | التثبيت | as in existing Kestrel strings |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer «مع الرموز» phrasing in sentences |

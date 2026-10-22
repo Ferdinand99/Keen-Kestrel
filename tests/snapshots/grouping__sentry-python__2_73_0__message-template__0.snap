@@ -6,8 +6,8 @@ title: Order A-17 failed after 3 retries
 culprit: 
 level: error
 platform: python
-config: kestrel:v1
-hash: 3bbf0d18a0d4c2aa3a9515d9ca1f45e2
+config: kestrel:v2
+hash: c2fb9b5481284eaddd8e83145a11f98a
 unsymbolicated: false
 tags: level=error, environment=fixtures, release=fixture-python@1.0.0, server_name=fixture-host, runtime.name=CPython, runtime=CPython 3.13.17
 components:

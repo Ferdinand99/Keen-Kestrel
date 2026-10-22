@@ -56,5 +56,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | Stichprobe / Sampling | sample rate: „Sample-Rate“ |
 | tag | Tag (das) | VV: neuter, „das Tag“ |
 | analytics | Analyse | VV: „Analyse“ |
+| notification channel / channel | Benachrichtigungskanal / Kanal (der; Pl. Kanäle) | kit/VV: „Einstellungen → Benachrichtigungen“; short „Kanal“ in rules and tables |
+| digest | Sammelmeldung (die) | „Als Sammelmeldung senden“; status pill „In Sammelmeldung“ |
+| cooldown (at most every … per issue) | höchstens alle … pro Problem | label „Pro Problem höchstens alle“ |
+| threshold | Schwelle (die) | in the form: „Mehr als [100] Ereignisse pro Stunde“; message field „Alarm ab“ |
+| adoption | Verbreitung | the release's share of sessions |
+| abnormal (session ended abnormally) | abnormal beendet | |
+| errored (session) | mit Fehlern, ohne Absturz | |
+| finalized (release) | abgeschlossen | lowercase status after a date |
+| attempt (delivery) | Versuch (der; Pl. Versuche) | |
+| header (HTTP) | Header (der) | as the kit: „Eigene Header“ |
+| AI assistant | KI-Assistent | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; „der DSN“, „das dSYM“, „das SDK“ |
 | symbolication | Symbolication (die) | unchanged noun; prefer „symbolisiert“ phrasing in sentences |

@@ -1604,6 +1604,7 @@ dependencies = [
  "symbolic-debuginfo",
  "symbolic-demangle",
  "symbolic-symcache",
+ "time",
  "tokio",
  "tower",
  "tracing",

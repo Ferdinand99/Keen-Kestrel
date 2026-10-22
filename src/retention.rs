@@ -10,9 +10,11 @@
 //!    their events and details;
 //! 3. hourly counts older than 30 days go (the pages show at most 14 days);
 //!
-//! then the store's rows of deleted projects go, new and regressed issues
-//! that have been so for a week become ongoing, and `store.sqlite` gives
-//! freed pages back (incremental vacuum).
+//! then the store's rows of deleted projects go, release-health rollups
+//! older than 400 days go (docs/design.md §4.6), the alert history older
+//! than 90 days, new and regressed issues that have been so for a week
+//! become ongoing, and `store.sqlite` gives freed pages back (incremental
+//! vacuum).
 //!
 //! Debug files ([`prune_debug_files`]) go when they were neither uploaded
 //! nor used for `retention_dif_days` (180), unless one of the project's
@@ -21,7 +23,9 @@
 //! and the files of deleted projects.
 //!
 //! Every minute the job also ends ignoring that ran out by time (an issue
-//! ignored for an hour comes back even if no event arrives).
+//! ignored for an hour comes back even if no event arrives) and rolls the
+//! session items up into release health ([`crate::releases::health`]),
+//! which deletes them from the store.
 //!
 //! Everything runs on the writer's connection ([`Writer::run`]).
 
@@ -47,6 +51,10 @@ const BATCH_PAUSE: Duration = Duration::from_millis(25);
 pub const HOURS_KEPT_DAYS: i64 = 30;
 /// Pages `store.sqlite` gives back per run.
 const VACUUM_PAGES: i64 = 10_000;
+/// Release-health rollups are kept this long (docs/design.md §4.6).
+pub const ROLLUPS_KEPT_DAYS: i64 = 400;
+/// The alert history is kept this long.
+pub const ALERT_LOG_KEPT_DAYS: i64 = 90;
 
 /// What one run did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -55,6 +63,8 @@ pub struct Report {
     pub issues_deleted: usize,
     pub hours_deleted: usize,
     pub settled: usize,
+    pub rollups_deleted: usize,
+    pub alerts_deleted: usize,
 }
 
 /// Chunks of uploads that never assembled are kept this long.
@@ -82,6 +92,15 @@ pub fn spawn(writer: Writer, difs: Difs) {
                 Ok(n) if n > 0 => tracing::info!(issues = n, "ignoring ran out"),
                 Ok(_) => {}
                 Err(err) => tracing::warn!(%err, "can't end expired ignoring"),
+            }
+            let n = now.clone();
+            match writer
+                .run(move |c| crate::releases::health::rollup_all(c, &n))
+                .await
+            {
+                Ok(r) if r.items > 0 => tracing::debug!(items = r.items, "sessions rolled up"),
+                Ok(_) => {}
+                Err(err) => tracing::warn!(%err, "can't roll up the sessions"),
             }
             if tokio::time::Instant::now() >= next_run {
                 next_run = tokio::time::Instant::now() + RUN_EVERY;
@@ -197,17 +216,40 @@ pub async fn run_once(writer: &Writer, now: &str) -> Result<Report, WriterError>
         tokio::time::sleep(BATCH_PAUSE).await;
     }
     let n = now.to_string();
+    (report.rollups_deleted, report.alerts_deleted) =
+        writer.run(move |c| prune_rollups_and_alerts(c, &n)).await?;
+    let n = now.to_string();
     report.settled = writer.run(move |c| triage::settle_substatus(c, &n)).await?;
     writer.run(|c| vacuum(c)).await?;
     tracing::info!(
         details = report.details_deleted,
         issues = report.issues_deleted,
         hours = report.hours_deleted,
+        rollups = report.rollups_deleted,
+        alerts = report.alerts_deleted,
         settled = report.settled,
         elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         "retention run finished"
     );
     Ok(report)
+}
+
+/// Removes release-health rollups older than [`ROLLUPS_KEPT_DAYS`], the
+/// alert history older than [`ALERT_LOG_KEPT_DAYS`] and cooldowns longer ago
+/// than any cooldown. Returns `(rollups, alert log entries)` deleted.
+fn prune_rollups_and_alerts(c: &mut Connection, now: &str) -> rusqlite::Result<(usize, usize)> {
+    let tx = c.transaction()?;
+    let rollups = crate::releases::health::prune(&tx, now, ROLLUPS_KEPT_DAYS)?;
+    let cutoff: String = tx.query_row(
+        "SELECT datetime(?1, ?2)",
+        params![now, format!("-{ALERT_LOG_KEPT_DAYS} days")],
+        |r| r.get(0),
+    )?;
+    let alerts = crate::db::alerts::prune_log(&tx, &cutoff)?;
+    let year_ago: String = tx.query_row("SELECT datetime(?1, '-366 days')", [now], |r| r.get(0))?;
+    crate::db::alerts::prune_cooldowns(&tx, &year_ago)?;
+    tx.commit()?;
+    Ok((rollups, alerts))
 }
 
 /// Removes the debug files retention says go (rows through the writer,
@@ -283,6 +325,7 @@ pub fn run_blocking(c: &mut Connection, now: &str) -> rusqlite::Result<Report> {
         tx.commit()?;
     }
     report.details_deleted += triage::prune_orphans(c, i64::MAX)?;
+    (report.rollups_deleted, report.alerts_deleted) = prune_rollups_and_alerts(c, now)?;
     report.settled = triage::settle_substatus(c, now)?;
     vacuum(c)?;
     Ok(report)
