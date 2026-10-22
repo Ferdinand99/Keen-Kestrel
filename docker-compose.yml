@@ -1,7 +1,7 @@
 services:
   keen-kestrel:
-    build: .
-    image: keen-kestrel:latest
+    image: ghcr.io/ferdinand99/keen-kestrel:latest
+    # build: .  # build from this checkout instead of pulling the image
     container_name: keen-kestrel
     restart: unless-stopped
     ports:
