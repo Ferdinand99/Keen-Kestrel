@@ -28,6 +28,10 @@ const MIGRATION_FILES: &[(&str, &str)] = &[
         "0002_analytics.sql",
         include_str!("../migrations/store/0002_analytics.sql"),
     ),
+    (
+        "0003_app_signals.sql",
+        include_str!("../migrations/store/0003_app_signals.sql"),
+    ),
 ];
 
 fn migrations() -> Vec<(String, String)> {
@@ -105,7 +109,14 @@ mod tests {
         let mut c = Connection::open_in_memory().unwrap();
         prepare(&c).unwrap();
         let applied = apply_migrations_with(&mut c, &MIGRATIONS).unwrap();
-        assert_eq!(applied, ["0001_store.sql", "0002_analytics.sql"]);
+        assert_eq!(
+            applied,
+            [
+                "0001_store.sql",
+                "0002_analytics.sql",
+                "0003_app_signals.sql"
+            ]
+        );
         let mode: i64 = c.query_row("PRAGMA auto_vacuum", [], |r| r.get(0)).unwrap();
         assert_eq!(mode, 2, "incremental");
         assert!(

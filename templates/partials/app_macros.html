@@ -1,0 +1,31 @@
+{#- The App tab's charts: lines on one scale, the first with an area. `c` is
+    analytics::app::pages::Chart. -#}
+{% macro chart(c, id, title, sub) -%}
+<section class="card" aria-labelledby="{{ id }}">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title" id="{{ id }}">{{ title }}</h2>
+      <p class="card-sub">{{ sub }}</p>
+    </div>
+    <div class="legend" aria-hidden="true">
+      {%- for l in c.lines %}
+      <span class="legend-item"><span class="legend-swatch" style="--status: {{ l.color }}"></span><span class="break">{{ l.label }}</span>{% if !l.value.is_empty() %} <strong class="num">{{ l.value }}</strong>{% endif %}</span>
+      {%- endfor %}
+    </div>
+  </div>
+  <div class="chart">
+    <svg viewBox="0 0 600 120" preserveAspectRatio="none" role="img" aria-label="{{ c.label }}">
+      <line class="chart-grid" x1="0" x2="600" y1="60" y2="60"></line>
+      <line class="chart-grid" x1="0" x2="600" y1="120" y2="120"></line>
+      {%- if !c.area.is_empty() %}
+      <polygon class="chart-area" points="{{ c.area }}"></polygon>
+      {%- endif %}
+      {%- for l in c.lines.iter().rev() %}
+      <polyline class="chart-line" style="--chart: {{ l.color }}" points="{{ l.points }}"></polyline>
+      {%- endfor %}
+    </svg>
+    <div class="chart-scale" aria-hidden="true"><span><bdi>{{ c.max_label }}</bdi></span><span><bdi>{{ c.min_label }}</bdi></span></div>
+  </div>
+  <div class="chart-axis" aria-hidden="true"><span>{{ c.start_label }}</span><span>{{ c.end_label }}</span></div>
+</section>
+{%- endmacro %}

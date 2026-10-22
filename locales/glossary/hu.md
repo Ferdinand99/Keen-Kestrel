@@ -65,7 +65,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (at most every … per issue) | „problémánként legfeljebb … időnként” | label „Problémánként legfeljebb ennyi időnként”, then the duration |
 | threshold / alert above | küszöb / riasztási küszöb | form label „Több mint … esemény óránként” |
 | multiplier (× the usual) | a szokásosnál …× több | „…-szoros” would need a suffix on the number; avoid |
-| adoption | elterjedtség | the release's share of sessions in the last 7 days |
+| adoption | elterjedtség | the release's share of sessions in the last 7 days; also share of an app’s daily active users |
 | errored (session) | hibával, összeomlás nélkül | |
 | abnormal (session) | rendellenesen ért véget | |
 | finalized (release) | véglegesítve | lowercase status after a date |
@@ -82,3 +82,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | current visitors | jelenlegi látogatók | stat card, last 5 minutes |
 | direct / none (no referrer) | közvetlen / nincs |  |
 | raw events | nyers események | filtered numbers: „szűrt számok” |
+| app analytics | alkalmazásanalitika | tab „App” |
+| install / install id | telepítés / telepítésazonosító | random id per app installation |
+| signal type | jelzéstípus |  |
+| payload | kísérőadatok | the key/value data an app sends with a signal |
+| signal explorer | jelzésböngésző |  |
+| test signal | tesztjelzés | debug builds, TestFlight, simulator |
+| strict mode | szigorú mód | the user id changes every day |
+| build (app build) | buildszám | as „Buildszám” in event details; plural „Buildszámok” |
+| release (signal dimension, bundle@version+build) | teljes verzió | only where it stands next to „Verzió” (the app version) |
+| device model | eszközmodell |  |
+| locale (language and region setting) | területi beállítás |  |
+| platform | platform |  |

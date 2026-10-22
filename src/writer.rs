@@ -80,6 +80,9 @@ pub enum Job {
     DifUse(DifUse),
     /// A pageview or custom event from k.js (docs/design.md §5).
     Web(Box<crate::analytics::WebEvent>),
+    /// One request's app signals (docs/design.md §5): one job, so a batch of
+    /// 100 takes one place in the queue.
+    App(Vec<crate::analytics::app::AppSignal>),
 }
 
 /// Work for the writer's connection besides ingest jobs.
@@ -153,8 +156,8 @@ pub struct Writer {
     web: broadcast::Sender<WebChange>,
 }
 
-/// What changed in a project's web analytics: new raw events (current
-/// visitors) or new rollups (the dashboard's numbers).
+/// What changed in a project's analytics (web or app): new raw events
+/// (current visitors and users) or new rollups (the dashboards' numbers).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WebChange {
     Events(i64),
@@ -377,6 +380,13 @@ fn write_batch(c: &mut Connection, batch: Vec<Msg>, stats: &Stats) -> BatchOut {
             Job::Web(e) if !web_projects.contains(&e.project_id) => {
                 web_projects.push(e.project_id);
             }
+            Job::App(signals) => {
+                for s in signals {
+                    if !web_projects.contains(&s.project_id) {
+                        web_projects.push(s.project_id);
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -534,6 +544,12 @@ fn write_job(c: &Connection, job: &Job) -> rusqlite::Result<Option<Written>> {
         }
         Job::Web(e) => {
             crate::analytics::rollup::insert_event(c, e)?;
+            Ok(None)
+        }
+        Job::App(signals) => {
+            for s in signals {
+                crate::analytics::app::insert(c, s)?;
+            }
             Ok(None)
         }
         Job::Attachment(a) => {

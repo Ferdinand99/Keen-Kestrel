@@ -16,6 +16,9 @@
 //! long enough (the project's raw retention) for the result to be exact.
 //! Older than that, it isn't counted.
 //!
+//! App signals (`source = 'app'`) are read in the same batches and rolled
+//! up by [`app::rollup`].
+//!
 //! Raw events stay after the rollup; the daily retention job removes them
 //! after `retention_analytics_raw_days` (30) and the rollups after
 //! `retention_analytics_days` (400).
@@ -24,6 +27,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
+use super::app::{self, APP, AppSignal};
 use super::{
     Dim, PAGEVIEW, WebEvent, WebEventRow, day_number, day_string, hour_string, value_hash,
 };
@@ -90,7 +94,7 @@ type DimKey = (i64, String, i64, Dim, String);
 
 /// Adds the distinct `visitors` to the seen-set of `(project, day, dim,
 /// value)`; returns how many weren't there yet.
-fn new_visitors(
+pub(crate) fn new_visitors(
     tx: &Transaction<'_>,
     project_id: i64,
     day: i64,
@@ -211,11 +215,28 @@ pub fn rollup(c: &mut Connection, now: i64) -> rusqlite::Result<Report> {
         )
         .optional()?
         .unwrap_or(0);
+    // The batch: the next BATCH raw events of either source.
+    let (read, max): (i64, Option<i64>) = tx
+        .prepare_cached(
+            "SELECT COUNT(*), MAX(id) FROM (
+                 SELECT id FROM store.analytics_events WHERE id > ?1 ORDER BY id LIMIT ?2)",
+        )?
+        .query_row(params![last, BATCH], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    let max = max.unwrap_or(last);
     let rows: Vec<WebEventRow> = tx
         .prepare_cached(&format!(
-            "SELECT {ROW_COLUMNS} FROM store.analytics_events WHERE id > ?1 ORDER BY id LIMIT ?2"
+            "SELECT {ROW_COLUMNS} FROM store.analytics_events
+             WHERE id > ?1 AND id <= ?2 AND source = 'web' ORDER BY id"
         ))?
-        .query_map(params![last, BATCH], row)?
+        .query_map(params![last, max], row)?
+        .collect::<rusqlite::Result<_>>()?;
+    let app_rows: Vec<AppSignal> = tx
+        .prepare_cached(&format!(
+            "SELECT {} FROM store.analytics_events
+             WHERE id > ?1 AND id <= ?2 AND source = 'app' ORDER BY id",
+            app::rollup::COLUMNS
+        ))?
+        .query_map(params![last, max], app::rollup::row)?
         .collect::<rusqlite::Result<_>>()?;
     // Projects that exist, with the first day their raw events are complete.
     let today = day_number(now);
@@ -330,12 +351,17 @@ pub fn rollup(c: &mut Connection, now: i64) -> rusqlite::Result<Report> {
             add_breakdown(&tx, &(project_id, source, day, Dim::Entry, path), 1, 1)?;
         }
     }
+    app::rollup::add(&tx, &app_rows, today, &projects, &mut late, &mut touched)?;
     for (project_id, source, day) in &late {
-        recompute_day(&tx, *project_id, source, *day)?;
+        if source == APP {
+            app::rollup::recompute_day(&tx, *project_id, *day, today)?;
+        } else {
+            recompute_day(&tx, *project_id, source, *day)?;
+        }
         touched.insert(*project_id);
     }
 
-    if let Some(max) = rows.last().map(|r| r.id) {
+    if max > last {
         tx.execute(
             "UPDATE store.analytics_rollup_state SET last_id = ?1 WHERE id = 1",
             [max],
@@ -347,7 +373,7 @@ pub fn rollup(c: &mut Connection, now: i64) -> rusqlite::Result<Report> {
     )?;
     tx.commit()?;
     Ok(Report {
-        events: rows.len(),
+        events: read as usize,
         late_days: late.len(),
         projects: touched.into_iter().collect(),
     })

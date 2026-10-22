@@ -1,0 +1,29 @@
+{#- How to add KestrelKit to an app. Expects `setup` (analytics::app::pages::Setup) and `m`. -#}
+{%- match setup.configure %}
+{%- when Some(configure) %}
+<ol class="stack app-steps">
+  <li class="stack-sm">
+    <p class="help">{{ tr("app.setup_package") }}</p>
+    <pre class="code"><code id="app-package">{{ setup.package_url }}</code></pre>
+    <div class="toolbar"><button type="button" class="btn btn-secondary btn-sm" data-copy="#app-package">{{ m::icon("copy") }}<span>{{ tr("project.copy_code") }}</span></button></div>
+  </li>
+  <li class="stack-sm">
+    <p class="help">{{ tr("app.setup_configure") }}</p>
+    <pre class="code"><code id="app-configure">{{ configure }}</code></pre>
+    <div class="toolbar"><button type="button" class="btn btn-secondary btn-sm" data-copy="#app-configure">{{ m::icon("copy") }}<span>{{ tr("project.copy_code") }}</span></button></div>
+  </li>
+  <li class="stack-sm">
+    <p class="help">{{ tr("app.setup_signal") }}</p>
+    <pre class="code"><code id="app-signal">{{ setup.signal_example }}</code></pre>
+  </li>
+</ol>
+<ul class="stack-sm web-tips">
+  <li>{{ tr("app.tip_automatic") }}</li>
+  <li>{{ tr("app.tip_debug") }}</li>
+  <li>{{ tr("app.tip_opt_out") }}</li>
+  <li>{{ tr("app.tip_release") }}</li>
+</ul>
+<p class="help">{{ tr("app.setup_privacy") }} <a href="{{ setup.readme }}" rel="noopener noreferrer" target="_blank">{{ tr("app.setup_readme") }}</a></p>
+{%- when None %}
+{{ m::empty_state("key", tr("project.no_key_title"), tr("project.no_key_text"), &self.setup.settings_href, tr("project.open_settings")) }}
+{%- endmatch %}

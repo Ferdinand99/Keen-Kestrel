@@ -1,0 +1,128 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block head %}
+  <link rel="stylesheet" href="/static/analytics.css">
+{% endblock %}
+
+{% block content %}
+{% include "partials/project_head.html" %}
+
+{%- if !enabled %}
+{{ m::callout("warning", tr("app.off_text"), tr("app.off_title")) }}
+{%- endif %}
+
+{%- if has_data %}
+<div class="stack" hx-ext="sse" sse-connect="{{ live_href }}">
+  <div class="cluster cluster-between">
+    <nav class="chips" aria-label="{{ tr("app.subnav") }}">
+      <a class="chip" href="{{ dashboard_href }}" aria-current="page">{{ m::icon("chart") }}<span>{{ tr("app.nav_dashboard") }}</span></a>
+      <a class="chip" href="{{ explorer_href }}">{{ m::icon("search") }}<span>{{ tr("app.nav_explorer") }}</span></a>
+    </nav>
+    <p class="web-live" role="status">
+      <span class="dot status-up" aria-hidden="true"></span>
+      <span>{{ tr("app.current_users") }}: <strong class="num" sse-swap="app-live" hx-swap="innerHTML">{{ live }}</strong></span>
+    </p>
+  </div>
+
+  {% include "partials/app_filters.html" %}
+
+  <div id="app-summary" class="stack" sse-swap="app-updated" hx-swap="innerHTML">
+    {% include "partials/app_summary.html" %}
+  </div>
+
+  {%- if let Some(a) = adoption %}
+  <section class="card stack-sm" aria-labelledby="adoption-title">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title" id="adoption-title">{{ tr("app.adoption_title") }}</h2>
+        <p class="card-sub">{{ tr("app.adoption_sub") }}</p>
+      </div>
+    </div>
+    {%- if let Some(c) = a.chart %}
+    <div class="chart">
+      <svg viewBox="0 0 600 120" preserveAspectRatio="none" role="img" aria-label="{{ c.label }}">
+        <line class="chart-grid" x1="0" x2="600" y1="60" y2="60"></line>
+        <line class="chart-grid" x1="0" x2="600" y1="120" y2="120"></line>
+        {%- for l in c.lines.iter().rev() %}
+        <polyline class="chart-line" style="--chart: {{ l.color }}" points="{{ l.points }}"></polyline>
+        {%- endfor %}
+      </svg>
+      <div class="chart-scale" aria-hidden="true"><span><bdi>{{ c.max_label }}</bdi></span><span><bdi>{{ c.min_label }}</bdi></span></div>
+    </div>
+    <div class="chart-axis" aria-hidden="true"><span>{{ c.start_label }}</span><span>{{ c.end_label }}</span></div>
+    {%- endif %}
+    <div class="bars-head" aria-hidden="true"><span>{{ tr("app.dim_version") }}</span><span>{{ tr("app.users") }}</span><span>{{ tr("app.adoption_share") }}</span></div>
+    <ul class="bars" role="list" aria-label="{{ tr("app.adoption_title") }}">
+      {%- for r in a.rows %}
+      <li class="bar-row" style="--share: {{ r.width }}">
+        <span class="bar-label"><span class="legend-swatch app-swatch" style="--status: {{ r.color }}" aria-hidden="true"></span>{{ r.label }}</span>
+        <span class="bar-num" aria-label="{{ tr("app.users") }}">{{ r.users }}</span>
+        <span class="bar-num" aria-label="{{ tr("app.adoption_share") }}">{{ r.share }}</span>
+      </li>
+      {%- endfor %}
+    </ul>
+  </section>
+  {%- endif %}
+
+  <div class="grid-2">
+    {%- for card in cards %}
+    <section class="card stack-sm" aria-labelledby="card-{{ card.id }}">
+      <h2 class="card-title" id="card-{{ card.id }}">{{ card.title }}</h2>
+      <div data-tabs>
+        {%- if card.panels.len() > 1 %}
+        <div class="tabs" role="tablist" aria-label="{{ card.title }}">
+          {%- for p in card.panels %}
+          <button class="tab" role="tab" type="button" id="t-{{ p.id }}" aria-controls="p-{{ p.id }}" aria-selected="{% if loop.first %}true{% else %}false{% endif %}">{{ p.label }}</button>
+          {%- endfor %}
+        </div>
+        {%- endif %}
+        {%- for p in card.panels %}
+        <div class="tab-panel"{% if card.panels.len() > 1 %} role="tabpanel" id="p-{{ p.id }}" aria-labelledby="t-{{ p.id }}"{% endif %}{% if !loop.first %} hidden{% endif %}>
+          {%- if p.rows.is_empty() %}
+          <p class="muted web-empty">{{ p.empty }}</p>
+          {%- else %}
+          <div class="bars-head" aria-hidden="true"><span>{{ p.label }}</span><span>{{ tr("app.users") }}</span><span>{{ p.count_label }}</span></div>
+          <ul class="bars" role="list" aria-label="{{ p.label }}">
+            {%- for b in p.rows %}
+            <li class="bar-row" style="--share: {{ b.share }}">
+              {%- if b.href.is_empty() %}
+              <span class="bar-label{% if b.mono %} mono{% endif %}" title="{{ b.label }}">{{ b.label }}</span>
+              {%- else %}
+              <a class="bar-label{% if b.mono %} mono{% endif %}" href="{{ b.href }}" title="{{ b.label }}">{{ b.label }}</a>
+              {%- endif %}
+              <span class="bar-num" aria-label="{{ tr("app.users") }}">{{ b.visitors }}</span>
+              <span class="bar-num" aria-label="{{ p.count_label }}">{{ b.count }}</span>
+            </li>
+            {%- endfor %}
+          </ul>
+          {%- endif %}
+        </div>
+        {%- endfor %}
+      </div>
+    </section>
+    {%- endfor %}
+  </div>
+  <p class="section-foot">{{ tr("app.foot") }}</p>
+</div>
+
+<section class="section" aria-labelledby="setup-title">
+  <details class="disclosure card">
+    <summary><span id="setup-title">{{ tr("app.setup") }}</span><span class="disclosure-sub">{{ tr("app.setup_sub") }}</span>{{ m::icon("chevron-down") }}</summary>
+    <div class="disclosure-body stack">
+      {% include "partials/app_setup.html" %}
+    </div>
+  </details>
+</section>
+{%- else %}
+<div class="empty-card">
+  {{ m::empty_state("chart", tr("app.empty_title"), tr("app.empty_text")) }}
+</div>
+<section class="section" aria-labelledby="setup-title">
+  {% call m::section_head(tr("app.setup"), tr("app.setup_sub"), "setup-title") %}{% endcall %}
+  <div class="card stack">
+    {% include "partials/app_setup.html" %}
+  </div>
+</section>
+{%- endif %}
+{% endblock %}

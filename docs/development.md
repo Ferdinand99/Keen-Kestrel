@@ -6,8 +6,8 @@ Vigilant Vole repository. The kit brings sign-in, users, API tokens, Security, t
 database plumbing and the design system; Kestrel adds its own pages, API, migrations and strings, the
 Sentry-compatible ingest ([below](#ingest)), debug files with symbolication
 ([below](#debug-files-and-symbolication)), alerts ([below](#alerts)), release health
-([below](#releases-and-release-health)), the REST API and MCP tools ([below](#rest-api-and-mcp)) and web analytics
-([below](#web-analytics)).
+([below](#releases-and-release-health)), the REST API and MCP tools ([below](#rest-api-and-mcp)), web analytics
+([below](#web-analytics)) and app analytics ([below](#app-analytics)).
 
 ## Layout
 
@@ -26,7 +26,7 @@ src/
                       # triage (the issue pages' reads, lifecycle actions, retention deletes)
   dsn.rs              # public address, DSNs, SDK snippets
   ingest/             # Sentry endpoints: keys, body decoding and limits, envelopes, rate limits, capture mode;
-                      # web.rs: POST /ingest/v1/event
+                      # web.rs: POST /ingest/v1/event; signals.rs: POST /ingest/v1/signals
   event/              # normalisation and privacy (scrub.rs, paths.rs), grouping (kestrel:v2), title, culprit, tags
   difs/               # debug files: on disk (files.rs), sentry-cli upload (upload.rs), symbolication
                       # (symbolicate.rs), the symbolication queue (worker.rs), the Debug files page (pages.rs)
@@ -40,18 +40,21 @@ src/
   releases/           # the releases pages (mod.rs), release-health rollup (health.rs), sentry-cli's release
                       # commands (cli.rs)
   analytics/          # web analytics: k.js and its handler (kjs.rs), what a pageview keeps (clean.rs, ua.rs),
-                      # the rollups (rollup.rs), the queries (query.rs), the Web tab (pages.rs)
+                      # the rollups (rollup.rs), the queries (query.rs), the Web tab (pages.rs); app/: app
+                      # signals (what a signal keeps, hashes, rollup, queries, the App tab and explorer)
   retention.rs        # the daily retention job; every minute the end of time-limited ignoring and the rollups
-  api.rs, api/        # REST API v1 and its route table (API reference); issues and events, releases, alert rules
+  api.rs, api/        # REST API v1 and its route table (API reference); issues and events, releases, alert rules,
+                      # web and app analytics
   mcp.rs              # MCP tools
 templates/            # Kestrel's pages (extend kit/layout.html)
 static/               # favicon, home-screen icons, web manifest, the Web tab's stylesheet
 migrations/           # Kestrel's migrations (after the kit's core set); store/ has store.sqlite's own
 locales/              # Kestrel's strings, 26 languages; glossaries in locales/glossary/
 tests/                # in-process app tests, translation coverage, ingest, grouping, issue pages, debug files,
-                      # alerts, releases, the API and MCP for errors, web analytics
+                      # alerts, releases, the API and MCP for errors, web analytics, app analytics
   kjs/                # k.js's behaviour in Node (behaviour.mjs)
-tools/loadtest/web.py # load generator for web analytics ingest
+  fixtures/kestrelkit/ # KestrelKit's golden request bodies
+tools/loadtest/       # load generators: web.py (web analytics), signals.py (app signals)
   fixtures/sentry/    # requests recorded from real SDKs, per SDK and version
   fixtures/dsym/      # the dSYM of the sentry-cocoa fixtures' app (symbolication tests)
   snapshots/          # grouping snapshots (insta)
@@ -447,7 +450,10 @@ The REST API v1 (`src/api.rs`, `src/api/`; reference at `/api-docs`, `/api-docs.
 - alert rules (list, create, change, delete, with validation per field), the alerts sent, and the notification
   channels by name and kind (never their settings, editors only);
 - web analytics: a time series with totals and a breakdown by one dimension ([below](#web-analytics));
-- the ingest endpoints (group "Ingest", access "a project's DSN key", with `POST /ingest/v1/event` and `GET /js/k.js`)
+- app analytics: a time series, breakdowns, signal types, a type's payload and version adoption
+  ([below](#app-analytics)), and each release's share of the app's users;
+- the ingest endpoints (group "Ingest", access "a project's DSN key", with `POST /ingest/v1/event`, `GET /js/k.js` and
+  `POST /ingest/v1/signals`)
   and sentry-cli's (group "sentry-cli", "any API token").
 
 Read tokens act as viewers; changing needs a read-and-write token of an editor or admin, and is noted in the
@@ -456,7 +462,8 @@ issue's activity under the token owner's name.
 The MCP server (`/mcp`) has `list_projects`, `list_issues` (the search syntax), `get_issue` (the issue and its
 latest event as text for a model: the exception chain, in-app frames innermost first with `file:line` and the
 line of code, folded runs of other frames, the last ten breadcrumbs, the request line and tags; never the user
-section), `release_health`, `analytics_summary`, `analytics_breakdown`, and for a read-and-write token of an editor
+section), `release_health`, `analytics_summary` and `analytics_breakdown` (web, or app with `source: app`), and for a
+read-and-write token of an editor
 `resolve_issue` and `ignore_issue`.
 
 ## Web analytics
@@ -473,14 +480,15 @@ it, `Cache-Control: public, max-age=86400`, an ETag (304 on `If-None-Match`), `A
 `tests/analytics.rs` keep it under 2 KB). It sends a pageview on load (after prerendering), on `pushState`,
 `replaceState` and `popstate` when the path changed, and on `hashchange` with `data-hash`; it skips `localhost`,
 `127.x`, `[::1]` and `file:` unless `data-localhost`, paths matching `data-exclude`, `navigator.webdriver` and
-`localStorage.kestrel_ignore = 'true'`. `window.kestrel('event', name, props)` sends a custom event (calls queued in
+`localStorage.kestrel_ignore = 'true'`, and sends nothing when `navigator.globalPrivacyControl` is true.
+`window.kestrel('event', name, props)` sends a custom event (calls queued in
 `kestrel.q` before it loaded are sent too). It posts with `fetch(…, {keepalive: true, credentials: 'omit'})`, so no
 cookie of the Kestrel domain goes along, and falls back to `navigator.sendBeacon`; the body is a JSON string, so the
 browser sends `text/plain` and needs no preflight.
 
-`tests/kjs/behaviour.mjs` runs k.js in Node with a small fake DOM, as written and as served (52 checks: the payload,
-SPA navigation, hash mode, localhost, exclusions, opt-out, webdriver, custom and queued events, `data-api`,
-`sendBeacon`, prerendering, no cookie or storage writes):
+`tests/kjs/behaviour.mjs` runs k.js in Node with a small fake DOM, as written and as served (58 checks: the payload,
+SPA navigation, hash mode, localhost, exclusions, opt-out, webdriver, Global Privacy Control, custom and queued events,
+`data-api`, `sendBeacon`, prerendering, no cookie or storage writes):
 
 ```bash
 tar -cf - src/analytics/k.js tests/kjs | docker run --rm -i -w /w --tmpfs /w:exec node:22-alpine \
@@ -489,7 +497,7 @@ tar -cf - src/analytics/k.js tests/kjs | docker run --rm -i -w /w --tmpfs /w:exe
 ```
 
 **Ingest** (`POST /ingest/v1/event`, also on the ingest port; exempt from the CSRF check): in order, the per-IP bucket
-(`KK_INGEST_IP_RATE_LIMIT`), bots (user agents that aren't Mozilla-compatible or name a crawler, preview, monitor,
+(`KK_INGEST_IP_RATE_LIMIT`), Global Privacy Control (`Sec-GPC: 1`: answered 202 and dropped; `DNT` is ignored), bots (user agents that aren't Mozilla-compatible or name a crawler, preview, monitor,
 script, headless or automated browser; `Sec-Purpose: prefetch`; client hints naming HeadlessChrome) are answered 202 and
 dropped, the media type (`text/plain`, `application/json` or none, else 415), the body (64 KB, 413), JSON (400), the key
 (`X-Kestrel-Key`, the body's `k`/`key` or `?key=`: 401 when missing or unknown, 403 when disabled), the project's
@@ -569,6 +577,110 @@ at 3000 events/s; the container used about 40 MB at 3000/s and 220 MB with 741,0
 rows on tmpfs (every request a new visitor, the worst case for the seen-set). With that many raw events, a filtered
 breakdown takes about 220 ms and the current-visitor count (410,000 visitors in five minutes) about 0.8 s; unfiltered
 views read the rollups and stay fast.
+
+## App analytics
+
+docs/design.md §5; the user guide is [app-analytics.md](app-analytics.md). `src/analytics/app/` (`mod.rs`: the wire
+format and what a signal keeps, `rollup.rs`, `query.rs`, `pages.rs`), `src/ingest/signals.rs`, `src/api/app.rs`,
+`migrations/0007_app_analytics.sql` (the switches, the project secret, the rollups' new columns) and
+`migrations/store/0003_app_signals.sql` (the app columns of the raw events, `app_users`).
+
+**The protocol** is KestrelKit's (`docs/protocol.md` in the KestrelKit repository, v1 and its proposals P1–P13):
+`POST /ingest/v1/signals` (also on the ingest port; exempt from the CSRF check) with the project's public key in
+`X-Kestrel-Key`. In order: the per-IP bucket (429), the key (401 missing or unknown, 403 disabled), the project's
+`app_analytics` switch (403 when off), the key's allowed origins when the request has an `Origin` (apps send none; 403),
+a project secret (503 without), the key's bucket (`rate_limit_per_minute`, per request, 429), the body (256 KB, 413),
+`Content-Encoding` (gzip, also deflate, br, zstd) undone with the same 256 KB cap (413; 400 when broken), JSON with a
+`signals` array (400), at most 100 signals (413). Unknown fields are ignored; `sent_at` and `sdk` are optional. Each
+signal on its own: an object with a valid `type` (1–100 characters from `[A-Za-z0-9._-]`, longer ones cut) and an
+`install_id` (cut to 64 characters), else dropped; `time` corrected by `now − sent_at` when they are more than 5
+seconds apart, the arrival time without a readable `time`, never in the future, dropped when older than the project's
+raw retention. The text fields are cut to 200 characters without control characters; an unknown platform is kept as
+sent; flags that aren't `true` are false; the payload keeps at most 20 string, number or boolean values (40-character
+keys, 200-character values, scrubbed like web events: email addresses, phone and card numbers, credentials, IP
+addresses), without keys that name an IP address or user agent. The answer is `202 {"accepted": n}` (with
+`"dropped": m` when signals were dropped; `Ingest::dropped_signals` counts them), `Cache-Control: no-store`, no
+cookie. The whole batch is one writer job (a full queue answers 503 with `Retry-After`).
+
+**Users and sessions** (`analytics::app::Keys`): `trunc64(HMAC-SHA256(secret, "install" ‖ 0 ‖ install id))` and
+the same with `"session"`, with the project's 32-byte `app_secret` (made by `randomblob(32)` in the migration and a
+trigger on new projects; never read by any page or the API). Strict mode (`app_strict`) keys with
+`HMAC(secret, "day" ‖ 0 ‖ day)` of the signal's UTC day. HMAC is written out in `app/mod.rs` (RFC 4231 vectors in its
+tests) rather than adding a crate.
+
+**Storage and rollups.** Raw signals go to `store.analytics_events` with `source = 'app'`: the type in `name`, the
+user in `visitor`, the platform in `os`, the payload in `props`, and `bundle_id`, `app_version`, `build`,
+`os_version`, `model`, `locale`, `flags` (1 debug, 2 TestFlight, 4 simulator) and `session` of their own. The rollup
+(`rollup.rs`) reads both sources in the same id order and hands the app's to `app::rollup::add`: test signals are
+skipped; the rest are added to `analytics_days`/`analytics_hours` with `source = 'app'` (signals in `events`, users in
+`visitors`, `sessions`; and per day `wau` and `mau`) and to `analytics_breakdown` (dimensions `type`, `version`,
+`build`, `release`, `platform`, `os`, `model`, `locale` with signals and users, and `payload` with signals per
+`type ␟ key ␟ value`, at most 50 values per type, key and day, the rest as `\u{1}`). Hourly and per-value users and
+daily sessions use the seen-set with their own codes (100–117). **Weekly and monthly users**: `store.app_users` holds
+each day's users for 31 days. A day's row is made with the distinct users of the 6 and 29 days before; a user new to the
+day (`INSERT OR IGNORE` into `app_users`) is looked up once (`MAX(day)` in the 29 days before, through
+`idx_app_users_user`) and counts for the week and month when absent there; a late user of yesterday counts in today's
+windows when today has no other day of theirs. Today's row is made at the first rollup of the day for any project with
+users in the month before, so quiet days have their weekly and monthly users. Older days that get signals late are
+rolled up again from the raw signals (`recompute_day`), and so are the windows of the 29 days after. In strict mode
+the same arithmetic gives the sum of the days.
+
+**Queries** (`query.rs`): without filters the rollups; with a version, platform or type filter, or with test signals,
+the raw signals (30 days), where weekly and monthly users per day come from the distinct `(day, user)` pairs of the
+period and the 29 days before. Release adoption (`release_adoption`) sums the release's daily users over the last 7
+days and divides by the days' active users; `db::releases` adds it to every release (`adoption_users`).
+
+**Pages** (`pages.rs`, `templates/app.html`, `app_explorer.html`, `partials/app_*.html`, `static/analytics.css`):
+the App tab (`/projects/{id}/app`: period, the filter bar, daily/weekly/monthly users, sessions and signals, two
+charts, version adoption, the lists, a test-signal note; live current users and numbers from `…/app/live`:
+`app-live`, `app-updated`), the signal explorer (`/projects/{id}/app/signals?type=`), Settings → App analytics (the
+switch and strict mode, `POST …/app/settings`, editors), the overview's app summary, and the adoption on the
+Releases tab and release pages. Before the first signal the tab shows KestrelKit's setup with an enabled key.
+
+**API and MCP**: `GET /api/v1/projects/{id}/analytics/app/timeseries`, `…/breakdown?dimension=`, `…/signal-types`,
+`…/payload?type=`, `…/adoption` (period, `from`, `to`, `version`, `platform`, `type`, `test=1`, `limit`), and
+`adoption_users_7d` on releases; MCP `analytics_summary` and `analytics_breakdown` with `source: app` (or an app
+dimension, or a project with only app analytics). Counts only, never a user hash.
+
+**Retention** is the web's (Settings → Retention): raw signals with `retention_analytics_raw_days`, rollups with
+`retention_analytics_days`; deleting a project deletes its `app_users` too.
+
+**Tests**: `tests/app_analytics.rs`: the protocol contract with KestrelKit's own golden requests
+(`tests/fixtures/kestrelkit/`, copied from its `WireTests`: the encoder's exact bytes and the protocol document's
+example), gzip, every answer (400, 401, 403, 413 for size, decompressed size and 101 signals, 429 for the key and the
+IP, 503 for a full queue), lenient signals, unknown fields, clock skew, origins, the ingest port; a privacy scan of
+every text and blob column of both databases for the install and session ids, the IP address, the user agent, an
+email address, a phone and a card number; keyed and strict hashes; daily, weekly and monthly users checked against a
+brute-force count over 45 days with churn, late signals for yesterday and an older day; hours, breakdowns, bounded
+payloads, test signals and recomputation; retention and project deletion; the App tab (empty and with data, periods,
+filters, test signals), the explorer, the settings; release adoption; the API, the reference and MCP. Unit tests in
+`app/` cover HMAC, the golden batch, clock correction, payloads and KestrelKit's scrubbing cases.
+
+### Load check (app signals)
+
+`tools/loadtest/signals.py` (standard library only; open loop; batches of 50–100 signals built like KestrelKit's and
+gzip-compressed, from 20,000 installs on five versions, 20 types, payloads on a third, 5 % TestFlight; `--setup` makes
+the admin and a project on a fresh instance and checks the rollup afterwards) against the release image limited to 2
+CPUs and 2 GB, data on tmpfs, `KK_TRUST_PROXY=1` and `KK_INGEST_IP_RATE_LIMIT=0`. Latency is per request (one batch):
+
+| Rate | Accepted | p50 | p99 | Max |
+|---|---|---|---|---|
+| 3000 signals/s for 30 s | all | 5.0 ms | 7.5 ms | 15 ms |
+| 3000 signals/s for 120 s (two rollups during it) | all | 5.0 ms | 7.3 ms | 16 ms |
+| 6000 signals/s for 20 s | all | 4.4 ms | 6.6 ms | 16 ms |
+| 10,000 signals/s for 15 s | all | 4.6 ms | 7.0 ms | 16 ms |
+| 20,000 signals/s for 15 s | all | 4.3 ms | 6.6 ms | 17 ms |
+
+Every accepted signal was stored, and the rollup counted every production signal (the TestFlight ones stay raw). A
+minute's worth at 3000 signals/s (180,000 signals, 20,000 users) took 2.3–2.5 seconds to roll up; 300,000 took 4.1
+seconds. The container used 55–110 MB. With 300,000 signals and 20,000 users in one day, the App tab, the overview and
+the explorer read the rollups in about 50 ms; filtered views read the raw signals in one pass: 0.6–0.7 s for a version
+or platform filter, 1.4 s with test signals included (every signal of the day).
+
+**KestrelKit end to end**: KestrelKit's own test suite (56 tests) passes on Linux (`swift:6.2`), and a small Swift
+program using the package (`Kestrel.configure`, `Kestrel.signal`, `await Kestrel.flush()`) sent its gzip batch
+(KestrelKit's own deflate encoder) of 43 signals to a test Kestrel: all stored, `App.launched` sent by the SDK, the
+email address in a payload filtered, the unknown platform `Linux` kept as sent.
 
 ## Working on vole-kit at the same time
 

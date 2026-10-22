@@ -60,7 +60,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (“at most every … per issue”) | 이슈당 최소 알림 간격 | summary: 이슈당 최소 간격 {time} (no particle on the placeholder) |
 | threshold | 기준 | spike form reads 시간당 이벤트 [100] 개 초과; message field 알림 기준 |
 | multiplier (× the usual) | 배 | 평소의 {k}배 초과 |
-| adoption | 채택률 | share of the sessions in the last 7 days |
+| adoption | 채택률 | share of the sessions in the last 7 days; also share of an app's daily active users |
 | crash-free rate | 크래시 없는 비율 | |
 | errored (session) | 오류 있음, 크래시 없음 | |
 | abnormal (session ended abnormally) | 비정상 종료 | |
@@ -78,3 +78,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | raw events | 원시 이벤트 | 원시 웹 이벤트 in retention |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer 기호화됨 phrasing in sentences |
+| app analytics / App tab | 앱 분석 / 앱 | tab 앱 |
+| install / install id | 설치 / 설치 ID | a random id per app installation |
+| signal type | 시그널 유형 | |
+| payload | 페이로드 | key/value data sent with a signal |
+| signal explorer | 시그널 탐색기 | |
+| test signal | 테스트 시그널 | debug builds, TestFlight, simulator |
+| strict mode | 엄격 모드 | the user id changes every day |
+| build (app build) | 빌드 | 디버그 빌드 |
+| device model | 기기 모델 | |
+| locale | 언어 및 지역 | as in Apple's settings; 로케일 is too technical |
+| platform | 플랫폼 | |

@@ -19,11 +19,15 @@
 > first crash to ~40 notification channels (Slack, Discord, Teams, Telegram, ntfy, email, webhooks …); release
 > health with crash-free sessions and users; and a REST API, OpenAPI document and MCP tools for all of it.
 > **Web analytics works too** (not released yet): a script under 2 KB, no cookies and no stored IP addresses, a Web
-> tab with visitors, pageviews, pages, referrers, UTM, browsers and devices, filters and live current visitors.
-> App analytics (KestrelKit) come in v0.2; installers and Unraid/Proxmox templates by v1.0. The translations are
-> unreviewed drafts. **[Sending errors to Kestrel](docs/sending-errors.md)** shows how to point each SDK at it,
-> upload dSYMs and set up alerts; **[Web analytics](docs/web-analytics.md)** shows how to add the snippet and what is
-> kept. The design is in [`docs/design.md`](docs/design.md); to build and run it, see
+> tab with visitors, pageviews, pages, referrers, UTM, browsers and devices, filters and live current visitors, and it
+> respects Global Privacy Control. **App analytics work as well** (not released yet; they become v0.2 once the
+> [KestrelKit](https://github.com/Ferdinand99/KestrelKit) Swift package has its first release): an App tab with daily,
+> weekly and monthly active users, sessions, signal types, version adoption, OS versions, devices and locales, a signal
+> explorer for payloads, and each release's adoption next to its crash-free rate. Installers and Unraid/Proxmox
+> templates come by v1.0. The translations are unreviewed drafts. **[Sending errors to Kestrel](docs/sending-errors.md)**
+> shows how to point each SDK at it, upload dSYMs and set up alerts; **[Web analytics](docs/web-analytics.md)** shows
+> how to add the snippet and what is kept; **[App analytics](docs/app-analytics.md)** does the same for KestrelKit.
+> The design is in [`docs/design.md`](docs/design.md); to build and run it, see
 > [`docs/development.md`](docs/development.md).
 
 Keen Kestrel answers two questions about the apps and sites you run:

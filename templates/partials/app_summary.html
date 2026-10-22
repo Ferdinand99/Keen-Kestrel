@@ -1,0 +1,19 @@
+{#- The App tab's numbers and charts: inside app.html and on its own for each
+    live update (`app-updated`). Only `s` (analytics::app::pages::Summary) is
+    in scope. -#}
+{% import "kit/macros.html" as m %}
+{% import "partials/app_macros.html" as am %}
+<div class="stats">
+  {{ m::stat(tr("app.dau"), s.dau, "", s.day_meta) }}
+  {{ m::stat(tr("app.wau"), s.wau, "", tr("app.wau_meta")) }}
+  {{ m::stat(tr("app.mau"), s.mau, "", tr("app.mau_meta")) }}
+  {{ m::stat(tr("app.sessions"), s.sessions, "", s.period_label) }}
+  {{ m::stat(tr("app.signals"), s.signals, "", s.period_label) }}
+</div>
+{%- if s.strict %}
+<p class="help">{{ tr("app.strict_note") }}</p>
+{%- endif %}
+<div class="grid-2">
+  {{ am::chart(s.users_chart, "app-users-title", tr("app.users_chart_title"), s.period_label) }}
+  {{ am::chart(s.activity_chart, "app-activity-title", tr("app.activity_chart_title"), s.period_label) }}
+</div>

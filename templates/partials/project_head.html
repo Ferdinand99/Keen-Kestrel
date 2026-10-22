@@ -1,4 +1,4 @@
-{#- Project page header with the Overview / Issues / Releases / Web / Alerts / Debug files / Settings tabs. Expects `project: ProjectView`, `tab` and `m`. -#}
+{#- Project page header with the Overview / Issues / Releases / Web / App / Alerts / Debug files / Settings tabs. Expects `project: ProjectView`, `tab` and `m`. -#}
 <header class="page-head">
   <a class="page-back" href="/projects">{{ m::icon("chevron-left") }}{{ tr("projects.title") }}</a>
   <div class="page-head-row">
@@ -13,6 +13,7 @@
   <a class="tab" href="/projects/{{ project.id }}/issues"{% if tab == "issues" %} aria-current="page"{% endif %}>{{ tr("issues.title") }}</a>
   <a class="tab" href="/projects/{{ project.id }}/releases"{% if tab == "releases" %} aria-current="page"{% endif %}>{{ tr("releases.tab") }}</a>
   <a class="tab" href="/projects/{{ project.id }}/web"{% if tab == "web" %} aria-current="page"{% endif %}>{{ tr("web.tab") }}</a>
+  <a class="tab" href="/projects/{{ project.id }}/app"{% if tab == "app" %} aria-current="page"{% endif %}>{{ tr("app.tab") }}</a>
   <a class="tab" href="/projects/{{ project.id }}/alerts"{% if tab == "alerts" %} aria-current="page"{% endif %}>{{ tr("alerts.tab") }}</a>
   <a class="tab" href="/projects/{{ project.id }}/debug-files"{% if tab == "debug-files" %} aria-current="page"{% endif %}>{{ tr("difs.tab") }}</a>
   <a class="tab" href="/projects/{{ project.id }}/settings"{% if tab == "settings" %} aria-current="page"{% endif %}>{{ tr("project.settings") }}</a>

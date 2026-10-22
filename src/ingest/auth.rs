@@ -17,6 +17,14 @@ pub struct KeyInfo {
     pub keep_user_details: bool,
     /// Whether the key's project takes web analytics (`projects.web_analytics`).
     pub web_analytics: bool,
+    /// Whether the key's project takes app signals (`projects.app_analytics`).
+    pub app_analytics: bool,
+    /// Strict mode: app user hashes change every day (`projects.app_strict`).
+    pub app_strict: bool,
+    /// The project's secret for app user hashes (`projects.app_secret`).
+    pub app_secret: Vec<u8>,
+    /// How long raw analytics events are kept (days).
+    pub raw_days: i64,
 }
 
 impl KeyInfo {
@@ -96,7 +104,8 @@ pub fn checked(key: &str) -> Option<String> {
 pub fn lookup(c: &Connection, public_key: &str) -> rusqlite::Result<Option<KeyInfo>> {
     c.prepare_cached(
         "SELECT k.id, k.project_id, k.enabled, k.rate_limit_per_minute, k.allowed_origins,
-                p.keep_user_details, p.web_analytics
+                p.keep_user_details, p.web_analytics, p.app_analytics, p.app_strict,
+                coalesce(p.app_secret, x''), p.retention_analytics_raw_days
          FROM project_keys k JOIN projects p ON p.id = k.project_id
          WHERE k.public_key = ?1",
     )?
@@ -115,6 +124,10 @@ pub fn lookup(c: &Connection, public_key: &str) -> rusqlite::Result<Option<KeyIn
                 .collect(),
             keep_user_details: r.get(5)?,
             web_analytics: r.get(6)?,
+            app_analytics: r.get(7)?,
+            app_strict: r.get(8)?,
+            app_secret: r.get(9)?,
+            raw_days: r.get(10)?,
         })
     })
     .optional()
@@ -173,6 +186,10 @@ mod tests {
             allowed_origins: vec![],
             keep_user_details: false,
             web_analytics: true,
+            app_analytics: true,
+            app_strict: false,
+            app_secret: Vec::new(),
+            raw_days: 30,
         };
         assert!(k.allows_origin("https://evil.example") && k.any_origin());
         k.allowed_origins = vec!["https://shop.example".into()];

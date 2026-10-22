@@ -62,7 +62,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (“at most every … per issue”) | مرة على الأكثر كل … لكل مشكلة | form label «لكل مشكلة، مرة على الأكثر كل» |
 | threshold | حد | message field «حد التنبيه» |
 | multiplier (× the usual) | أضعاف / × | summary keeps «{k}× المعتاد» |
-| adoption | الاعتماد | share of the sessions in the last 7 days |
+| adoption | الاعتماد | share of the sessions in the last 7 days; also share of an app's daily active users |
 | crash-free rate | نسبة الجلسات بلا أعطال | |
 | errored (session) | بأخطاء دون عطل | |
 | abnormal (session ended abnormally) | انتهت بشكل غير طبيعي | |
@@ -82,3 +82,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | traffic sources (card) | مصادر الزيارات | not «المصادر» alone: that is the keys' allowed origins |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer «مع الرموز» phrasing in sentences |
+| app analytics / App tab | تحليلات التطبيق / التطبيق | tab «التطبيق» |
+| install / install id | التثبيت / معرّف التثبيت | a random id per app installation |
+| signal type | نوع الإشارة (pl. أنواع الإشارات) | |
+| payload | الحمولة (pl. الحمولات) | key/value data sent with a signal |
+| signal explorer | مستكشف الإشارات | |
+| test signal | إشارة اختبار (pl. إشارات الاختبار) | debug builds, TestFlight, simulator |
+| strict mode | الوضع الصارم | the user id changes every day |
+| build (app build) | البنية (pl. البنيات) | «بنيات التصحيح» for debug builds |
+| version (dimension next to release) | رقم الإصدار (pl. أرقام الإصدار) | where «الإصدار» (release) and the bare version appear side by side |
+| device model | طراز الجهاز (pl. طرازات الأجهزة) | |
+| locale | اللغة والمنطقة | language and region setting |
+| platform | المنصة (pl. المنصات) | |

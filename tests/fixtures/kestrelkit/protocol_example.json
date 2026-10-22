@@ -1,0 +1,7 @@
+{"sent_at":"2026-10-22T19:00:00.000Z","sdk":{"name":"kestrelkit","version":"0.1.0"},
+ "signals":[{"type":"App.launched","time":"2026-10-22T18:59:58.123Z",
+   "install_id":"8F3C2B1A-0D4E-4F5A-9B6C-7D8E9F0A1B2C","session_id":"1B2C3D4E-5F60-4718-8293-A4B5C6D7E8F9",
+   "app":{"bundle_id":"com.example.app","version":"1.4.0","build":"57"},
+   "device":{"platform":"iOS","os_version":"18.2","model":"iPhone16,2","locale":"nb_NO"},
+   "flags":{"debug":false,"testflight":false,"simulator":false},
+   "payload":{"plan":"pro"}}]}

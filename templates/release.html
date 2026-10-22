@@ -16,7 +16,7 @@
 <div class="stats">
   {{ m::stat(tr("releases.crash_free_sessions"), pct(stats.crash_free_sessions), stats.health_status, trn("release.sessions_meta", stats.sessions)) }}
   {{ m::stat(tr("releases.crash_free_users"), pct(stats.crash_free_users), "", trn("release.users_meta", stats.users)) }}
-  {{ m::stat(tr("releases.adoption"), pct(stats.adoption), "", tr("release.adoption_meta")) }}
+  {{ m::stat(tr("releases.adoption"), pct(stats.adoption), "", stats.adoption_meta) }}
   {{ m::stat(tr("releases.new_issues"), num(release.new_issues), "", trn("release.events_meta", release.events)) }}
 </div>
 

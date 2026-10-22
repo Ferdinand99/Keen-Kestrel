@@ -25,6 +25,10 @@ pub struct Release {
     pub health: Health,
     /// Its share of the project's sessions in the last 7 days.
     pub adoption: Option<f64>,
+    /// Its share of the app's daily active users in the last 7 days (app
+    /// analytics: `bundle@version+build` matched to the signals' app), when
+    /// any app user ran it.
+    pub adoption_users: Option<f64>,
 }
 
 const COLUMNS: &str = "r.id, r.project_id, r.version, r.first_seen, r.last_seen, r.date_released,
@@ -44,6 +48,7 @@ fn row(r: &Row<'_>) -> rusqlite::Result<Release> {
         new_issues: r.get(8)?,
         health: Health::default(),
         adoption: None,
+        adoption_users: None,
     })
 }
 
@@ -55,6 +60,12 @@ fn week_start(c: &Connection, now: &str) -> rusqlite::Result<String> {
 fn fill(c: &Connection, mut r: Release, since: &str) -> rusqlite::Result<Release> {
     r.health = health::totals(c, r.id, None, None)?;
     r.adoption = health::adoption(c, r.project_id, r.id, since)?;
+    let today = since
+        .parse::<jiff::civil::Date>()
+        .map(|d| crate::analytics::day_of(d) + 6)
+        .unwrap_or_default();
+    r.adoption_users =
+        crate::analytics::app::query::release_adoption(c, r.project_id, &r.version, today)?;
     Ok(r)
 }
 

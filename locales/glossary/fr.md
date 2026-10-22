@@ -65,7 +65,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (at most every … per issue) | intervalle minimal | « Par problème, intervalle minimal de [1 h] »; avoids « toutes les 1 h » |
 | digest interval (one message every …) | un message par période de … | same reason as above |
 | threshold / alert above | seuil (m.) / seuil d’alerte | form label « Plus de [100] événements par heure » |
-| adoption | adoption (f.) | share of the last 7 days’ sessions |
+| adoption | adoption (f.) | share of the last 7 days’ sessions; also share of an app’s daily active users |
 | errored (session) | avec erreurs, sans plantage | session row label |
 | abnormal (session ended abnormally) | fin anormale | session row label |
 | crashed (session) | plantée | « Plantées » as row label (f.: session) |
@@ -86,3 +86,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | raw events | événements bruts | kept for filters; retention « Conserver les événements web bruts » |
 | snippet (k.js) | script (m.) | « le script k.js »; avoids « extrait » |
 | UTM source / medium / campaign | source / support / campagne UTM |  |
+| app analytics | statistiques d’app | tab « App »; page title « Statistiques d’app de … » |
+| install / install id | installation (f.) / identifiant d’installation | a random id per app installation |
+| signal type | type de signal (m.) | `App.launched` and the like stay as code |
+| payload | charge utile (f.) | the key/value data an app sends with a signal |
+| signal explorer | explorateur de signaux (m.) | nav item short « Explorateur » |
+| test signal | signal de test (m.) | from debug builds, TestFlight and the simulator |
+| strict mode | mode strict (m.) | |
+| build (app build) | build (m.) | « build de débogage » |
+| device model | modèle d’appareil (m.) | |
+| locale | langue et région | as Apple’s « Langue et région »; card « Langues » |
+| platform | plateforme (f.) | |
+| OS version | version du système (f.) | |
+| release (as an analytics dimension) | version complète | dimension label, to tell `bundle@version+build` apart from « Version » (app version) |

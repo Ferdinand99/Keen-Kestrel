@@ -60,7 +60,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | digest | Sammelmeldung (die) | „Als Sammelmeldung senden“; status pill „In Sammelmeldung“ |
 | cooldown (at most every … per issue) | höchstens alle … pro Problem | label „Pro Problem höchstens alle“ |
 | threshold | Schwelle (die) | in the form: „Mehr als [100] Ereignisse pro Stunde“; message field „Alarm ab“ |
-| adoption | Verbreitung | the release's share of sessions |
+| adoption | Verbreitung | the release's share of sessions; also its share of an app's daily active users |
 | abnormal (session ended abnormally) | abnormal beendet | |
 | errored (session) | mit Fehlern, ohne Absturz | |
 | finalized (release) | abgeschlossen | lowercase status after a date |
@@ -79,3 +79,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | current visitors | aktuelle Besucher | live counter, last 5 minutes |
 | direct / none (no referrer) | direkt / keiner | |
 | raw events | Rohereignisse | settings label „Web-Rohereignisse aufbewahren“ |
+| app analytics | App-Analyse | tab „App“; page title „App-Analyse für …“ |
+| install / install id | Installation / Installations-ID | a random id per app installation |
+| signal type | Signaltyp (der) | `App.launched` and the like stay as code |
+| payload | Payload (die) | the key/value data an app sends with a signal; its keys are „Felder“ in sentences (avoids a clash with the project key „Schlüssel“) |
+| signal explorer | Signal-Explorer (der) | nav item |
+| test signal | Testsignal (das) | from debug builds, TestFlight and the simulator; „Testsignale einbeziehen“ |
+| strict mode | strenger Modus | settings toggle „Strenger Modus“ |
+| build (app build) | Build (der; Pl. Builds) | „Debug-Build“ |
+| device model | Gerätemodell (das) | |
+| locale | Sprache und Region | as Apple's „Sprache & Region“; card „Sprachen“ |
+| platform | Plattform (die) | |
+| OS version | Systemversion (die) | |

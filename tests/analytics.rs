@@ -1151,3 +1151,27 @@ async fn nothing_personal_is_stored_from_web_events() {
     assert!(scanned > 50, "{scanned}");
     // And the answers set no cookie (checked above for each ingest answer).
 }
+
+#[tokio::test]
+async fn global_privacy_control_is_respected() {
+    let app = App::new().await;
+    // The browser says Sec-GPC: 1: the same answer, nothing stored.
+    let mut req = beacon(&pageview(&app.key, "/private"), FIREFOX);
+    req.headers_mut().insert("sec-gpc", "1".parse().unwrap());
+    let res = app.send(req).await;
+    assert_eq!(res.status, StatusCode::ACCEPTED);
+    assert!(res.body.is_empty());
+    assert!(res.headers.get(header::SET_COOKIE).is_none());
+    // Without it (or with DNT, which isn't acted on) the pageview counts.
+    let mut req = beacon(&pageview(&app.key, "/counted"), FIREFOX);
+    req.headers_mut().insert("dnt", "1".parse().unwrap());
+    req.headers_mut().insert("sec-gpc", "0".parse().unwrap());
+    assert_eq!(app.send(req).await.status, StatusCode::ACCEPTED);
+    assert_eq!(raw_count(&app).await, 1);
+    // k.js sends nothing when navigator.globalPrivacyControl is true
+    // (tests/kjs/behaviour.mjs runs it).
+    let js = app
+        .send(Request::get("/js/k.js").body(Body::empty()).unwrap())
+        .await;
+    assert!(js.body.contains("globalPrivacyControl === true"));
+}

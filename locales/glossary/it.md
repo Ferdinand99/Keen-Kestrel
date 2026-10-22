@@ -64,7 +64,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | digest | riepilogo (m.) | «Invia come riepilogo»; status pill «Nel riepilogo» |
 | cooldown (at most every … per issue) | al massimo ogni … | «Per problema, al massimo ogni [1 h]» |
 | threshold / alert above | soglia (f.) / soglia di avviso | form label «Più di [100] eventi l’ora» |
-| adoption | adozione (f.) | share of the last 7 days’ sessions |
+| adoption | adozione (f.) | share of the last 7 days’ sessions; also share of an app’s daily active users |
 | errored (session) | con errori, senza crash | session row label |
 | abnormal (session ended abnormally) | chiusura anomala | session row label |
 | crashed (session) | con crash | session row label |
@@ -85,3 +85,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | raw events | eventi grezzi | kept for filters |
 | snippet (k.js) | snippet (m.) | loanword, as with «stack trace» |
 | UTM source / medium / campaign | sorgente / mezzo / campagna UTM | as in Google Analytics |
+| app analytics | analisi app | tab «App»; page title «Analisi app di …» |
+| install / install id | installazione (f.) / ID di installazione (m.) | a random id per app installation |
+| signal type | tipo di segnale (m.) | `App.launched` and the like stay as code |
+| payload | payload (m., invariable) | loanword, as with «snippet»; the key/value data an app sends with a signal |
+| signal explorer | Esplora segnali | nav item and page title, Italian UI style for an explorer tool |
+| test signal | segnale di test (m.) | from debug builds, TestFlight and the simulator |
+| strict mode | modalità rigorosa (f.) | |
+| build (app build) | build (f., invariable) | «build di debug» |
+| device model | modello di dispositivo (m.) | |
+| locale | lingua e regione | as Apple’s «Lingua e regione»; card «Lingue» |
+| platform | piattaforma (f.) | |
+| OS version | versione del sistema (f.) | |
+| release (as an analytics dimension) | versione completa | dimension label, to tell `bundle@version+build` apart from «Versione» (app version) |

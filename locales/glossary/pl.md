@@ -67,7 +67,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown ("at most every … per issue") | najwyżej co … na problem | select label "Na problem najwyżej co [1 godz.]" |
 | threshold / alert above | ponad … / alert powyżej | "Ponad [100] zdarzeń na godzinę"; message field "Alert powyżej" |
 | multiplier | … × więcej niż zwykle | "I ponad [5] ×" |
-| adoption | udział (m.) | share of the sessions in the last 7 days |
+| adoption | udział (m.) | share of the sessions in the last 7 days; also share of an app's daily active users |
 | crashed / errored / abnormal (session) | z awarią / z błędami, bez awarii / zakończone nieprawidłowo | session outcomes |
 | finalized (release) | sfinalizowana | lowercase status, agrees with "wersja" |
 | attempt (delivery) | próba (f.; pl. próby / prób) | |
@@ -85,3 +85,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | current visitors | odwiedzający teraz | stat card, last 5 minutes |
 | direct / none (no referrer) | bezpośrednio / brak |  |
 | raw events | surowe zdarzenia | „Liczby po filtrowaniu” for filtered numbers |
+| install / install id | instalacja / identyfikator instalacji | a random id per app installation; only its keyed hash is kept |
+| signal type | typ sygnału |  |
+| payload | dane sygnału | the key/value data sent with a signal; „Brak danych” when empty |
+| signal explorer | eksplorator sygnałów | tab „Eksplorator sygnałów” |
+| test signal | sygnał testowy | from debug builds, TestFlight, the simulator |
+| strict mode | tryb ścisły | user id changes every day |
+| build (app build) | kompilacja (f.) | as `dist` in the event view; debug build: „kompilacja debugowa” |
+| device model | model urządzenia |  |
+| locale | język i region | card „Języki” |
+| platform | platforma (f.) |  |
+| release identifier (bundle@version+build) | identyfikator wersji | dimension label, to tell it apart from „Wersja” |

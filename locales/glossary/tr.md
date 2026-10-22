@@ -65,7 +65,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (at most every … per issue) | “sorun başına en sık … aralıkla” | label “Sorun başına en sık şu aralıkla”, then the duration |
 | threshold / alert above | eşik / uyarı eşiği | form label “Şundan fazla”, addon “etkinlik / saat” |
 | multiplier (× the usual) | normalin … katı | |
-| adoption | benimsenme | the release's share of sessions in the last 7 days |
+| adoption | benimsenme | the release's share of sessions in the last 7 days; also share of an app’s daily active users |
 | errored (session) | hatalı, çökme yok | |
 | abnormal (session) | anormal sonlandı | |
 | finalized (release) | tamamlandı | lowercase status after a date |
@@ -84,3 +84,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | direct / none (no referrer) | doğrudan / yok |  |
 | raw events | ham etkinlikler | filtered numbers: “filtrelenmiş sayılar” |
 | UTM medium | UTM aracı | as in Google Analytics (kaynak / araç) |
+| app analytics | uygulama analizi | tab “Uygulama” |
+| install / install id | kurulum / kurulum kimliği | random id per app installation |
+| signal type | sinyal türü |  |
+| payload | parametreler | the key/value data an app sends with a signal |
+| signal explorer | sinyal gezgini |  |
+| test signal | test sinyali |  |
+| strict mode | katı mod | the user id changes every day |
+| build (app build) | derleme | debug build: “hata ayıklama derlemesi” |
+| release (signal dimension, bundle@version+build) | tam sürüm | only where it stands next to “Sürüm” (the app version) |
+| device model | cihaz modeli |  |
+| locale (language and region setting) | dil ve bölge |  |
+| platform | platform |  |
+| on/off switch (for users) | açma/kapama seçeneği | not “anahtar”, which is the project key |

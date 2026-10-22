@@ -63,7 +63,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (“at most every … per issue”) | برای هر مشکل حداکثر هر … یک بار | form label «برای هر مشکل، حداکثر هر» |
 | threshold | آستانه | message field «آستانهٔ هشدار» |
 | multiplier (× the usual) | برابر / × | summary keeps «{k}× حالت معمول» |
-| adoption | پذیرش | share of the sessions in the last 7 days |
+| adoption | پذیرش | share of the sessions in the last 7 days; also share of an app's daily active users |
 | crash-free rate | نرخ بدون کرش | |
 | errored (session) | با خطا، بدون کرش | |
 | abnormal (session ended abnormally) | پایان غیرعادی | |
@@ -82,3 +82,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | referrers (list tab) | ارجاع‌دهنده‌ها | short form of «سایت‌های ارجاع‌دهنده» for the narrow tab |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer «با نماد» phrasing in sentences |
+| app analytics / App tab | تحلیل برنامه / برنامه | tab «برنامه» |
+| install / install id | نصب / شناسهٔ نصب | a random id per app installation |
+| signal type | نوع سیگنال | plural «انواع سیگنال» |
+| payload | محموله | key/value data sent with a signal |
+| signal explorer | کاوشگر سیگنال | |
+| test signal | سیگنال آزمایشی | debug builds, TestFlight, simulator |
+| strict mode | حالت سخت‌گیرانه | the user id changes every day |
+| build (app build) | بیلد | familiar loanword; «بیلدهای اشکال‌زدایی» for debug builds |
+| version (dimension next to release) | شمارهٔ نسخه | where «نسخه» (release) and the bare version appear side by side |
+| device model | مدل دستگاه | |
+| locale | زبان و منطقه | language and region setting |
+| platform | پلتفرم | |

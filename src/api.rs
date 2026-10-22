@@ -1,7 +1,7 @@
 //! REST API v1 (`/api/v1/**`): projects and their DSN keys, issues and
 //! events ([`issues`]), releases and their health ([`releases`]), alert
 //! rules and the alerts they sent ([`rules`]), debug files, web analytics
-//! ([`analytics`]), and the route
+//! ([`analytics`]), app analytics ([`app`]), and the route
 //! table ([`DOCS`]) the kit turns into `/api-docs`, the OpenAPI document,
 //! `/api-docs.md` and `/llms.txt`. The table also documents the ingest
 //! endpoints the SDKs call (with a DSN key, not an API token) and
@@ -36,6 +36,7 @@ use crate::dsn;
 use crate::project::{self, Platform};
 
 pub mod analytics;
+pub mod app;
 pub mod issues;
 pub mod releases;
 pub mod rules;
@@ -136,6 +137,7 @@ const RELEASE_EXAMPLE: &str = r#"{
   "health": {"sessions": 5400, "errored": 61, "crashed": 4, "abnormal": 1, "users": 812, "crashed_users": 3,
              "crash_free_sessions": 99.93, "crash_free_users": 99.63},
   "adoption_7d": 64.5,
+  "adoption_users_7d": 71.2,
   "path": "/projects/1/releases/7"
 }"#;
 
@@ -191,6 +193,47 @@ const BREAKDOWN_EXAMPLE: &str = r#"{
     {"value": "news.ycombinator.com", "label": "news.ycombinator.com", "visitors": 388, "count": 452}
   ]
 }"#;
+
+const APP_TIMESERIES_EXAMPLE: &str = r#"{
+  "source": "app",
+  "period": "7d",
+  "from": "2026-10-16",
+  "to": "2026-10-22",
+  "filters": {"version": null, "platform": "iOS", "type": null, "include_test": false},
+  "interval": "day",
+  "totals": {"signals": 18240, "sessions": 3920, "user_days": 2610, "dau": 402, "wau": 1310, "mau": 2875},
+  "current_users": 12,
+  "data": [{"start": "2026-10-16", "users": 371, "wau": 1288, "mau": 2840, "sessions": 552, "signals": 2580}, "…"]
+}"#;
+
+const APP_BREAKDOWN_EXAMPLE: &str = r#"{
+  "source": "app",
+  "dimension": "version",
+  "metric": "signals",
+  "period": "30d",
+  "from": "2026-09-23",
+  "to": "2026-10-22",
+  "filters": {"version": null, "platform": null, "type": null, "include_test": false},
+  "data": [
+    {"value": "1.4.0", "label": "1.4.0", "users": 9120, "count": 61230},
+    {"value": "1.3.2", "label": "1.3.2", "users": 3010, "count": 18800}
+  ]
+}"#;
+
+const APP_PAYLOAD_EXAMPLE: &str = r#"{
+  "source": "app",
+  "type": "Paywall.shown",
+  "period": "7d",
+  "from": "2026-10-16",
+  "to": "2026-10-22",
+  "filters": {"version": null, "platform": null, "type": null, "include_test": false},
+  "data": [
+    {"key": "plan", "values": [{"value": "pro", "label": "pro", "count": 640}, {"value": "free", "label": "free", "count": 212}]},
+    {"key": "source", "values": [{"value": "onboarding", "label": "onboarding", "count": 590}, {"value": null, "label": "Other values", "count": 14}]}
+  ]
+}"#;
+
+const APP_FILTER_Q: &str = "version, platform, type: only signals with this value; test=1: include test signals (debug builds, TestFlight, the simulator). Filters and test signals are counted from the raw signals, which are kept 30 days";
 
 const PERIOD_Q: &str =
     "period: today, yesterday, 7d (default), 30d, any 1d–400d, or custom with from and to";
@@ -256,7 +299,7 @@ pub static ROUTES: &[RouteDoc] = &[
     r("GET", "/api/v1/projects/{id}/issues/{issue_id}/events/latest", "viewer", "Issues", "The issue's newest event that still has its details, with the normalised payload as stored (already scrubbed at ingest).").res(EVENT_EXAMPLE),
     r("GET", "/api/v1/projects/{id}/events/{event_id}", "viewer", "Issues", "One event by its id (32 hex characters, dashes allowed), with its issue and payload.").res(EVENT_EXAMPLE),
     // -- Releases --
-    r("GET", "/api/v1/projects/{id}/releases", "viewer", "Releases", "A project's releases, newest first, each with its events, new issues, all-time health (sessions, crash-free sessions and users) and its share of the last 7 days' sessions (`adoption_7d`).")
+    r("GET", "/api/v1/projects/{id}/releases", "viewer", "Releases", "A project's releases, newest first, each with its events, new issues, all-time health (sessions, crash-free sessions and users), its share of the last 7 days' sessions (`adoption_7d`) and, when KestrelKit sends signals for it (`bundle@version+build` matches the app's bundle id, version and build), its share of the app's daily active users in the last 7 days (`adoption_users_7d`, else `null`).")
         .q(&[LIMIT_Q, CURSOR_Q])
         .res(r#"{"data": [ …release… ], "next_cursor": null, "total": 12}"#),
     r("GET", "/api/v1/projects/{id}/releases/{release_id}", "viewer", "Releases", "Get one release.").res(RELEASE_EXAMPLE),
@@ -270,6 +313,21 @@ pub static ROUTES: &[RouteDoc] = &[
     r("GET", "/api/v1/projects/{id}/analytics/breakdown", "viewer", "Analytics", "The top values of one dimension over a period, most visitors first: `page`, `entry` (a visitor's first page of the day), `referrer` (the referring domain; \"\" is direct or none), `utm_source`, `utm_medium`, `utm_campaign`, `browser`, `os`, `device` (desktop, mobile, tablet), `screen` (a width bucket) or `event` (custom events by name). `count` is pageviews, entries for `entry`, events for `event` (`metric` says which).")
         .q(&["dimension: which values to count (required)", "limit: values (1–100, default 10)", PERIOD_Q, FROM_Q, FILTER_Q])
         .res(BREAKDOWN_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/analytics/app/timeseries", "viewer", "Analytics", "A project's app analytics (KestrelKit signals) over a period: totals (signals; sessions and users counted per day and added up as `sessions` and `user_days`; daily, weekly and monthly active users on the period's last day as `dau`, `wau`, `mau`), users seen in the last five minutes, and the series by hour (one-day periods) or by UTC day, with each day's `wau` and `mau`. Test signals (debug builds, TestFlight, the simulator) are left out unless `test=1`. Without filters it reads the rollups (kept 400 days); with filters the raw signals (30 days).")
+        .q(&[PERIOD_Q, FROM_Q, APP_FILTER_Q])
+        .res(APP_TIMESERIES_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/analytics/app/breakdown", "viewer", "Analytics", "The top values of one dimension of app signals over a period, most users first (users counted per day and added up): `type` (the signal type), `version`, `build` (version and build), `release` (`bundle@version+build`, the name Sentry's Apple SDK gives the same release), `platform`, `os` (platform and version), `model` (hardware model) or `locale`. `count` is signals.")
+        .q(&["dimension: which values to count (required)", "limit: values (1–100, default 10)", PERIOD_Q, FROM_Q, APP_FILTER_Q])
+        .res(APP_BREAKDOWN_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/analytics/app/signal-types", "viewer", "Analytics", "The signal types of a period with their signals and users, most users first.")
+        .q(&["limit: types (1–500, default 50)", PERIOD_Q, FROM_Q, APP_FILTER_Q])
+        .res(r#"{"source": "app", "period": "7d", "from": "2026-10-16", "to": "2026-10-22", "filters": {"version": null, "platform": null, "type": null, "include_test": false}, "metric": "signals", "data": [{"value": "App.launched", "label": "App.launched", "users": 1310, "count": 4022}, "…"]}"#),
+    r("GET", "/api/v1/projects/{id}/analytics/app/payload", "viewer", "Analytics", "A signal type's payload over a period: each key (most signals first) with its top values and their signals. The rollups keep at most 50 values per type, key and day; the rest count as one value with `value: null` (\"Other values\").")
+        .q(&["type: the signal type (required)", "limit: values per key (1–100, default 10)", PERIOD_Q, FROM_Q, APP_FILTER_Q])
+        .res(APP_PAYLOAD_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/analytics/app/adoption", "viewer", "Analytics", "Version adoption: the versions with the most users over the period, each with its share (percent) of the daily active users on every day of the period and on the last one.")
+        .q(&["limit: versions (1–20, default 5)", PERIOD_Q, FROM_Q, APP_FILTER_Q])
+        .res(r#"{"source": "app", "period": "30d", "from": "2026-09-23", "to": "2026-10-22", "filters": {"version": null, "platform": null, "type": null, "include_test": false}, "days": ["2026-09-23", "…"], "versions": [{"version": "1.4.0", "users": 21480, "shares": [0.0, "…", 71.2], "latest": 71.2}, "…"]}"#),
     // -- Alerts --
     r("GET", "/api/v1/projects/{id}/alert-rules", "viewer", "Alerts", "A project's alert rules, oldest first.")
         .q(&[LIMIT_Q, CURSOR_Q])
@@ -297,6 +355,9 @@ pub static ROUTES: &[RouteDoc] = &[
         .res(r#"{"id": "9ec79c33ec9942ab8353589fcb2e04dc"}"#),
     r("POST", "/ingest/v1/event", "dsn key", "Ingest", "Where the k.js snippet sends pageviews and custom events: one JSON object, as `text/plain` (no CORS preflight) or `application/json` (64 KB at most). `k` (or `key`, `X-Kestrel-Key`, `?key=`) is the project's public key; `n` the event (`pageview` or a custom event's name); `u` the page's URL; `r` the referrer; `w` the screen width; `h: 1` keeps a `#/route` in the path; `p` up to 20 properties of a custom event. The key's allowed origins are checked against `Origin` (else `Referer`); the project must have web analytics on. Bots are answered like everyone else and not counted. Answers `202 Accepted` with an empty body and never sets a cookie; 429 with `Retry-After` when a limit or the queue is full.")
         .req(r#"{"k": "<public key>", "n": "pageview", "u": "https://shop.example/pricing?utm_source=newsletter", "r": "https://news.example/", "w": 1440}"#),
+    r("POST", "/ingest/v1/signals", "dsn key", "Ingest", "Where KestrelKit (and any app SDK that speaks its protocol, v1) sends app signals: `{\"sent_at\", \"sdk\", \"signals\": [...]}` with at most 100 signals and 256 KB (also once gzip is undone), the project's public key in `X-Kestrel-Key`, optionally `Content-Encoding: gzip`. A signal has `type` (1–100 characters from `[A-Za-z0-9._-]`), `time`, `install_id`, `session_id`, `app` (`bundle_id`, `version`, `build`), `device` (`platform`, `os_version`, `model`, `locale`), `flags` (`debug`, `testflight`, `simulator`) and `payload` (at most 20 keys of 40 characters, string values of 200). Signals that break a limit are cut or dropped one by one; `time` is corrected by `sent_at` for the device's clock. Kestrel keeps a keyed hash of the install id, never the id, the IP address or the user agent, and scrubs email addresses, phone and card numbers in payloads. Answers `202 {\"accepted\": n}` (and `dropped` when signals were dropped); 400 for a malformed batch, 401 for a missing or unknown key, 403 for a disabled key or app analytics turned off, 413 for too large, 429 (rate limit) and 503 (queue full) with `Retry-After` in seconds.")
+        .req(r#"{"sent_at": "2026-10-22T19:00:00.000Z", "sdk": {"name": "kestrelkit", "version": "0.1.0"}, "signals": [{"type": "Paywall.shown", "time": "2026-10-22T18:59:58.123Z", "install_id": "8F3C2B1A-0D4E-4F5A-9B6C-7D8E9F0A1B2C", "session_id": "1B2C3D4E-5F60-4718-8293-A4B5C6D7E8F9", "app": {"bundle_id": "com.example.app", "version": "1.4.0", "build": "57"}, "device": {"platform": "iOS", "os_version": "18.2", "model": "iPhone16,2", "locale": "nb_NO"}, "flags": {"debug": false, "testflight": false, "simulator": false}, "payload": {"plan": "pro"}}]}"#)
+        .res(r#"{"accepted": 1}"#),
     r("GET", "/js/k.js", "public", "Ingest", "The web analytics snippet (under 2 KB gzip-compressed): `<script defer src=\"https://kestrel.example.com/js/k.js\" data-key=\"<public key>\"></script>`. Cached for a day, with an ETag."),
     // -- sentry-cli --
     r("GET", "/api/0/", "api token", "sentry-cli", "What sentry-cli's `info` and upload commands ask first: the token's user and scopes (`project:releases` when it may upload debug files and manage releases).")
@@ -309,7 +370,7 @@ pub static ROUTES: &[RouteDoc] = &[
     r("GET", "/api/0/organizations/{org}/releases/{version}/", "api token", "sentry-cli", "`sentry-cli releases info`: the release across the projects that have it."),
     // -- System --
     r("GET", "/api/v1/openapi.json", "viewer", "System", "This reference as an OpenAPI 3.1 document."),
-    r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants. Tools: list_projects, list_issues, get_issue, release_health, analytics_summary, analytics_breakdown; with a read-and-write token of an editor also resolve_issue and ignore_issue. Bearer API token; GET answers 405.")
+    r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants. Tools: list_projects, list_issues, get_issue, release_health, analytics_summary, analytics_breakdown (web or app analytics); with a read-and-write token of an editor also resolve_issue and ignore_issue. Bearer API token; GET answers 405.")
         .req(r#"{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_issues", "arguments": {"project": "shop", "query": "is:unresolved level:error"}}}"#),
     r("GET", "/healthz", "public", "System", "Liveness probe: always \"ok\"."),
 ];
@@ -353,9 +414,9 @@ fn markdown_intro(out: &mut String, base: &str) {
         out,
         "# Keen Kestrel API\n\n\
          > REST API of a Keen Kestrel instance (version {version}), generated from the server's own route table. \
-         Keen Kestrel is a self-hosted, Sentry-compatible error tracker with privacy-friendly web analytics: projects and \
-         their DSN keys, issues and events, releases and their health, alert rules, debug files and web analytics. The \
-         official Sentry SDKs and the k.js snippet send to it (see Ingest).\n\n\
+         Keen Kestrel is a self-hosted, Sentry-compatible error tracker with privacy-friendly web and app analytics: \
+         projects and their DSN keys, issues and events, releases and their health, alert rules, debug files, web and app \
+         analytics. The official Sentry SDKs, the k.js snippet and KestrelKit send to it (see Ingest).\n\n\
          - Instance: {base}\n\
          - API base URL: {base}/api/v1\n\
          - Browsable reference: {base}/api-docs (sign in) · OpenAPI 3.1: {base}/api/v1/openapi.json\n\
@@ -426,6 +487,16 @@ fn markdown_middle(out: &mut String) {
          numbers and card numbers in paths, UTM values and custom event names and properties are `[Filtered]`.\n\
          - Raw events are kept 30 days and rolled up every minute into hourly and daily counts kept 400 days (per project: \
          Settings → Retention). Queries without filters read the rollups; with filters, the raw events.\n\n\
+         ## App analytics\n\n\
+         - Apps send signals with the KestrelKit Swift package (`Kestrel.configure(url:key:)` with a public key of the \
+         project) to `POST /ingest/v1/signals`. Kestrel keeps `HMAC(project secret, install id)`, cut to 64 bits, never the \
+         install id, the IP address or the user agent; in a project's strict mode the key changes every UTC day.\n\
+         - `dau`, `wau` and `mau` are distinct users on a day and in the 7 and 30 days up to it (in strict mode, the days \
+         added up). Sessions are distinct session ids per day.\n\
+         - Test signals (debug builds, TestFlight, the simulator) are kept raw but left out of the rollups; `test=1` \
+         counts them from the raw signals.\n\
+         - A release `bundle@version+build` matches the app's bundle id, version and build, so the releases show their \
+         share of the app's users (`adoption_users_7d`).\n\n\
          ## Alerts\n\n\
          - Alert rules belong to a project and send to the instance's notification channels (Settings → Notifications: Slack, Discord, \
          Teams, Telegram, ntfy, email, webhooks, PagerDuty and about 30 more).\n\
@@ -531,6 +602,20 @@ pub fn router() -> Router<Core> {
             "/projects/{id}/analytics/breakdown",
             get(analytics::breakdown),
         )
+        .route(
+            "/projects/{id}/analytics/app/timeseries",
+            get(app::timeseries),
+        )
+        .route(
+            "/projects/{id}/analytics/app/breakdown",
+            get(app::breakdown),
+        )
+        .route(
+            "/projects/{id}/analytics/app/signal-types",
+            get(app::signal_types),
+        )
+        .route("/projects/{id}/analytics/app/payload", get(app::payload))
+        .route("/projects/{id}/analytics/app/adoption", get(app::adoption))
         .route(
             "/projects/{id}/alert-rules",
             get(rules::list).post(rules::create),

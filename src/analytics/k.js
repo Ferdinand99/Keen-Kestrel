@@ -14,7 +14,8 @@
 // Custom events: kestrel('event', 'Signup', {plan: 'pro'}). Calls made
 // before k.js loads are queued by: window.kestrel = window.kestrel ||
 // function () { (kestrel.q = kestrel.q || []).push(arguments) }.
-// localStorage.kestrel_ignore = 'true' stops this browser from counting.
+// localStorage.kestrel_ignore = 'true' stops this browser from counting, and
+// so does Global Privacy Control (navigator.globalPrivacyControl).
 //
 // Served with comment lines and indentation removed (src/analytics/kjs.rs):
 // no comments after code on a line, no multi-line strings.
@@ -33,7 +34,8 @@
   var last;
 
   function off() {
-    if (!key || navigator.webdriver || w._phantom || w.__nightmare || w.Cypress) return 1;
+    var n = navigator;
+    if (!key || n.globalPrivacyControl === true || n.webdriver || w._phantom || w.__nightmare || w.Cypress) return 1;
     if (!local && (/^(localhost|127(\.\d+){3}|\[::1\]|0\.0\.0\.0)$/.test(l.hostname) || l.protocol == 'file:')) return 1;
     try {
       if (localStorage.getItem('kestrel_ignore') == 'true') return 1;

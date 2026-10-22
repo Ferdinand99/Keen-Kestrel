@@ -229,7 +229,9 @@ pub fn has_data(main: &Connection, project_id: i64) -> rusqlite::Result<bool> {
 /// for the minute before the first rollup).
 pub fn has_raw(store: &Connection, project_id: i64) -> rusqlite::Result<bool> {
     Ok(store
-        .prepare_cached("SELECT 1 FROM analytics_events WHERE project_id = ?1 LIMIT 1")?
+        .prepare_cached(
+            "SELECT 1 FROM analytics_events WHERE project_id = ?1 AND source = 'web' LIMIT 1",
+        )?
         .query_row([project_id], |_| Ok(()))
         .optional()?
         .is_some())
@@ -476,7 +478,9 @@ pub fn raw_breakdown(
 /// before it).
 pub fn raw_first_day(store: &Connection, project_id: i64) -> rusqlite::Result<Option<i64>> {
     let ts: Option<i64> = store
-        .prepare_cached("SELECT MIN(ts) FROM analytics_events WHERE project_id = ?1")?
+        .prepare_cached(
+            "SELECT MIN(ts) FROM analytics_events WHERE project_id = ?1 AND source = 'web'",
+        )?
         .query_row([project_id], |r| r.get(0))?;
     Ok(ts.map(day_number))
 }
@@ -486,7 +490,7 @@ pub fn current_visitors(store: &Connection, project_id: i64, now: i64) -> rusqli
     store
         .prepare_cached(
             "SELECT COUNT(DISTINCT visitor) FROM analytics_events
-             WHERE project_id = ?1 AND ts > ?2 AND ts <= ?3",
+             WHERE project_id = ?1 AND source = 'web' AND ts > ?2 AND ts <= ?3",
         )?
         .query_row(params![project_id, now - LIVE_SECONDS, now + 60], |r| {
             r.get(0)

@@ -188,6 +188,7 @@ struct OverviewTemplate {
     frequent: Vec<IssueRowView>,
     issues_href: String,
     web: Option<crate::analytics::pages::Overview>,
+    app: Option<crate::analytics::app::pages::Overview>,
 }
 
 /// The retention form's values.
@@ -216,6 +217,9 @@ struct SettingsTemplate {
     retention: RetentionView,
     web_enabled: bool,
     web_href: String,
+    app_enabled: bool,
+    app_strict: bool,
+    app_href: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +439,7 @@ async fn overview(
         }
     });
     let web = crate::analytics::pages::overview(&core, &ingest, id).await?;
+    let app = crate::analytics::app::pages::overview(&core, &ingest, id).await?;
     let (ctx, jar) = PageCtx::build(
         &core,
         Some(&user),
@@ -446,6 +451,7 @@ async fn overview(
     .await;
     let page = OverviewTemplate {
         web,
+        app,
         ctx,
         tab: "overview",
         first_tab: dsn::first_snippet(project.platform),
@@ -494,12 +500,13 @@ async fn render_settings(
     attempt: Option<Attempt>,
 ) -> ApiResult<Response> {
     let id = project.id;
-    let (keys, retention, web_enabled) = core
+    let (keys, retention, web_enabled, (app_enabled, app_strict)) = core
         .with_conn(move |c| {
             Ok((
                 db::keys(c, id)?,
                 triage::retention(c, id)?.unwrap_or_default(),
                 db::web_analytics(c, id)?.unwrap_or(true),
+                db::app_analytics(c, id)?.unwrap_or((true, false)),
             ))
         })
         .await?;
@@ -533,6 +540,9 @@ async fn render_settings(
         },
         web_enabled,
         web_href: format!("/projects/{id}/web"),
+        app_enabled,
+        app_strict,
+        app_href: format!("/projects/{id}/app"),
     };
     let status = if invalid {
         StatusCode::UNPROCESSABLE_ENTITY
