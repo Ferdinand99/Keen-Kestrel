@@ -1015,6 +1015,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
         tables,
         [
             "api_tokens",
+            "dif_files",
             "environments",
             "events",
             "issue_activity",
@@ -1033,6 +1034,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "releases",
             "schema_migrations",
             "settings",
+            "token_grants",
             "users"
         ]
     );
@@ -1042,7 +1044,8 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "kit/0001_core.sql",
             "0001_projects.sql",
             "0002_errors.sql",
-            "0003_triage.sql"
+            "0003_triage.sql",
+            "0004_debug_files.sql"
         ]
     );
     assert!(app.dir.join("store.sqlite").exists());

@@ -18,7 +18,10 @@ pub async fn run(config: Config) -> Result<(), crate::StartError> {
     // Notifications and other work outside a request use the site language.
     vole_kit::i18n::site_language(&kestrel.core).await;
     // Retention, daily, and the end of ignoring that ran out by time.
-    crate::retention::spawn(kestrel.ingest.writer().clone());
+    crate::retention::spawn(
+        kestrel.ingest.writer().clone(),
+        kestrel.ingest.difs().clone(),
+    );
 
     let addr = config.bind_addr();
     let listener = bind(addr).await?;

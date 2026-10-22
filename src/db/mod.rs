@@ -4,6 +4,7 @@
 //! [`issues`] is the writer's side (one event at a time); [`triage`] holds
 //! what the pages read and the lifecycle actions they take.
 
+pub mod difs;
 pub mod issues;
 pub mod projects;
 pub mod triage;
@@ -24,6 +25,10 @@ const MIGRATION_FILES: &[(&str, &str)] = &[
     (
         "0003_triage.sql",
         include_str!("../../migrations/0003_triage.sql"),
+    ),
+    (
+        "0004_debug_files.sql",
+        include_str!("../../migrations/0004_debug_files.sql"),
     ),
 ];
 

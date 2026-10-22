@@ -17,7 +17,9 @@
 > SDKs can send events, which are scrubbed of personal data, grouped into issues and stored. Errors can be
 > browsed and triaged: a project overview, an issue list with search, filters and live updates, issue and event
 > pages with stack traces, breadcrumbs and the reasons for the grouping, and resolve, ignore, merge and delete,
-> with retention per project. Symbolication, alerts and the API for issues come next. The design is in
+> with retention per project. iOS and macOS crashes are symbolicated from dSYMs uploaded with the official
+> `sentry-cli` (Xcode build phases and fastlane work unchanged) or as a zip: function, file, line and inlined
+> frames. Alerts, release health and the API for issues come next. The design is in
 > [`docs/design.md`](docs/design.md); to build and run it, see [`docs/development.md`](docs/development.md).
 
 Keen Kestrel answers two questions about the apps and sites you run:

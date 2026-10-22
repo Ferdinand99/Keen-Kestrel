@@ -1000,6 +1000,8 @@ pub struct EventDetail {
     pub all_frames: bool,
     pub frames_app_href: String,
     pub frames_all_href: String,
+    /// The project's Debug files page (for frames whose dSYM was missing).
+    pub difs_href: String,
 }
 
 async fn load_payload(ingest: &Ingest, payload_id: i64) -> Option<Value> {
@@ -1052,6 +1054,7 @@ async fn event_detail(
         all_frames,
         frames_app_href: format!("{page_href}#stack"),
         frames_all_href: format!("{page_href}{sep}frames=all#stack"),
+        difs_href: format!("/projects/{project_id}/debug-files"),
     }
 }
 

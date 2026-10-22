@@ -57,6 +57,25 @@ const KEY_EXAMPLE: &str = r#"{
   "created_at": "2026-10-22 08:00:00"
 }"#;
 
+const DIF_UPLOAD_EXAMPLE: &str = r#"{
+  "data": [{
+    "id": 4,
+    "project_id": 1,
+    "debug_id": "74b62df4-771f-3338-8a76-efff43e57038",
+    "code_id": "74b62df4771f33388a76efff43e57038",
+    "object_name": "Sylo",
+    "arch": "arm64",
+    "kind": "macho",
+    "features": ["debug", "symtab", "unwind"],
+    "size": 3482880,
+    "sha1": "1d8303e249d133f5d0fa0590edb7efaaf6f27bad",
+    "release": null,
+    "uploaded_at": "2026-10-22 08:00:00",
+    "last_used_at": null
+  }],
+  "skipped": ["Sylo.app.dSYM/Contents/Info.plist"]
+}"#;
+
 const ERROR_EXAMPLE: &str = r#"{
   "error": {
     "code": "validation_failed",
@@ -90,6 +109,14 @@ pub static ROUTES: &[RouteDoc] = &[
         .req(r#"{"enabled": false, "rate_limit_per_minute": null}"#)
         .res(KEY_EXAMPLE),
     r("DELETE", "/api/v1/projects/{id}/keys/{key_id}", "editor", "Keys", "Delete a key. SDKs that use its DSN can no longer send."),
+    // -- Debug files --
+    r("POST", "/api/v1/projects/{id}/dsyms", "editor", "Debug files", "Upload debug files: a zip of dSYMs (or one object file) as the body (Content-Type: application/zip) or as multipart field `file`. Each object (one per architecture) is stored with a SymCache; files in the zip that aren't debug files are listed in `skipped`. Needs a token with the difs:write grant or a read-and-write token of an editor. At most 1 GB per upload and per file.")
+        .req("<zip archive>")
+        .res(DIF_UPLOAD_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/debug-files", "viewer", "Debug files", "List a project's debug files, oldest first.")
+        .q(&[LIMIT_Q, CURSOR_Q])
+        .res(r#"{"data": [ …debug file… ], "next_cursor": null}"#),
+    r("DELETE", "/api/v1/projects/{id}/debug-files/{dif_id}", "editor", "Debug files", "Delete a debug file and its SymCache. Events that arrive later for its build stay unsymbolicated."),
     // -- System --
     r("GET", "/api/v1/openapi.json", "viewer", "System", "This reference as an OpenAPI 3.1 document."),
     r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants, with the tool list_projects. Bearer API token; GET answers 405.")
@@ -101,6 +128,7 @@ fn curl_path_param(_route: &RouteDoc, segment: &str) -> Option<String> {
     match segment {
         "{id}" => Some("1".into()),
         "{key_id}" => Some("3".into()),
+        "{dif_id}" => Some("4".into()),
         _ => None,
     }
 }
@@ -150,7 +178,17 @@ fn markdown_middle(out: &mut String) {
          - `platform`: `apple`, `javascript`, `rust`, `python` or `other`. It only picks the setup guide shown first.\n\
          - A key has a random 32-character hex `public_key` and a `dsn` built from the instance's public URL.\n\
          - `enabled: false` makes the key's DSN refused; `rate_limit_per_minute` (1–1,000,000 or `null`) caps the events it may send; \
-         `allowed_origins` lists the browser origins (`https://example.com`, or `*`) that may use it, and an empty list allows any.\n\n",
+         `allowed_origins` lists the browser origins (`https://example.com`, or `*`) that may use it, and an empty list allows any.\n\n\
+         ## Debug files\n\n\
+         - Debug files (dSYMs) let Kestrel symbolicate native crashes: function, file and line instead of image and offset. \
+         Each object (one per debug id and architecture) is kept with a SymCache made from it.\n\
+         - `sentry-cli debug-files upload` works unchanged: `sentry-cli --url <this instance> debug-files upload --org any \
+         --project <slug or id> <path>`, with `SENTRY_AUTH_TOKEN` (or `--auth-token`) set to an API token. Its endpoints are \
+         `GET /api/0/organizations/{org}/chunk-upload/`, `POST` to the same path, `POST /api/0/projects/{org}/{project}/files/difs/assemble/` \
+         and the older `POST /api/0/projects/{org}/{project}/files/dsyms/`; any organization slug is accepted.\n\
+         - Uploading needs a token made on the project's Debug files page (grant `difs:write`; it only reads otherwise) or a \
+         read-and-write token, and the token's owner must be an editor or admin.\n\
+         - A debug file applies to events that arrive after it; stored events are not symbolicated again.\n\n",
     );
 }
 
@@ -205,6 +243,19 @@ pub fn router() -> Router<Core> {
         .route(
             "/projects/{id}/keys/{key_id}",
             get(show_key).patch(update_key).delete(delete_key),
+        )
+        .route(
+            "/projects/{id}/dsyms",
+            axum::routing::post(crate::difs::upload::v1_upload)
+                .layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/projects/{id}/debug-files",
+            get(crate::difs::upload::v1_list),
+        )
+        .route(
+            "/projects/{id}/debug-files/{dif_id}",
+            axum::routing::delete(crate::difs::upload::v1_delete),
         )
         .fallback(fallback)
         .route_layer(middleware::from_fn(
@@ -409,6 +460,7 @@ async fn delete_project(
     if !found {
         return Err(V1Error::not_found());
     }
+    ingest.difs().forget_project(id);
     tracing::info!(user = %user.username, id, "project deleted (API)");
     Ok(no_content())
 }

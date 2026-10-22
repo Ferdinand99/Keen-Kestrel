@@ -1,8 +1,8 @@
 //! Normalisation (docs/design.md §4.3): one shape for every SDK's event,
 //! defaults filled in, sizes bounded, `in_app` derived, and nothing that
 //! identifies a person kept: no IP address ever (`{{auto}}` is ignored),
-//! credentials and card numbers scrubbed, email and username hashed unless
-//! the project keeps them, and the user agent reduced to browser and OS.
+//! credentials and card numbers scrubbed, user id, email and username hashed
+//! unless the project keeps them, and the user agent reduced to browser and OS.
 
 use jiff::Timestamp;
 use serde_json::{Map, Value, json};
@@ -27,7 +27,7 @@ pub const LEVELS: [&str; 5] = ["fatal", "error", "warning", "info", "debug"];
 /// What normalisation needs to know about where the event came from.
 pub struct Context<'a> {
     pub project_id: i64,
-    /// Keep `user.email` and `user.username` as sent.
+    /// Keep `user.id`, `user.email` and `user.username` as sent.
     pub keep_user_details: bool,
     /// The instance's key for user hashes.
     pub hash_key: &'a [u8; 32],
@@ -521,7 +521,7 @@ fn fill_from_user_agent(map: &mut Map<String, Value>, ua: &str) {
     }
 }
 
-/// The user interface: never an IP address; email and username hashed
+/// The user interface: never an IP address; id, email and username hashed
 /// unless the project keeps them; other data scrubbed by key.
 fn user(map: &mut Map<String, Value>, ctx: &Context<'_>, facts: &mut Facts) {
     let Some(Value::Object(user)) = map.get_mut("user") else {
@@ -537,7 +537,9 @@ fn user(map: &mut Map<String, Value>, ctx: &Context<'_>, facts: &mut Facts) {
     facts.user_hash =
         identity.map(|(_, v)| scrub::keyed_hash(ctx.hash_key, ctx.project_id, "user", &v));
     if !ctx.keep_user_details {
-        for field in ["email", "username"] {
+        // The id too: on iOS it is the SDK's install id, which stays the
+        // same for as long as the app is installed.
+        for field in ["id", "email", "username"] {
             if let Some(v) = text(user.get(field)) {
                 let hashed = scrub::keyed_hash(ctx.hash_key, ctx.project_id, field, &v);
                 user.insert(field.into(), Value::from(format!("hash:{hashed}")));
@@ -962,7 +964,8 @@ mod tests {
             assert!(!text.contains(secret), "{secret} in {text}");
         }
         assert!(e["user"]["email"].as_str().unwrap().starts_with("hash:"));
-        assert_eq!(e["user"]["id"], "42");
+        let id = e["user"]["id"].as_str().unwrap();
+        assert!(id.starts_with("hash:") && !id.contains("42"), "{id}");
         assert_eq!(e["request"]["headers"]["Authorization"], FILTERED);
         assert_eq!(e["request"]["headers"]["Accept"], "*/*");
         assert_eq!(e["request"]["query_string"], "page=2&token=[Filtered]");
@@ -974,13 +977,13 @@ mod tests {
 
     #[test]
     fn projects_can_keep_user_details() {
-        let Value::Object(mut map) =
-            json!({"user": {"email": "ada@example.com", "ip_address": "1.2.3.4"}})
+        let Value::Object(mut map) = json!({"user": {"id": "install-1", "email": "ada@example.com", "ip_address": "1.2.3.4"}})
         else {
             panic!()
         };
         let facts = normalize(&mut map, &ctx(true));
         assert_eq!(map["user"]["email"], "ada@example.com");
+        assert_eq!(map["user"]["id"], "install-1");
         assert!(map["user"].get("ip_address").is_none());
         assert_eq!(facts.user_hash.unwrap().len(), 16);
     }

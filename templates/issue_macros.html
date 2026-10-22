@@ -5,16 +5,20 @@
 -#}
 {% import "kit/macros.html" as m %}
 
-{#- One frame (view::FrameView) as a list row; source and variables fold out. -#}
-{% macro frame(f) -%}
+{#- One frame (view::FrameView) as a list row; source and variables fold out.
+    `difs_href` is the project's Debug files page, for a missing dSYM. -#}
+{% macro frame(f, difs_href) -%}
 <li class="list-row list-row-wrap">
   <span class="list-main">
     <span class="list-title list-title-wrap mono">{{ f.function }}</span>
     {%- if !f.location.is_empty() || !f.package.is_empty() || !f.address.is_empty() %}
     <span class="list-sub break">{{ f.location }}{% if !f.package.is_empty() %}{% if !f.location.is_empty() %} · {% endif %}{{ f.package }}{% endif %}{% if !f.address.is_empty() %}{% if !f.location.is_empty() || !f.package.is_empty() %} · {% endif %}<span class="mono">{{ f.address }}</span>{% endif %}</span>
     {%- endif %}
+    {%- if !f.missing_dsym.is_empty() %}
+    <span class="list-sub break">{{ m::icon("alert") }} <a href="{{ difs_href }}">{{ tr("difs.missing_dsym") }}</a> · <span class="mono" title="{{ tr("difs.debug_id") }}">{{ f.missing_dsym }}</span></span>
+    {%- endif %}
   </span>
-  {%- if f.in_app %}<span class="list-trail"><span class="badge badge-brand">{{ tr("event.in_app") }}</span></span>{% endif %}
+  {%- if f.in_app || f.inlined %}<span class="list-trail">{% if f.inlined %}<span class="badge" title="{{ tr("difs.inlined_help") }}">{{ tr("difs.inlined") }}</span>{% endif %}{% if f.in_app %}<span class="badge badge-brand">{{ tr("event.in_app") }}</span>{% endif %}</span>{% endif %}
   {%- if f.has_details() %}
   <details class="disclosure list-full"{% if f.open %} open{% endif %}>
     <summary>{% if f.context.is_empty() %}{{ tr("event.variables") }}{% else %}{{ tr("event.source") }}{% endif %}{{ m::icon("chevron-down") }}</summary>

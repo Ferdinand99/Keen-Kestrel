@@ -56,7 +56,8 @@ pub static KIT: KitConfig = KitConfig {
     backup_prefix: "kestrel-before-",
     flash_cookie: "kk_flash",
     env_prefix: "KK",
-    csrf_exempt_prefixes: &["/api/v1", "/mcp"],
+    // `/api/0`: sentry-cli's debug file upload, which takes API tokens only.
+    csrf_exempt_prefixes: &["/api/v1", "/api/0", "/mcp"],
     // Ingest (`/api/{project_id}/envelope/`, `/api/{project_id}/store/`):
     // SDKs post from any site with a DSN key, never with a session cookie.
     csrf_exempt_path: crate::ingest::is_ingest_path,

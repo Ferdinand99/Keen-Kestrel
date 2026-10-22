@@ -14,16 +14,24 @@
 //! that have been so for a week become ongoing, and `store.sqlite` gives
 //! freed pages back (incremental vacuum).
 //!
+//! Debug files ([`prune_debug_files`]) go when they were neither uploaded
+//! nor used for `retention_dif_days` (180), unless one of the project's
+//! `retention_dif_releases` (5) newest releases used them; with them their
+//! objects and SymCaches on disk, chunks of uploads that never finished,
+//! and the files of deleted projects.
+//!
 //! Every minute the job also ends ignoring that ran out by time (an issue
 //! ignored for an hour comes back even if no event arrives).
 //!
 //! Everything runs on the writer's connection ([`Writer::run`]).
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use rusqlite::{Connection, params};
 
 use crate::db::triage;
+use crate::difs::Difs;
 use crate::writer::{Writer, WriterError};
 
 const FIRST_RUN_DELAY: Duration = Duration::from_secs(60);
@@ -49,8 +57,11 @@ pub struct Report {
     pub settled: usize,
 }
 
+/// Chunks of uploads that never assembled are kept this long.
+const CHUNKS_KEPT: Duration = Duration::from_secs(24 * 3600);
+
 /// Starts the job (at server start).
-pub fn spawn(writer: Writer) {
+pub fn spawn(writer: Writer, difs: Difs) {
     tokio::spawn(async move {
         let mut next_run = tokio::time::Instant::now() + FIRST_RUN_DELAY;
         let mut ticker = tokio::time::interval(TICK);
@@ -76,6 +87,11 @@ pub fn spawn(writer: Writer) {
                 next_run = tokio::time::Instant::now() + RUN_EVERY;
                 if let Err(err) = run_once(&writer, &now).await {
                     tracing::error!(%err, "retention run failed");
+                }
+                match prune_debug_files(&writer, &difs, &now).await {
+                    Ok(n) if n > 0 => tracing::info!(files = n, "debug files removed"),
+                    Ok(_) => {}
+                    Err(err) => tracing::error!(%err, "debug file retention failed"),
                 }
             }
         }
@@ -192,6 +208,53 @@ pub async fn run_once(writer: &Writer, now: &str) -> Result<Report, WriterError>
         "retention run finished"
     );
     Ok(report)
+}
+
+/// Removes the debug files retention says go (rows through the writer,
+/// then their directories), the files of deleted projects, directories
+/// without a row (an upload cut short) and chunks older than a day.
+/// Returns how many debug files went.
+pub async fn prune_debug_files(
+    writer: &Writer,
+    difs: &Difs,
+    now: &str,
+) -> Result<usize, WriterError> {
+    let n = now.to_string();
+    let (expired, projects) = writer
+        .run(move |c| {
+            let tx = c.transaction()?;
+            let mut out = Vec::new();
+            for (project_id, r) in crate::db::difs::all_retention(&tx)? {
+                for (id, debug_id) in crate::db::difs::expired(&tx, project_id, r, &n)? {
+                    crate::db::difs::delete(&tx, project_id, id)?;
+                    out.push((project_id, debug_id));
+                }
+            }
+            let projects: HashSet<i64> = tx
+                .prepare("SELECT id FROM projects")?
+                .query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            tx.commit()?;
+            Ok((out, projects))
+        })
+        .await?;
+    for (project_id, debug_id) in &expired {
+        if let Some(id) = crate::difs::parse_debug_id(debug_id) {
+            difs.remove(*project_id, &id);
+        }
+    }
+    let difs = difs.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        for project_id in difs.stray_projects(&projects) {
+            difs.forget_project(project_id);
+        }
+        for project_id in &projects {
+            difs.remove_unlisted(*project_id, CHUNKS_KEPT);
+        }
+        crate::difs::files::prune_chunks(&difs.chunk_dir(), CHUNKS_KEPT);
+    })
+    .await;
+    Ok(expired.len())
 }
 
 /// The same steps on one connection (with `store.sqlite` attached as

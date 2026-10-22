@@ -58,12 +58,23 @@ pub struct AttachmentItem {
     pub data: Vec<u8>,
 }
 
+/// Debug files an event was symbolicated with: their `last_used_at` (and
+/// the release that used them).
+#[derive(Debug, Clone)]
+pub struct DifUse {
+    pub project_id: i64,
+    pub debug_ids: Vec<String>,
+    pub release: Option<String>,
+    pub at: String,
+}
+
 #[derive(Debug)]
 pub enum Job {
     Event(Box<EventRecord>),
     Session(SessionItem),
     Feedback(FeedbackItem),
     Attachment(Box<AttachmentItem>),
+    DifUse(DifUse),
 }
 
 /// Work for the writer's connection besides ingest jobs.
@@ -168,6 +179,23 @@ impl Writer {
             .tx
             .try_reserve_many(jobs.len())
             .map_err(|_| QueueFull)?;
+        for (permit, job) in permits.zip(jobs) {
+            permit.send(Msg::Job(job));
+        }
+        Ok(())
+    }
+
+    /// Queues `jobs`, all or none, waiting while the queue is full (for the
+    /// symbolication workers, whose SDK already has its answer).
+    pub async fn submit_wait(&self, jobs: Vec<Job>) -> Result<(), WriterError> {
+        if jobs.is_empty() {
+            return Ok(());
+        }
+        let permits = self
+            .tx
+            .reserve_many(jobs.len())
+            .await
+            .map_err(|_| WriterError::Stopped)?;
         for (permit, job) in permits.zip(jobs) {
             permit.send(Msg::Job(job));
         }
@@ -405,6 +433,12 @@ fn write_job(c: &Connection, job: &Job) -> rusqlite::Result<Option<Outcome>> {
                 "INSERT INTO store.feedback (project_id, event_id, received_at, data) VALUES (?1, ?2, ?3, ?4)",
             )?
             .execute(params![f.project_id, f.event_id, f.received_at, f.data])?;
+            Ok(None)
+        }
+        Job::DifUse(u) => {
+            for id in &u.debug_ids {
+                crate::db::difs::mark_used(c, u.project_id, id, u.release.as_deref(), &u.at)?;
+            }
             Ok(None)
         }
         Job::Attachment(a) => {

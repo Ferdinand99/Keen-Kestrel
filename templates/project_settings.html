@@ -68,6 +68,8 @@
     {{ m::field_number("event_days", tr("retention.event_days"), retention.event_days, tr("common.days"), "1", "3650", "1", tr("retention.event_days_help")) }}
     {{ m::field_number("issue_days", tr("retention.issue_days"), retention.issue_days, tr("common.days"), "1", "3650", "1", tr("retention.issue_days_help")) }}
     {{ m::field_number("per_day", tr("retention.per_day"), retention.per_day, tr("retention.per_day_unit"), "1", "100000", "1", tr("retention.per_day_help")) }}
+    {{ m::field_number("dif_days", tr("difs.retention_days"), retention.dif_days, tr("common.days"), "1", "3650", "1", tr("difs.retention_days_help")) }}
+    {{ m::field_number("dif_releases", tr("difs.retention_releases"), retention.dif_releases, tr("difs.retention_releases_unit"), "0", "1000", "1", tr("difs.retention_releases_help")) }}
     <div class="form-actions">
       {{ m::button(tr("retention.save")) }}
     </div>
@@ -78,6 +80,8 @@
       <div class="dl-row"><dt>{{ tr("retention.event_days") }}</dt><dd class="num">{{ trn("count.days", retention.event_days) }}</dd></div>
       <div class="dl-row"><dt>{{ tr("retention.issue_days") }}</dt><dd class="num">{{ trn("count.days", retention.issue_days) }}</dd></div>
       <div class="dl-row"><dt>{{ tr("retention.per_day") }}</dt><dd class="num">{{ num(retention.per_day) }}</dd></div>
+      <div class="dl-row"><dt>{{ tr("difs.retention_days") }}</dt><dd class="num">{{ trn("count.days", retention.dif_days) }}</dd></div>
+      <div class="dl-row"><dt>{{ tr("difs.retention_releases") }}</dt><dd class="num">{{ num(retention.dif_releases) }}</dd></div>
     </dl>
   </div>
   {%- endif %}

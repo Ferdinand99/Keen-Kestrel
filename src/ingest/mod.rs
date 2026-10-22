@@ -38,6 +38,8 @@ use vole_kit::auth::session;
 use vole_kit::db::settings;
 use vole_kit::state::Core;
 
+use crate::difs::Difs;
+use crate::difs::worker::{Symbolicator, Work, WorkerSettings};
 use crate::event::{self, Context, normalize, scrub};
 use crate::writer::{AttachmentItem, FeedbackItem, Job, SessionItem, Writer, WriterSettings};
 use auth::KeyInfo;
@@ -61,6 +63,8 @@ pub struct Settings {
     /// Requests per minute from one IP address; 0 turns the limit off.
     pub ip_rate_limit_per_minute: u32,
     pub writer: WriterSettings,
+    /// The symbolication queue (docs/design.md §4.8).
+    pub symbolication: WorkerSettings,
 }
 
 impl Default for Settings {
@@ -69,6 +73,7 @@ impl Default for Settings {
             capture_dir: None,
             ip_rate_limit_per_minute: 6000,
             writer: WriterSettings::default(),
+            symbolication: WorkerSettings::default(),
         }
     }
 }
@@ -82,6 +87,8 @@ pub struct Ingest {
 struct Inner {
     core: Core,
     writer: Writer,
+    difs: Difs,
+    symbolicator: Symbolicator,
     store: Pool,
     settings: Settings,
     hash_key: [u8; 32],
@@ -209,6 +216,18 @@ impl Ingest {
             &data_dir.join(crate::store::STORE_FILE),
             settings.writer,
         )?;
+        let dif_ids = core
+            .with_conn(|c| crate::db::difs::all_ids(c))
+            .await
+            .map_err(|_| "can't read the debug files")?;
+        let difs = Difs::open(data_dir, dif_ids).map_err(|e| {
+            format!(
+                "can't open the debug files directory in {}: {e}",
+                data_dir.display()
+            )
+        })?;
+        let symbolicator =
+            Symbolicator::start(difs.clone(), writer.clone(), settings.symbolication);
         if let Some(dir) = &settings.capture_dir {
             tracing::warn!(dir = %dir.display(), "capture mode: every ingest request is written to disk");
         }
@@ -216,6 +235,8 @@ impl Ingest {
             inner: Arc::new(Inner {
                 core,
                 writer,
+                difs,
+                symbolicator,
                 store,
                 settings,
                 hash_key,
@@ -234,8 +255,18 @@ impl Ingest {
         &self.inner.writer
     }
 
-    /// Waits until every accepted job is written.
+    /// The debug files.
+    pub fn difs(&self) -> &Difs {
+        &self.inner.difs
+    }
+
+    pub fn symbolicator(&self) -> &Symbolicator {
+        &self.inner.symbolicator
+    }
+
+    /// Waits until every accepted job is symbolicated and written.
     pub async fn flush(&self) {
+        self.inner.symbolicator.flush().await;
         self.inner.writer.flush().await;
     }
 
@@ -386,13 +417,25 @@ impl Ingest {
         }
 
         let this = self.clone();
-        let (jobs, id) = tokio::task::spawn_blocking(move || this.jobs(parsed, &key))
+        let (items, id) = tokio::task::spawn_blocking(move || this.jobs(parsed, &key))
             .await
             .map_err(|_| Reject::Unavailable("ingest failed"))??;
-        inner.writer.submit(jobs).map_err(|_| Reject::RateLimited {
+        let full = Reject::RateLimited {
             secs: 1,
             scope: "organization",
-        })?;
+        };
+        if items.iter().any(|w| matches!(w, Work::Event(_))) {
+            inner.symbolicator.submit(items).map_err(|_| full)?;
+        } else {
+            let jobs = items
+                .into_iter()
+                .filter_map(|w| match w {
+                    Work::Job(j) => Some(j),
+                    Work::Event(_) => None,
+                })
+                .collect();
+            inner.writer.submit(jobs).map_err(|_| full)?;
+        }
         Ok(id)
     }
 
@@ -431,8 +474,23 @@ impl Ingest {
         Ok(info)
     }
 
-    /// Turns the body into writer jobs. Returns the event id to answer with.
-    fn jobs(&self, parsed: Parsed, key: &KeyInfo) -> Result<(Vec<Job>, Option<String>), Reject> {
+    /// An event as a writer job, or as work for the symbolication queue when
+    /// the project has a debug file for one of its images.
+    fn event_work(&self, prepared: event::Prepared) -> Work {
+        let difs = &self.inner.difs;
+        let project_id = prepared.project_id;
+        if difs.has_any(project_id)
+            && crate::difs::symbolicate::wants(&prepared.event, |id| difs.has(project_id, id))
+        {
+            Work::Event(Box::new(prepared))
+        } else {
+            Work::Job(Job::Event(Box::new(event::finish(prepared))))
+        }
+    }
+
+    /// Turns the body into writer jobs (some through the symbolication
+    /// queue). Returns the event id to answer with.
+    fn jobs(&self, parsed: Parsed, key: &KeyInfo) -> Result<(Vec<Work>, Option<String>), Reject> {
         let received = jiff::Timestamp::now();
         let received_at = normalize::sql_time(normalize::ts_seconds(received));
         let ctx = Context {
@@ -444,9 +502,9 @@ impl Ingest {
         let bad = |e: event::EventError| Reject::BadRequest(e.to_string());
         let env = match parsed {
             Parsed::Event(data) => {
-                let record = event::prepare(&data, &ctx, None).map_err(bad)?;
-                let id = record.event_id.clone();
-                return Ok((vec![Job::Event(Box::new(record))], Some(id)));
+                let prepared = event::parse(&data, &ctx, None).map_err(bad)?;
+                let id = prepared.event_id.clone();
+                return Ok((vec![self.event_work(prepared)], Some(id)));
             }
             Parsed::Envelope(env) => env,
         };
@@ -460,23 +518,23 @@ impl Ingest {
                     if item.payload.len() > MAX_EVENT {
                         return Err(Reject::TooLarge("the event is too large"));
                     }
-                    let record =
-                        event::prepare(&item.payload, &ctx, header_id.as_deref()).map_err(bad)?;
-                    answer.get_or_insert_with(|| record.event_id.clone());
-                    jobs.push(Job::Event(Box::new(record)));
+                    let prepared =
+                        event::parse(&item.payload, &ctx, header_id.as_deref()).map_err(bad)?;
+                    answer.get_or_insert_with(|| prepared.event_id.clone());
+                    jobs.push(self.event_work(prepared));
                 }
                 "session" => jobs.extend(
                     self.session(&item.payload, &ctx, &received_at, false)
-                        .map(Job::Session),
+                        .map(|s| Work::Job(Job::Session(s))),
                 ),
                 "sessions" => jobs.extend(
                     self.session(&item.payload, &ctx, &received_at, true)
-                        .map(Job::Session),
+                        .map(|s| Work::Job(Job::Session(s))),
                 ),
                 "user_report" | "feedback" => {
                     jobs.extend(
                         feedback(&item, &ctx, &received_at, header_id.as_deref())
-                            .map(Job::Feedback),
+                            .map(|f| Work::Job(Job::Feedback(f))),
                     );
                 }
                 "attachment" => attachments.push(item),
@@ -506,7 +564,7 @@ impl Ingest {
                 );
                 continue;
             }
-            jobs.push(Job::Attachment(Box::new(AttachmentItem {
+            jobs.push(Work::Job(Job::Attachment(Box::new(AttachmentItem {
                 project_id: key.project_id,
                 event_id,
                 received_at: received_at.clone(),
@@ -520,7 +578,7 @@ impl Ingest {
                 attachment_type: kind.to_string(),
                 size: item.payload.len() as i64,
                 data: crate::store::compress(&item.payload),
-            })));
+            }))));
         }
         Ok((jobs, answer))
     }
