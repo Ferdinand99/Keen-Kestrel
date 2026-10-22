@@ -10,7 +10,7 @@
     <title>Keen Kestrel — self-hosted error tracking and privacy-friendly analytics</title>
     <meta
       name="description"
-      content="Keen Kestrel is a self-hosted, Sentry-compatible error tracker with cookieless analytics, in one small Rust binary with SQLite. In development: follow along on GitHub."
+      content="Keen Kestrel is a self-hosted, Sentry-compatible error tracker with cookieless analytics, in one small Rust binary with SQLite. Early release, Docker only: follow along on GitHub."
     />
     <script>document.documentElement.classList.add("js");</script>
     <link rel="canonical" href="https://hedgerow.tools/Keen-Kestrel/" />
@@ -26,7 +26,7 @@
     <meta property="og:title" content="Keen Kestrel — self-hosted error tracking and privacy-friendly analytics" />
     <meta
       property="og:description"
-      content="Sentry-compatible error tracking and cookieless analytics in one small Rust binary with SQLite. In development."
+      content="Sentry-compatible error tracking and cookieless analytics in one small Rust binary with SQLite. Early release."
     />
     <meta property="og:image" content="https://hedgerow.tools/Keen-Kestrel/og-image.png" />
     <meta property="og:image:type" content="image/png" />
@@ -37,7 +37,7 @@
     <meta name="twitter:title" content="Keen Kestrel — self-hosted error tracking and privacy-friendly analytics" />
     <meta
       name="twitter:description"
-      content="Sentry-compatible error tracking and cookieless analytics in one small Rust binary with SQLite. In development."
+      content="Sentry-compatible error tracking and cookieless analytics in one small Rust binary with SQLite. Early release."
     />
     <meta name="twitter:image" content="https://hedgerow.tools/Keen-Kestrel/og-image.png" />
     <link rel="preload" href="fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
@@ -103,7 +103,7 @@
             </div>
             <a class="live-pill" href="#roadmap">
               <span class="dot is-live" aria-hidden="true"></span>
-              <span>In development · nothing to install yet</span>
+              <span>v0.1 “errors” · early release</span>
               <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg>
             </a>
             <h1 class="display" id="hero-title">Know what broke.<br class="br-wide" /> See how it’s used.</h1>
@@ -653,9 +653,9 @@
               <div class="code-card">
                 <div class="code-head">
                   <span>Point a Sentry SDK at Kestrel</span>
-                  <span class="pill status-warning"><span class="dot"></span>Planned</span>
+                  <span class="pill status-up"><span class="dot"></span>Works today</span>
                 </div>
-                <pre tabindex="0" role="region" translate="no" aria-label="Planned example: configuring Sentry SDKs with a Kestrel DSN"><code><span class="c">// The DSN comes from your project’s settings in Kestrel</span>
+                <pre tabindex="0" role="region" translate="no" aria-label="Example: configuring Sentry SDKs with a Kestrel DSN"><code><span class="c">// The DSN comes from your project’s settings in Kestrel</span>
 <span class="c">// https://&lt;public key&gt;@kestrel.example.com/&lt;project id&gt;</span>
 
 <span class="c">// Swift</span>
@@ -673,19 +673,19 @@ sentry_sdk.init(dsn=<span class="s">"https://abc123@kestrel.example.com/3"</span
               <div class="code-card">
                 <div class="code-head">
                   <span>Upload dSYMs with sentry-cli</span>
-                  <span class="pill status-warning"><span class="dot"></span>Planned</span>
+                  <span class="pill status-up"><span class="dot"></span>Works today</span>
                 </div>
-                <pre tabindex="0" role="region" translate="no" aria-label="Planned example: uploading dSYMs to Kestrel with sentry-cli"><code><span class="k">export</span> SENTRY_URL=https://kestrel.example.com
+                <pre tabindex="0" role="region" translate="no" aria-label="Example: uploading dSYMs to Kestrel with sentry-cli"><code><span class="k">export</span> SENTRY_URL=https://kestrel.example.com
 <span class="k">export</span> SENTRY_AUTH_TOKEN=kk_…   <span class="c"># a Kestrel API token with difs:write</span>
 sentry-cli debug-files upload --org any --project notes build/</code></pre>
               </div>
 
-              <div class="callout status-warning">
-                <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#alert"></use></svg>
+              <div class="callout status-info">
+                <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#info"></use></svg>
                 <p>
-                  <span class="callout-title">Not working yet</span>
-                  These snippets show how setup is meant to work once Kestrel exists. There is no server
-                  to point them at today.
+                  <span class="callout-title">Errors today, analytics next</span>
+                  The error tracking above works in v0.1. KestrelKit and k.js arrive with analytics in
+                  v0.2.
                 </p>
               </div>
             </div>
@@ -900,18 +900,21 @@ sentry-cli debug-files upload --org any --project notes build/</code></pre>
                 </p>
               </div>
             </li>
-            <li class="milestone is-now reveal">
-              <span class="ms-marker" aria-hidden="true"><span class="dot is-live"></span></span>
+            <li class="milestone is-done reveal">
+              <span class="ms-marker" aria-hidden="true"><svg class="icon"><use href="assets/icons.svg#check"></use></svg></span>
               <div class="ms-body">
-                <p class="ms-status"><span class="pill status-accent"><span class="dot"></span>In progress</span></p>
+                <p class="ms-status"><span class="pill status-up"><span class="dot"></span>Released</span></p>
                 <h3>v0.1 “errors”</h3>
-                <p>Symbolication with uploaded dSYMs now, then alerts, release health, the API and MCP tools.</p>
+                <p>
+                  Ingest, grouping, issues and search, symbolication from dSYMs, alerts to ~40 channels,
+                  release health, the REST API and MCP tools. An early release, as a Docker image.
+                </p>
               </div>
             </li>
             <li class="milestone reveal">
               <span class="ms-marker" aria-hidden="true"></span>
               <div class="ms-body">
-                <p class="ms-status"><span class="pill">Then</span></p>
+                <p class="ms-status"><span class="pill status-accent">Next</span></p>
                 <h3>v0.2 “analytics”</h3>
                 <p>Web analytics with k.js, then KestrelKit for apps, and release pages that show adoption next to crashes.</p>
               </div>
@@ -946,10 +949,11 @@ sentry-cli debug-files upload --org any --project notes build/</code></pre>
                 <summary>When can I use it?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
                 <div class="faq-body">
                   <p>
-                    Not yet, and there’s no date. Ingest, grouping and the issue pages work; symbolication, alerts and release health come next. The first
-                    usable release will be v0.1 “errors”; analytics follow in v0.2. Watch or star the
-                    <a href="https://github.com/Ferdinand99/Keen-Kestrel">repository</a> to hear when it
-                    ships.
+                    Now, for errors. v0.1 “errors” is an early release as a Docker image
+                    (<code class="nw">ghcr.io/ferdinand99/keen-kestrel</code>); the
+                    <a href="https://github.com/Ferdinand99/Keen-Kestrel#install">README</a> shows how to run it.
+                    Analytics follow in v0.2, installers and templates by v1.0. Watch or star the
+                    <a href="https://github.com/Ferdinand99/Keen-Kestrel">repository</a> to hear about new releases.
                   </p>
                 </div>
               </details>

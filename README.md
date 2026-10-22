@@ -12,13 +12,14 @@
   <a href="https://hedgerow.tools/Keen-Kestrel/"><img src="https://img.shields.io/badge/website-hedgerow.tools%2FKeen--Kestrel-black.svg" alt="Website"></a>
 </p>
 
-> **Status: v0.1 "errors" is feature-complete and waiting for its release.** Error tracking works end to end
+> **Status: v0.1 "errors", an early release (Docker image only).** Error tracking works end to end
 > in 26 languages: the official Sentry SDKs send events, which are scrubbed of personal data, grouped into issues
 > and stored; issue and event pages with search, live updates, stack traces and triage; iOS and macOS crashes
 > symbolicated from dSYMs uploaded with `sentry-cli`; alerts for new issues, regressions, spikes and a release's
 > first crash to ~40 notification channels (Slack, Discord, Teams, Telegram, ntfy, email, webhooks …); release
 > health with crash-free sessions and users; and a REST API, OpenAPI document and MCP tools for all of it.
-> Analytics come next. **[Sending errors to Kestrel](docs/sending-errors.md)** shows how to point each SDK at it,
+> Analytics come in v0.2; installers and Unraid/Proxmox templates by v1.0. The translations are unreviewed
+> drafts. **[Sending errors to Kestrel](docs/sending-errors.md)** shows how to point each SDK at it,
 > upload dSYMs and set up alerts. The design is in [`docs/design.md`](docs/design.md); to build and run it, see
 > [`docs/development.md`](docs/development.md).
 
@@ -33,6 +34,21 @@ Keen Kestrel answers two questions about the apps and sites you run:
 
 One Rust binary and SQLite: no Kafka, ClickHouse, Redis or Postgres. It shares its design language and
 foundations with Vigilant Vole and runs on Docker, Unraid, Proxmox or plain Linux.
+
+## Install
+
+Kestrel runs as one container with its data in a single folder:
+
+```bash
+mkdir keen-kestrel && cd keen-kestrel
+curl -fsSLO https://raw.githubusercontent.com/Ferdinand99/Keen-Kestrel/main/docker-compose.yml
+docker compose up -d
+```
+
+Then open `http://<host>:3002/setup` to create the first admin, create a project and copy its DSN.
+Set `KK_PUBLIC_URL` in `docker-compose.yml` to the address your apps use (it goes into the DSNs and alert
+links), and put Kestrel behind HTTPS with `KK_TRUST_PROXY=1` when it's reachable from the internet. Images
+are on GHCR for amd64 and arm64: `ghcr.io/ferdinand99/keen-kestrel:<version>` or `:latest`.
 
 ## Planned for v1
 
