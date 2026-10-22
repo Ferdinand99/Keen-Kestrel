@@ -43,10 +43,6 @@ pub fn static_paths() -> Vec<String> {
     paths
 }
 
-fn no_exempt_path(_: &str) -> bool {
-    false
-}
-
 pub static KIT: KitConfig = KitConfig {
     product: NAME,
     slug: "kestrel",
@@ -61,7 +57,9 @@ pub static KIT: KitConfig = KitConfig {
     flash_cookie: "kk_flash",
     env_prefix: "KK",
     csrf_exempt_prefixes: &["/api/v1", "/mcp"],
-    csrf_exempt_path: no_exempt_path,
+    // Ingest (`/api/{project_id}/envelope/`, `/api/{project_id}/store/`):
+    // SDKs post from any site with a DSN key, never with a session cookie.
+    csrf_exempt_path: crate::ingest::is_ingest_path,
     extra_common_passwords: &["keenkestrel", "kestrel123"],
     migrations: &crate::db::MIGRATIONS,
     embeddable_prefixes: &[],

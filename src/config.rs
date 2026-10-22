@@ -28,11 +28,42 @@ pub struct Config {
     /// same-origin checks; without it, the address of each request is used.
     #[arg(long, env = "KK_PUBLIC_URL", value_parser = parse_public_url)]
     pub public_url: Option<String>,
+
+    /// A second port that serves only ingest (and /healthz), so the admin
+    /// interface can stay on a LAN or VPN. Ingest stays on the main port too.
+    #[arg(long, env = "KK_INGEST_PORT")]
+    pub ingest_port: Option<u16>,
+
+    /// Requests per minute one IP address may send to ingest (0: no limit).
+    /// Kept in memory only.
+    #[arg(long, env = "KK_INGEST_IP_RATE_LIMIT", default_value_t = 6000)]
+    pub ingest_ip_rate_limit: u32,
+
+    /// Write every ingest request (headers and body, as sent) to this
+    /// directory, to record SDK fixtures. For test instances only: the files
+    /// hold everything the SDKs send.
+    #[arg(long, env = "KESTREL_CAPTURE_DIR")]
+    pub capture_dir: Option<PathBuf>,
 }
 
 impl Config {
     pub fn bind_addr(&self) -> SocketAddr {
         SocketAddr::new(self.host, self.port)
+    }
+
+    /// Where the ingest-only listener binds, when there is one.
+    pub fn ingest_addr(&self) -> Option<SocketAddr> {
+        self.ingest_port
+            .map(|port| SocketAddr::new(self.host, port))
+    }
+
+    /// Ingest's settings from the flags.
+    pub fn ingest_settings(&self) -> crate::ingest::Settings {
+        crate::ingest::Settings {
+            capture_dir: self.capture_dir.clone(),
+            ip_rate_limit_per_minute: self.ingest_ip_rate_limit,
+            ..crate::ingest::Settings::default()
+        }
     }
 }
 
@@ -58,15 +89,26 @@ mod tests {
         let c = Config::try_parse_from(["kestrel"]).unwrap();
         assert_eq!(c.port, 3002);
         assert_eq!(c.bind_addr().to_string(), "0.0.0.0:3002");
+        assert_eq!(c.ingest_addr(), None);
+        assert_eq!(c.ingest_settings().ip_rate_limit_per_minute, 6000);
         let c = Config::try_parse_from([
             "kestrel",
             "--port",
             "8080",
             "--public-url",
             "https://errors.example.com/",
+            "--ingest-port",
+            "3003",
+            "--capture-dir",
+            "/tmp/cap",
         ])
         .unwrap();
         assert_eq!(c.port, 8080);
+        assert_eq!(c.ingest_addr().unwrap().to_string(), "0.0.0.0:3003");
+        assert_eq!(
+            c.ingest_settings().capture_dir,
+            Some(PathBuf::from("/tmp/cap"))
+        );
         assert_eq!(c.public_url.as_deref(), Some("https://errors.example.com"));
     }
 

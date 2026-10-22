@@ -1,0 +1,22 @@
+---
+source: tests/grouping.rs
+expression: text
+---
+title: InvalidOrder: Invalid order 1234
+culprit: main.rs in kk_fixtures::main
+level: error
+platform: native
+config: kestrel:v1
+hash: cb2d836a4864b9326cdd1f5b766f2d7e
+unsymbolicated: false
+tags: level=error, environment=fixtures, release=fixture-rust@1.0.0, server_name=fixture-host, os.name=Linux, os=Linux 6.12.0-fixture
+components:
+{
+  "kind": "exception_value",
+  "values": [
+    {
+      "type": "InvalidOrder",
+      "value": "Invalid order <num>"
+    }
+  ]
+}

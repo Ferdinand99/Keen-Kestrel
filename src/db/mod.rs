@@ -1,16 +1,23 @@
 //! Kestrel's tables and its migration set. The pool, the runner and the core
 //! tables (users, API tokens, settings) are vole-kit's.
 
+pub mod issues;
 pub mod projects;
 
 use rusqlite::Connection;
 use vole_kit::db::migrate::{self, MigrationError, MigrationSet};
 
 /// Kestrel's own migrations, sorted by name. They run after the kit's core set.
-const MIGRATION_FILES: &[(&str, &str)] = &[(
-    "0001_projects.sql",
-    include_str!("../../migrations/0001_projects.sql"),
-)];
+const MIGRATION_FILES: &[(&str, &str)] = &[
+    (
+        "0001_projects.sql",
+        include_str!("../../migrations/0001_projects.sql"),
+    ),
+    (
+        "0002_errors.sql",
+        include_str!("../../migrations/0002_errors.sql"),
+    ),
+];
 
 fn migrations() -> Vec<(String, String)> {
     MIGRATION_FILES

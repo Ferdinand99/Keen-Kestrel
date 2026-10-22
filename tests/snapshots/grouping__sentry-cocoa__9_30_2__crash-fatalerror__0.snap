@@ -1,0 +1,43 @@
+---
+source: tests/grouping.rs
+expression: text
+---
+title: EXC_BREAKPOINT: KestrelSpike/CrashSite.swift:21: Fatal error: KestrelSpike fatalError at depth 12
+culprit: KestrelSpike +0x2048
+level: fatal
+platform: cocoa
+config: kestrel:v1
+hash: 32d31519c09633ba4b3a48ce5a7031b5
+unsymbolicated: true
+tags: level=fatal, environment=production, release=com.example.kestrelspike@1.0+1, dist=1, os.name=iOS, os=iOS 26.2, device=iPhone17,3, device.family=iOS, handled=no, mechanism=mach, crash_kind=fatal
+components:
+{
+  "kind": "exception",
+  "values": [
+    {
+      "frames": [
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2558"
+        },
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2354"
+        },
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2100"
+        },
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2074"
+        },
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2048"
+        }
+      ],
+      "type": "EXC_BREAKPOINT"
+    }
+  ]
+}

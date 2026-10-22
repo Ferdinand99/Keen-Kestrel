@@ -1,0 +1,13 @@
+{
+  "method": "POST",
+  "uri": "/api/1/envelope/",
+  "headers": {
+    "accept-encoding": "identity",
+    "content-encoding": "gzip",
+    "content-length": "173",
+    "content-type": "application/x-sentry-envelope",
+    "host": "kk-ingest-capture:3002",
+    "user-agent": "sentry.python/2.73.0",
+    "x-sentry-auth": "Sentry sentry_key=0123456789abcdef0123456789abcdef, sentry_version=7, sentry_client=sentry.python/2.73.0"
+  }
+}

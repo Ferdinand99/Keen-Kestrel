@@ -1,0 +1,26 @@
+---
+source: tests/grouping.rs
+expression: text
+---
+title: ParseQuantity: Could not parse quantity
+culprit: main.rs in kk_fixtures::main
+level: error
+platform: native
+config: kestrel:v1
+hash: 33158c1911ad5903ac712859d8375e18
+unsymbolicated: false
+tags: level=error, environment=fixtures, release=fixture-rust@1.0.0, server_name=fixture-host, os.name=Linux, os=Linux 6.12.0-fixture
+components:
+{
+  "kind": "exception_value",
+  "values": [
+    {
+      "type": "ParseIntError",
+      "value": "invalid digit found in string"
+    },
+    {
+      "type": "ParseQuantity",
+      "value": "Could not parse quantity"
+    }
+  ]
+}

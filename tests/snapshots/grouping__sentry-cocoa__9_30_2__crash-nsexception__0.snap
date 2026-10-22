@@ -1,0 +1,43 @@
+---
+source: tests/grouping.rs
+expression: text
+---
+title: NSInternalInconsistencyException: KestrelSpike NSException at depth 12
+culprit: KestrelSpike +0x1f88
+level: fatal
+platform: cocoa
+config: kestrel:v1
+hash: e5a3369b972eec8bb866901f3f1891bc
+unsymbolicated: true
+tags: level=fatal, environment=production, release=com.example.kestrelspike@1.0+1, dist=1, os.name=iOS, os=iOS 26.2, device=iPhone17,3, device.family=iOS, handled=no, mechanism=nsexception, crash_kind=nsexception
+components:
+{
+  "kind": "exception",
+  "values": [
+    {
+      "frames": [
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2558"
+        },
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2354"
+        },
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2100"
+        },
+        {
+          "image": "KestrelSpike",
+          "offset": "0x2074"
+        },
+        {
+          "image": "KestrelSpike",
+          "offset": "0x1f88"
+        }
+      ],
+      "type": "NSInternalInconsistencyException"
+    }
+  ]
+}

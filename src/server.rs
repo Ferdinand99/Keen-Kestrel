@@ -5,31 +5,80 @@ use std::net::SocketAddr;
 
 use crate::config::Config;
 
-/// Starts Kestrel with `config` and serves until it is told to stop.
+/// Starts Kestrel with `config` and serves until it is told to stop. With
+/// `KK_INGEST_PORT`, a second listener serves ingest alone. Events accepted
+/// before the stop are written before it returns.
 pub async fn run(config: Config) -> Result<(), crate::StartError> {
-    let core = crate::start(&config.data_dir, config.public_url.as_deref()).await?;
+    let kestrel = crate::start_with(
+        &config.data_dir,
+        config.public_url.as_deref(),
+        config.ingest_settings(),
+    )
+    .await?;
     // Notifications and other work outside a request use the site language.
-    vole_kit::i18n::site_language(&core).await;
+    vole_kit::i18n::site_language(&kestrel.core).await;
 
-    let app = crate::router(core);
     let addr = config.bind_addr();
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .map_err(|e| format!("can't listen on {addr}: {e}"))?;
+    let listener = bind(addr).await?;
+    let ingest_listener = match config.ingest_addr() {
+        Some(addr) => Some(bind(addr).await?),
+        None => None,
+    };
     tracing::info!(
         version = crate::VERSION,
         data_dir = %config.data_dir.display(),
         "Keen Kestrel listening on http://{addr}"
     );
-    // Connect info lets the sign-in rate limiter key on the peer address.
-    axum::serve(
+
+    let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+    let stopped = move || {
+        let mut rx = stop_rx.clone();
+        async move {
+            let _ = rx.wait_for(|stop| *stop).await;
+        }
+    };
+    // Connect info lets the rate limiters key on the peer address.
+    let main = axum::serve(
         listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
+        crate::router(kestrel.clone()).into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
+    .with_graceful_shutdown(stopped());
+    let ingest = ingest_listener.map(|listener| {
+        tracing::info!(
+            "ingest also listening on http://{}",
+            listener
+                .local_addr()
+                .map(|a| a.to_string())
+                .unwrap_or_default()
+        );
+        axum::serve(
+            listener,
+            crate::ingest_router(kestrel.clone())
+                .into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(stopped())
+    });
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        let _ = stop_tx.send(true);
+    });
+    match ingest {
+        Some(ingest) => {
+            let (a, b) = tokio::join!(main, ingest);
+            a?;
+            b?;
+        }
+        None => main.await?,
+    }
+    kestrel.ingest.flush().await;
     tracing::info!("stopped");
     Ok(())
+}
+
+async fn bind(addr: SocketAddr) -> Result<tokio::net::TcpListener, crate::StartError> {
+    Ok(tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("can't listen on {addr}: {e}"))?)
 }
 
 async fn shutdown_signal() {

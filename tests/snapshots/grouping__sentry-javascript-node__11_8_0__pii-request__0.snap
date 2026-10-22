@@ -1,0 +1,26 @@
+---
+source: tests/grouping.rs
+expression: text
+---
+title: Error: Missing basket for card [Filtered]
+culprit: GET /checkout
+level: error
+platform: node
+config: kestrel:v1
+hash: 35907e6b45c9c3f9d5ddea94f5fed940
+unsymbolicated: false
+tags: level=error, environment=fixtures, release=fixture-node@1.0.0, server_name=fixture-host, transaction=GET /checkout, os.name=Alpine Linux, os=Alpine Linux 3.24.3, runtime.name=node, runtime=node v22.23.4, handled=no, mechanism=auto.http.express
+components:
+{
+  "kind": "exception",
+  "values": [
+    {
+      "frames": [
+        {
+          "module": "app"
+        }
+      ],
+      "type": "Error"
+    }
+  ]
+}
