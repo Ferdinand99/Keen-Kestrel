@@ -12,7 +12,9 @@
 //! run on the same connection through [`Writer::run`], after the jobs queued
 //! before them, so they never race ingest. After a batch with events, and
 //! after an action, the writer tells the live issue lists which project
-//! changed ([`Writer::subscribe`]).
+//! changed ([`Writer::subscribe`]), and hands what may alert (new issues,
+//! regressions, first crashes, issues with events) to the alerts, without
+//! waiting for them ([`crate::alerts::Sink`]).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,7 +24,8 @@ use std::time::Duration;
 use rusqlite::{Connection, TransactionBehavior, params};
 use tokio::sync::{broadcast, mpsc, oneshot};
 
-use crate::db::issues::{self, EventRecord, Outcome};
+use crate::alerts::{Sink, Trigger};
+use crate::db::issues::{self, EventRecord, Outcome, Written};
 
 /// A session update or aggregate (release health, later).
 #[derive(Debug, Clone)]
@@ -148,11 +151,13 @@ pub struct Writer {
 }
 
 impl Writer {
-    /// Opens the writer's connection and starts its task.
+    /// Opens the writer's connection and starts its task. `alerts` gets
+    /// what may alert after each committed batch.
     pub fn start(
         main: &Path,
         store: &Path,
         settings: WriterSettings,
+        alerts: Option<Sink>,
     ) -> Result<Writer, crate::StartError> {
         let conn = open(main, store)?;
         let (tx, rx) = mpsc::channel(settings.queue_capacity.max(1));
@@ -166,6 +171,7 @@ impl Writer {
             settings,
             stats.clone(),
             changes.clone(),
+            alerts,
         ));
         Ok(Writer { tx, stats, changes })
     }
@@ -264,6 +270,7 @@ async fn run(
     settings: WriterSettings,
     stats: Arc<Stats>,
     changes: broadcast::Sender<i64>,
+    alerts: Option<Sink>,
 ) {
     let mut conn = Some(conn);
     while let Some(first) = rx.recv().await {
@@ -294,15 +301,18 @@ async fn run(
         let stats2 = stats.clone();
         match tokio::task::spawn_blocking(move || {
             let mut c = c;
-            let (acks, projects) = write_batch(&mut c, batch, &stats2);
-            (c, acks, projects)
+            let (acks, projects, triggers) = write_batch(&mut c, batch, &stats2);
+            (c, acks, projects, triggers)
         })
         .await
         {
-            Ok((c, acks, projects)) => {
+            Ok((c, acks, projects, triggers)) => {
                 conn = Some(c);
                 for project in projects {
                     let _ = changes.send(project);
+                }
+                if let Some(alerts) = &alerts {
+                    alerts.send(triggers);
                 }
                 for ack in acks {
                     let _ = ack.send(());
@@ -313,13 +323,13 @@ async fn run(
     }
 }
 
-/// Writes a batch's jobs, then runs its other work. Returns the flush acks
-/// and the projects that got events.
+/// Writes a batch's jobs, then runs its other work. Returns the flush acks,
+/// the projects that got events and what may alert.
 fn write_batch(
     c: &mut Connection,
     batch: Vec<Msg>,
     stats: &Stats,
-) -> (Vec<oneshot::Sender<()>>, Vec<i64>) {
+) -> (Vec<oneshot::Sender<()>>, Vec<i64>, Vec<Trigger>) {
     let mut acks = Vec::new();
     let mut execs = Vec::new();
     let mut jobs = Vec::with_capacity(batch.len());
@@ -338,16 +348,20 @@ fn write_batch(
             projects.push(e.project_id);
         }
     }
-    if !jobs.is_empty() {
-        write_all(c, &mut jobs, stats);
-    }
+    let triggers = if jobs.is_empty() {
+        Vec::new()
+    } else {
+        write_all(c, &mut jobs, stats)
+    };
     for f in execs {
         f(c);
     }
-    (acks, projects)
+    (acks, projects, triggers)
 }
 
-fn write_all(c: &mut Connection, jobs: &mut [Job], stats: &Stats) {
+/// Writes the jobs (trying once more if the transaction fails). Returns
+/// what may alert, from the transaction that committed.
+fn write_all(c: &mut Connection, jobs: &mut [Job], stats: &Stats) -> Vec<Trigger> {
     // Events first: attachments need their event's row.
     jobs.sort_by_key(|j| match j {
         Job::Event(_) => 0,
@@ -360,13 +374,54 @@ fn write_all(c: &mut Connection, jobs: &mut [Job], stats: &Stats) {
         result = write_jobs(c, jobs, stats);
     }
     match result {
-        Ok(()) => {
+        Ok(triggers) => {
             stats.batches.fetch_add(1, Ordering::Relaxed);
+            triggers
         }
         Err(err) => {
             tracing::error!(%err, jobs = jobs.len(), "a batch could not be written");
             stats.failed.fetch_add(jobs.len() as u64, Ordering::Relaxed);
+            Vec::new()
         }
+    }
+}
+
+/// What an event that was written may alert.
+fn triggers_of(e: &EventRecord, w: Written, out: &mut Vec<Trigger>) {
+    let (issue_id, new, regressed) = match w.outcome {
+        Outcome::NewIssue(id) => (id, true, false),
+        Outcome::Existing(id, regressed) => (id, false, regressed),
+        Outcome::Duplicate => return,
+    };
+    let project_id = e.project_id;
+    if new {
+        out.push(Trigger::NewIssue {
+            project_id,
+            issue_id,
+            environment: e.environment.clone(),
+        });
+    }
+    if regressed {
+        out.push(Trigger::Regression {
+            project_id,
+            issue_id,
+            environment: e.environment.clone(),
+        });
+    }
+    if let Some(release_id) = w.first_crash {
+        out.push(Trigger::FirstCrash {
+            project_id,
+            issue_id,
+            release_id,
+            environment: e.environment.clone(),
+        });
+    }
+    let events = Trigger::Events {
+        project_id,
+        issue_id,
+    };
+    if !out.contains(&events) {
+        out.push(events);
     }
 }
 
@@ -380,15 +435,19 @@ struct Counts {
     failed: u64,
 }
 
-fn write_jobs(c: &mut Connection, jobs: &[Job], stats: &Stats) -> rusqlite::Result<()> {
+fn write_jobs(c: &mut Connection, jobs: &[Job], stats: &Stats) -> rusqlite::Result<Vec<Trigger>> {
     let mut tx = c.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let mut counts = Counts::default();
+    let mut triggers = Vec::new();
     for job in jobs {
         let sp = tx.savepoint()?;
         match write_job(&sp, job) {
-            Ok(outcome) => {
+            Ok(written) => {
                 sp.commit()?;
-                match outcome {
+                if let (Job::Event(e), Some(w)) = (job, written) {
+                    triggers_of(e, w, &mut triggers);
+                }
+                match written.map(|w| w.outcome) {
                     Some(Outcome::NewIssue(_)) => {
                         counts.events += 1;
                         counts.new_issues += 1;
@@ -414,12 +473,12 @@ fn write_jobs(c: &mut Connection, jobs: &[Job], stats: &Stats) -> rusqlite::Resu
         .fetch_add(counts.duplicates, Ordering::Relaxed);
     stats.other_items.fetch_add(counts.other, Ordering::Relaxed);
     stats.failed.fetch_add(counts.failed, Ordering::Relaxed);
-    Ok(())
+    Ok(triggers)
 }
 
-fn write_job(c: &Connection, job: &Job) -> rusqlite::Result<Option<Outcome>> {
+fn write_job(c: &Connection, job: &Job) -> rusqlite::Result<Option<Written>> {
     match job {
-        Job::Event(e) => issues::write_event(c, e).map(Some),
+        Job::Event(e) => issues::write_event_full(c, e).map(Some),
         Job::Session(s) => {
             c.prepare_cached(
                 "INSERT INTO store.session_items (project_id, received_at, release, environment, data)

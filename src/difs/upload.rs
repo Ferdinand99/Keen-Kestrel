@@ -203,7 +203,9 @@ pub fn dif_json(d: &DifFile) -> Value {
 // sentry-cli
 // ---------------------------------------------------------------------------
 
-/// `GET /api/0/`: who the token belongs to and what it may do.
+/// `GET /api/0/`: who the token belongs to and what it may do. Kestrel keeps
+/// no email addresses, so `email` (what `sentry-cli info` shows as the
+/// user) is the user name.
 async fn auth_info(State(core): State<Core>, user: CurrentUser, method: Method) -> Response {
     let method = method.map(|Extension(m)| m);
     let mut scopes = vec!["org:read", "project:read"];
@@ -213,7 +215,7 @@ async fn auth_info(State(core): State<Core>, user: CurrentUser, method: Method) 
     axum::Json(json!({
         "version": "0",
         "auth": {"scopes": scopes},
-        "user": {"id": user.id.to_string(), "name": user.display_name, "username": user.username, "email": ""},
+        "user": {"id": user.id.to_string(), "name": user.display_name, "username": user.username, "email": user.username},
     }))
     .into_response()
 }

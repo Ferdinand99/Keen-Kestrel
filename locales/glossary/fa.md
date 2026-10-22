@@ -58,5 +58,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | نمونه / نمونه‌برداری | sample rate: «نرخ نمونه‌برداری» |
 | tag | برچسب | VV: «برچسب‌ها» |
 | analytics | تحلیل | VV: «تحلیل» |
+| notification channel / channel | کانال اطلاع‌رسانی / کانال | vole-kit: «کانال‌ها», «اطلاع‌رسانی‌ها» |
+| digest | خلاصه | alerts gathered into one message; «ارسال به‌صورت خلاصه» |
+| cooldown (“at most every … per issue”) | برای هر مشکل حداکثر هر … یک بار | form label «برای هر مشکل، حداکثر هر» |
+| threshold | آستانه | message field «آستانهٔ هشدار» |
+| multiplier (× the usual) | برابر / × | summary keeps «{k}× حالت معمول» |
+| adoption | پذیرش | share of the sessions in the last 7 days |
+| crash-free rate | نرخ بدون کرش | |
+| errored (session) | با خطا، بدون کرش | |
+| abnormal (session ended abnormally) | پایان غیرعادی | |
+| finalized (release) | نهایی‌شده | lowercase status after a date in English |
+| header (webhook) | هدر | vole-kit: «هدرهای سفارشی» |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer «با نماد» phrasing in sentences |

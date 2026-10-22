@@ -1,0 +1,58 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{% include "partials/project_head.html" %}
+
+<section class="section" aria-labelledby="releases-title">
+  {% call m::section_head(tr("releases.title"), tr("releases.sub"), "releases-title") %}{% endcall %}
+  {%- if rows.is_empty() %}
+  <div class="card card-flush">
+    {{ m::empty_state("tag", tr("releases.empty_title"), tr("releases.empty_text")) }}
+  </div>
+  {%- else %}
+  {%- if !any_health %}
+  {{ m::callout("info", tr("releases.no_sessions_text"), tr("releases.no_sessions_title")) }}
+  {%- endif %}
+  <div class="card card-flush">
+    <div class="table-wrap">
+      <table class="table table-stack">
+        <thead><tr>
+          <th>{{ tr("releases.version") }}</th>
+          <th>{{ tr("releases.crash_free_sessions") }}</th>
+          <th>{{ tr("releases.crash_free_users") }}</th>
+          <th>{{ tr("releases.adoption") }}</th>
+          <th>{{ tr("releases.new_issues") }}</th>
+          <th>{{ tr("releases.events") }}</th>
+          <th>{{ tr("releases.last_seen") }}</th>
+        </tr></thead>
+        <tbody>
+          {%- for r in rows %}
+          <tr>
+            <td class="td-primary">
+              <a class="break" href="{{ r.href }}">{{ r.version }}</a>
+              <span class="muted">{{ tr("releases.first_seen") }} {{ m::time_ago(&r.first_seen) }}{% if r.finalized %} · {{ tr("releases.finalized") }}{% endif %}</span>
+            </td>
+            <td class="num nowrap" data-label="{{ tr("releases.crash_free_sessions") }}"><span class="dot status-{{ r.health_status }}" aria-hidden="true"></span> {{ pct(r.crash_free_sessions) }}</td>
+            <td class="num nowrap" data-label="{{ tr("releases.crash_free_users") }}">{{ pct(r.crash_free_users) }}</td>
+            <td class="num nowrap" data-label="{{ tr("releases.adoption") }}">{{ pct(r.adoption) }}</td>
+            <td class="num" data-label="{{ tr("releases.new_issues") }}">{{ num(r.new_issues) }}</td>
+            <td class="num" data-label="{{ tr("releases.events") }}">{{ num(r.events) }}</td>
+            <td class="nowrap" data-label="{{ tr("releases.last_seen") }}">{{ m::time_ago(&r.last_seen) }}</td>
+          </tr>
+          {%- endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {%- if paging.shown() %}
+  <nav class="cluster cluster-between" aria-label="{{ tr("issues.pages") }}">
+    {%- if paging.prev_href.is_empty() %}<span></span>{% else %}<a class="btn btn-secondary btn-sm" href="{{ paging.prev_href }}" rel="prev">{{ m::icon("chevron-left") }}<span>{{ tr("issues.previous") }}</span></a>{% endif %}
+    <span class="muted num">{{ tr2("issues.page_of", "page", num(paging.page), "pages", num(paging.pages)) }}</span>
+    {%- if paging.next_href.is_empty() %}<span></span>{% else %}<a class="btn btn-secondary btn-sm" href="{{ paging.next_href }}" rel="next"><span>{{ tr("issues.next") }}</span>{{ m::icon("chevron-right") }}</a>{% endif %}
+  </nav>
+  {%- endif %}
+  {%- endif %}
+  <p class="section-foot">{{ tr("releases.foot") }}</p>
+</section>
+{% endblock %}

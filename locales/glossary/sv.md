@@ -56,5 +56,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | urval / sampling | sample rate: ”urvalsfrekvens” |
 | tag | tagg | VV: ”Taggar” |
 | analytics | statistik | VV: ”Statistik” |
+| notification channel / channel | aviseringskanal / kanal | kit/VV: ”Inställningar → Aviseringar”; short ”kanal” in rules and tables |
+| digest | sammandrag (ett) | ”Skicka som sammandrag”; status pill ”I sammandrag” |
+| cooldown (at most every … per issue) | högst en gång per … och problem | label ”Per problem, högst en gång per” |
+| threshold | gräns (en) | in the form: ”Fler än [100] händelser i timmen” |
+| adoption | spridning | the release's share of sessions |
+| abnormal (session ended abnormally) | avslutades onormalt | |
+| errored (session) | med fel, ingen krasch | |
+| finalized (release) | slutförd | lowercase status after a date |
+| attempt (delivery) | försök (ett; pl. försök) | |
+| header (HTTP) | rubrik | as the kit: ”Egna rubriker”; ”Rubriknamn”, ”Lägg till rubrik” |
+| AI assistant | AI-assistent | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer ”symboliserad” phrasing in sentences |

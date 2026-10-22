@@ -58,5 +58,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | otos / otanta | sample rate: ”otantataajuus” |
 | tag | tunniste | VV: ”Tunnisteet” |
 | analytics | analytiikka | VV: ”Analytiikka” |
+| notification channel / channel | ilmoituskanava / kanava | kit/VV: ”Asetukset → Ilmoitukset”; short ”kanava” in rules and tables |
+| digest | kooste | ”Lähetä koosteena”; status pill ”Koosteessa”; ”kooste {time} välein” |
+| cooldown (at most every … per issue) | vähimmäisväli samalle ongelmalle | summary ”samasta ongelmasta enintään {time} välein” |
+| threshold | raja | in the form: ”Yli [100] tapahtumaa tunnissa”; message field ”Hälytysraja” |
+| adoption | käyttöaste | the release's share of sessions |
+| abnormal (session ended abnormally) | päättyi poikkeuksellisesti | |
+| errored (session) | virheitä, ei kaatumista | |
+| finalized (release) | viimeistelty | lowercase status after a date |
+| attempt (delivery) | yritys | |
+| header (HTTP) | otsake | as the kit: ”Omat otsakkeet” |
+| AI assistant | tekoälyavustaja | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer ”symboloitu” phrasing in sentences |

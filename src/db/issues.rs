@@ -58,9 +58,14 @@ pub struct EventRecord {
     pub tags: Vec<(String, String)>,
     pub grouping_config: &'static str,
     pub hash: String,
+    /// The hash of the previous grouping configuration (`kestrel:v1`) when
+    /// it differs: an issue it points at gets the event (and `hash`).
+    pub legacy_hash: Option<String>,
     /// JSON of the grouping components.
     pub components: String,
     pub unsymbolicated: bool,
+    /// A crash (fatal, or unhandled): the first one of a release can alert.
+    pub crash: bool,
     /// zstd-compressed JSON.
     pub payload: Vec<u8>,
 }
@@ -81,7 +86,7 @@ fn day(time: &str) -> &str {
     time.get(..10).unwrap_or(time)
 }
 
-fn upsert_release(
+pub fn upsert_release(
     c: &Connection,
     project_id: i64,
     version: &str,
@@ -198,29 +203,88 @@ pub fn hour_of(time: &str) -> String {
     }
 }
 
+/// What writing one event did, for the alerts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Written {
+    pub outcome: Outcome,
+    /// The release whose first crash this was.
+    pub first_crash: Option<i64>,
+}
+
+/// [`write_event_full`] without the details for the alerts.
+pub fn write_event(c: &Connection, e: &EventRecord) -> rusqlite::Result<Outcome> {
+    write_event_full(c, e).map(|w| w.outcome)
+}
+
+/// The issue an event's hash points at; failing that, the one its
+/// previous configuration's hash points at, which then gets the new hash
+/// too (so the issue keeps its configuration and its events).
+fn find_or_adopt(c: &Connection, e: &EventRecord) -> rusqlite::Result<Option<IssueState>> {
+    if let Some(issue) = find_issue(c, e.project_id, &e.hash)? {
+        return Ok(Some(issue));
+    }
+    let Some(legacy) = &e.legacy_hash else {
+        return Ok(None);
+    };
+    let Some(issue) = find_issue(c, e.project_id, legacy)? else {
+        return Ok(None);
+    };
+    c.prepare_cached(
+        "INSERT OR IGNORE INTO issue_hashes (project_id, hash, issue_id, grouping_config, components)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )?
+    .execute(params![
+        e.project_id,
+        e.hash,
+        issue.id,
+        e.grouping_config,
+        e.components
+    ])?;
+    Ok(Some(issue))
+}
+
 /// Writes one event: release, environment, issue (new or updated, with
 /// regression and ignore conditions, both logged), tag values, the user and
 /// the hourly count, and, while the issue has stored fewer than the
 /// project's daily cap ([`MAX_PAYLOADS_PER_DAY`] by default) today, the
-/// event row and its payload.
-pub fn write_event(c: &Connection, e: &EventRecord) -> rusqlite::Result<Outcome> {
+/// event row and its payload. A crash notes its release's first crash.
+pub fn write_event_full(c: &Connection, e: &EventRecord) -> rusqlite::Result<Written> {
     let duplicate: bool = c
         .prepare_cached(
             "SELECT EXISTS (SELECT 1 FROM events WHERE project_id = ?1 AND event_id = ?2)",
         )?
         .query_row(params![e.project_id, e.event_id], |r| r.get(0))?;
     if duplicate {
-        return Ok(Outcome::Duplicate);
+        return Ok(Written {
+            outcome: Outcome::Duplicate,
+            first_crash: None,
+        });
     }
     let release_id = match &e.release {
-        Some(version) => Some(upsert_release(c, e.project_id, version, &e.timestamp)?),
+        Some(version) => {
+            let id = upsert_release(c, e.project_id, version, &e.timestamp)?;
+            c.prepare_cached("UPDATE releases SET events = events + 1 WHERE id = ?1")?
+                .execute([id])?;
+            Some(id)
+        }
         None => None,
+    };
+    let first_crash = match release_id {
+        Some(id) if e.crash => {
+            let changed = c
+                .prepare_cached(
+                    "UPDATE releases SET first_crash_at = ?2 WHERE id = ?1 AND first_crash_at IS NULL",
+                )?
+                .execute(params![id, e.received_at])?;
+            (changed > 0).then_some(id)
+        }
+        _ => None,
     };
     let environment_id = upsert_environment(c, e.project_id, &e.environment, &e.timestamp)?;
     let today = day(&e.received_at);
     let cap = payload_cap(c, e.project_id)?;
 
-    let (issue_id, outcome, store_payload) = match find_issue(c, e.project_id, &e.hash)? {
+    let (issue_id, outcome, store_payload) = match find_or_adopt(c, e)? {
         None => {
             c.prepare_cached(
                 "INSERT INTO issues (project_id, title, culprit, level, platform, first_seen, last_seen,
@@ -370,7 +434,10 @@ pub fn write_event(c: &Connection, e: &EventRecord) -> rusqlite::Result<Outcome>
         c.prepare_cached("UPDATE issues SET payloads_today = payloads_today + 1 WHERE id = ?1")?
             .execute([issue_id])?;
     }
-    Ok(outcome)
+    Ok(Written {
+        outcome,
+        first_crash,
+    })
 }
 
 /// Counts the event's tag values: standard keys always, custom keys while
@@ -524,10 +591,12 @@ mod tests {
             environment: "production".into(),
             user_hash: None,
             tags: vec![("level".into(), "error".into())],
-            grouping_config: "kestrel:v1",
+            grouping_config: "kestrel:v2",
             hash: hash.repeat(32 / hash.len()),
+            legacy_hash: None,
             components: "{}".into(),
             unsymbolicated: false,
+            crash: false,
             payload: vec![1, 2, 3],
         }
     }
@@ -620,6 +689,74 @@ mod tests {
             )
             .unwrap();
         assert_eq!(keys, MAX_CUSTOM_TAG_KEYS + 1, "20 custom keys and level");
+        drop(c);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn v1_issues_keep_getting_their_events() {
+        let (c, path) = conn("legacy");
+        // An issue made by kestrel:v1 ...
+        let mut old = record(1, "f");
+        old.grouping_config = "kestrel:v1";
+        let Outcome::NewIssue(id) = write_event(&c, &old).unwrap() else {
+            panic!()
+        };
+        // ... gets the v2 event whose v1 hash matches, and the v2 hash with it.
+        let mut new = record(2, "9");
+        new.legacy_hash = Some(old.hash.clone());
+        assert_eq!(write_event(&c, &new).unwrap(), Outcome::Existing(id, false));
+        let configs: Vec<String> = c
+            .prepare("SELECT grouping_config FROM issue_hashes WHERE issue_id = ?1 ORDER BY id")
+            .unwrap()
+            .query_map([id], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(configs, ["kestrel:v1", "kestrel:v2"]);
+        let config: String = c
+            .query_row(
+                "SELECT grouping_config FROM issues WHERE id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(config, "kestrel:v1", "the issue keeps its configuration");
+        // Later events find it by the v2 hash directly.
+        let mut later = record(3, "9");
+        later.legacy_hash = Some("0".repeat(32));
+        assert_eq!(
+            write_event(&c, &later).unwrap(),
+            Outcome::Existing(id, false)
+        );
+        drop(c);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn a_release_notes_its_first_crash_once() {
+        let (c, path) = conn("crash");
+        let mut r = record(1, "a");
+        assert_eq!(write_event_full(&c, &r).unwrap().first_crash, None);
+        r = record(2, "b");
+        r.crash = true;
+        let first = write_event_full(&c, &r).unwrap().first_crash;
+        assert!(first.is_some());
+        r = record(3, "b");
+        r.crash = true;
+        assert_eq!(write_event_full(&c, &r).unwrap().first_crash, None);
+        r = record(4, "b");
+        r.crash = true;
+        r.release = Some("app@2".into());
+        assert!(write_event_full(&c, &r).unwrap().first_crash.is_some());
+        let events: i64 = c
+            .query_row(
+                "SELECT events FROM releases WHERE version = 'app@1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(events, 3);
         drop(c);
         let _ = std::fs::remove_file(path);
     }

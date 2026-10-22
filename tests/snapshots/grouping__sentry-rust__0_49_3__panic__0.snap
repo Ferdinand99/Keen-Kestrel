@@ -6,8 +6,8 @@ title: panic: index out of bounds: the len is 0 but the index is 7
 culprit: main.rs in kk_fixtures::main
 level: fatal
 platform: native
-config: kestrel:v1
-hash: 61892e3bc39649935a166da7917f1807
+config: kestrel:v2
+hash: 6ca6db9049cb3911bb52e493d2f3c079
 unsymbolicated: false
 tags: level=fatal, environment=fixtures, release=fixture-rust@1.0.0, server_name=fixture-host, os.name=Linux, os=Linux 6.12.0-fixture, handled=no, mechanism=panic
 components:

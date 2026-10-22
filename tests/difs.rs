@@ -661,6 +661,25 @@ async fn crashes_are_symbolicated_with_the_dsym() {
     // the inlined trigger(_:depth:) (it only exists inlined).
     let fatal = payload(&app, "0ae194b18c7448da976fa84bca4edea7").await;
     let frames = app_frames(&fatal);
+    // The dSYM's paths are the build machine's: stored without its home
+    // directory or CI workspace, the file name kept.
+    let abs: Vec<String> = fatal["exception"]["values"][0]["stacktrace"]["frames"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|f| f["abs_path"].as_str().map(str::to_string))
+        .collect();
+    assert!(!abs.is_empty());
+    for p in &abs {
+        assert!(
+            !p.starts_with("/Users/") && !p.starts_with("/home/") && !p.contains("runner"),
+            "{p}"
+        );
+    }
+    assert!(
+        abs.iter().any(|p| p.ends_with("CrashSite.swift")),
+        "{abs:?}"
+    );
     assert_eq!(
         at(find(&frames, "CrashSite.crash(")),
         ("CrashSite.swift".into(), 59, false)

@@ -1,0 +1,95 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{% include "partials/project_head.html" %}
+
+<section class="section" aria-labelledby="rules-title">
+  {% call m::section_head(tr("alerts.rules_title"), tr("alerts.rules_sub"), "rules-title") %}
+    {%- if ctx.can_edit() && !rules.is_empty() %}
+    {{ m::link_button(new_href.as_str(), tr("alerts.new_rule"), "primary", "plus", "sm") }}
+    {%- endif %}
+  {% endcall %}
+  {%- if !has_channels %}
+  {%- if ctx.can_edit() %}
+  {{ m::callout("info", tr("alerts.no_channels_text"), tr("alerts.no_channels_title")) }}
+  <p><a class="btn btn-secondary btn-sm" href="/settings/notifications">{{ m::icon("bell") }}<span>{{ tr("alerts.add_channel") }}</span></a></p>
+  {%- else %}
+  {{ m::callout("info", tr("alerts.no_channels_viewer")) }}
+  {%- endif %}
+  {%- endif %}
+  {%- if rules.is_empty() %}
+  <div class="card card-flush">
+    {%- if ctx.can_edit() %}
+    {{ m::empty_state("bell", tr("alerts.empty_title"), tr("alerts.empty_text"), new_href.as_str(), tr("alerts.new_rule")) }}
+    {%- else %}
+    {{ m::empty_state("bell", tr("alerts.empty_title"), tr("alerts.empty_viewer")) }}
+    {%- endif %}
+  </div>
+  {%- else %}
+  <ul class="list" role="list">
+    {%- for r in rules %}
+    <li class="list-row" id="rule-{{ r.id }}">
+      <span class="dot status-{% if r.enabled %}success{% else %}paused{% endif %}" role="img" aria-label="{% if r.enabled %}{{ tr("common.active") }}{% else %}{{ tr("common.paused") }}{% endif %}"></span>
+      <div class="list-main">
+        {%- if ctx.can_edit() %}
+        <a class="list-title stretched" href="{{ r.href }}">{{ r.name }}</a>
+        {%- else %}
+        <span class="list-title">{{ r.name }}</span>
+        {%- endif %}
+        <span class="list-sub">{{ r.kind_label }}{% if !r.summary.is_empty() %} · {{ r.summary }}{% endif %}</span>
+        <span class="list-sub">{{ m::icon("bell", "icon-sm") }} {{ r.channels }}</span>
+      </div>
+      {%- if !r.enabled %}<span class="badge status-paused">{{ tr("common.paused") }}</span>{% endif %}
+      {%- if ctx.can_edit() %}{{ m::icon("chevron-right", "list-chevron") }}{% endif %}
+    </li>
+    {%- endfor %}
+  </ul>
+  {%- endif %}
+</section>
+
+<section class="section" aria-labelledby="history-title" id="history">
+  {% call m::section_head(tr("alerts.history_title"), tr("alerts.history_sub"), "history-title") %}{% endcall %}
+  {%- if history.is_empty() %}
+  <div class="card card-flush">
+    {{ m::empty_state("clock", tr("alerts.history_empty_title"), tr("alerts.history_empty_text")) }}
+  </div>
+  {%- else %}
+  <div class="card card-flush">
+    <div class="table-wrap">
+      <table class="table table-stack">
+        <thead><tr><th>{{ tr("alerts.col_alert") }}</th><th>{{ tr("alerts.col_rule") }}</th><th>{{ tr("alerts.col_channel") }}</th><th>{{ tr("alerts.col_result") }}</th><th>{{ tr("alerts.col_time") }}</th></tr></thead>
+        <tbody>
+          {%- for h in history %}
+          <tr>
+            <td class="td-primary">
+              <span class="break">{{ h.headline }}</span>
+              {%- if !h.issue_title.is_empty() %}
+              <span class="muted break">{% if !h.issue_href.is_empty() %}<a href="{{ h.issue_href }}">{{ h.issue_title }}</a>{% else %}{{ h.issue_title }}{% endif %}</span>
+              {%- endif %}
+            </td>
+            <td data-label="{{ tr("alerts.col_rule") }}"><span class="break">{{ h.rule }}</span> <span class="muted">{{ h.kind_label }}</span></td>
+            <td class="break" data-label="{{ tr("alerts.col_channel") }}">{{ h.channel }}</td>
+            <td data-label="{{ tr("alerts.col_result") }}">
+              <span class="badge {{ h.status_class }}">{{ h.status_label }}</span>
+              {%- if h.attempts > 1 %} <span class="muted">{{ trn("alerts.attempts", h.attempts) }}</span>{% endif %}
+              {%- if !h.error.is_empty() %}<br><span class="muted break">{{ h.error }}</span>{% endif %}
+            </td>
+            <td class="nowrap" data-label="{{ tr("alerts.col_time") }}">{{ m::time_ago(&h.time) }}</td>
+          </tr>
+          {%- endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {%- if paging.shown() %}
+  <nav class="cluster cluster-between" aria-label="{{ tr("issues.pages") }}">
+    {%- if paging.prev_href.is_empty() %}<span></span>{% else %}<a class="btn btn-secondary btn-sm" href="{{ paging.prev_href }}" rel="prev">{{ m::icon("chevron-left") }}<span>{{ tr("issues.previous") }}</span></a>{% endif %}
+    <span class="muted num">{{ tr2("issues.page_of", "page", num(paging.page), "pages", num(paging.pages)) }}</span>
+    {%- if paging.next_href.is_empty() %}<span></span>{% else %}<a class="btn btn-secondary btn-sm" href="{{ paging.next_href }}" rel="next"><span>{{ tr("issues.next") }}</span>{{ m::icon("chevron-right") }}</a>{% endif %}
+  </nav>
+  {%- endif %}
+  {%- endif %}
+  <p class="section-foot">{{ tr("alerts.history_foot") }}</p>
+</section>
+{% endblock %}

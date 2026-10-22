@@ -62,3 +62,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | analityka | VV: "Analityka" |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; inflect with a hyphen only if unavoidable, better rephrase |
 | symbolication | symbolication | unchanged noun; prefer "z symbolami" phrasing in sentences |
+| notification channel / channel | kanał powiadomień / kanał (m.; pl. kanały / kanałów) | kit: "Dodaj kanał", settings page "Powiadomienia" |
+| digest | zestawienie (n.) | "Wysyłaj jako zestawienie", "zestawienie co {time}"; status pill "W zestawieniu" |
+| cooldown ("at most every … per issue") | najwyżej co … na problem | select label "Na problem najwyżej co [1 godz.]" |
+| threshold / alert above | ponad … / alert powyżej | "Ponad [100] zdarzeń na godzinę"; message field "Alert powyżej" |
+| multiplier | … × więcej niż zwykle | "I ponad [5] ×" |
+| adoption | udział (m.) | share of the sessions in the last 7 days |
+| crashed / errored / abnormal (session) | z awarią / z błędami, bez awarii / zakończone nieprawidłowo | session outcomes |
+| finalized (release) | sfinalizowana | lowercase status, agrees with "wersja" |
+| attempt (delivery) | próba (f.; pl. próby / prób) | |
+| culprit | miejsce | message field label; "źródło błędu" in search help |
+| instance | instancja (f.) | kit: "nazwij instancję" |
+| header (webhook) | nagłówek (m.) | |
+| secrets | sekrety | channel form footer |

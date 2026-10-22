@@ -1014,6 +1014,10 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
     assert_eq!(
         tables,
         [
+            "alert_cooldowns",
+            "alert_log",
+            "alert_rule_channels",
+            "alert_rules",
             "api_tokens",
             "dif_files",
             "environments",
@@ -1029,8 +1033,11 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "issues_fts_data",
             "issues_fts_docsize",
             "issues_fts_idx",
+            "notification_channels",
             "project_keys",
             "projects",
+            "release_health",
+            "release_health_seen",
             "releases",
             "schema_migrations",
             "settings",
@@ -1045,7 +1052,8 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "0001_projects.sql",
             "0002_errors.sql",
             "0003_triage.sql",
-            "0004_debug_files.sql"
+            "0004_debug_files.sql",
+            "0005_alerts_releases.sql"
         ]
     );
     assert!(app.dir.join("store.sqlite").exists());

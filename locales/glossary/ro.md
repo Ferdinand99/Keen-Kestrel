@@ -60,3 +60,18 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | statistici | VV: „Statistici” |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; articles with a hyphen: „DSN-ul”, „SDK-ul” |
 | symbolication | symbolication | unchanged noun; prefer „cu simboluri” phrasing in sentences |
+| notification channel / channel | canal de notificări / canal (n.; pl. canale) | VV: „Canale de notificări” |
+| digest | rezumat (n.) | „Trimite ca rezumat”; status pill „În rezumat” |
+| cooldown (at most every … per issue) | cel mult o dată la … | „Pentru fiecare problemă, cel mult o dată la [1 h]” |
+| threshold / alert above | prag (n.) / prag de alertă | form label „Peste [100] evenimente pe oră” |
+| adoption | adoptare (f.) | share of the last 7 days’ sessions |
+| errored (session) | cu erori, fără blocare | session row label |
+| abnormal (session ended abnormally) | încheiate anormal | session row label (f. pl.: sesiuni) |
+| crashed (session) | blocate | session row label (f. pl.: sesiuni) |
+| finalized (release) | finalizată | lowercase status after a date |
+| culprit (“Where” in alert messages) | origine (f.) | as in the issue search help |
+| skipped (alert delivery) | omisă | not „ignorată”, which is the issue status |
+| attempt (delivery) | încercare (f.; pl. încercări) | |
+| header (HTTP) | antet (n.; pl. anteturi) | VV |
+| AI assistant | asistent AI | |
+| numbers before nouns | „{n} de …” | where a count can be 20+ and isn’t a plural key, put the number after a colon („evenimente în ultima oră: {n}”) |

@@ -57,5 +57,17 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | 樣本 / 取樣 | sample rate: 取樣率 |
 | tag | 標籤 | VV |
 | analytics | 分析 | VV: 分析 |
+| notification channel / channel | 通知管道 / 管道 | vole-kit: 管道; counter 個 |
+| digest | 摘要 | alerts gathered into one message; status pill 已併入摘要 |
+| cooldown (“at most every … per issue”) | 每個問題最短間隔 | summary: 每個問題最多每 {time} 一次 |
+| threshold | 門檻 | spike form reads 每小時超過 [100] 次事件; message field 警報門檻 |
+| multiplier (× the usual) | 倍 | 超過平常的 {k} 倍 |
+| adoption | 採用率 | share of the sessions in the last 7 days |
+| crash-free rate | 無當機率 | |
+| errored (session) | 有錯誤，未當機 | |
+| abnormal (session ended abnormally) | 異常結束 | |
+| finalized (release) | 已定版 | lowercase status after a date in English |
+| header (webhook) | 標頭 | vole-kit: 自訂標頭 |
+| alert (counter) | 則 | {n} 則警報; rules take 條 |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer 已符號化 phrasing in sentences |

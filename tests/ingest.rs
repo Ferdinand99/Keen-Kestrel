@@ -127,7 +127,39 @@ async fn nothing_personal_is_stored() {
         ))
         .await;
     assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    // Paths from a build machine and a developer's Mac: the user name in
+    // them is never stored (the files' names are).
+    let paths = json!({"event_id": new_id(), "platform": "cocoa", "exception": {"values": [{"type": "AppError",
+        "stacktrace": {"frames": [
+            {"function": "Checkout.pay()", "abs_path": "/Users/adalovelace/Developer/Shop/Shop/Checkout.swift",
+             "filename": "/Users/adalovelace/Developer/Shop/Shop/Checkout.swift", "lineno": 12, "in_app": true,
+             "package": "/Users/adalovelace/Library/Developer/CoreSimulator/Devices/X/Shop.app/Shop"},
+            {"function": "main", "abs_path": "/home/adalovelace/build/shop/main.swift", "in_app": true}]}}]},
+        "debug_meta": {"images": [{"type": "macho", "code_file": "/Users/adalovelace/Library/Developer/X/Shop.app/Shop",
+            "debug_file": "/Users/adalovelace/Shop.dSYM", "image_addr": "0x1000", "image_size": 4096}]}});
+    let res = app
+        .send(envelope_request(
+            app.project_id,
+            &app.key,
+            envelope_with(&paths),
+        ))
+        .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
     app.flush().await;
+    // Roll the session up too: the rollup keeps only hashes.
+    let now = keen_kestrel::issues::now();
+    app.kestrel
+        .ingest
+        .writer()
+        .run(move |c| keen_kestrel::releases::health::rollup_all(c, &now))
+        .await
+        .unwrap();
+    // The fixtures' sessions (sentry-cocoa 1, @sentry/node 2, sentry-python
+    // 1) and this one.
+    assert_eq!(
+        app.count("SELECT SUM(sessions) FROM release_health").await,
+        5
+    );
     assert_eq!(app.store_count("SELECT COUNT(*) FROM feedback").await, 2);
     assert_eq!(app.store_count("SELECT COUNT(*) FROM attachments").await, 1);
 
@@ -173,6 +205,7 @@ async fn nothing_personal_is_stored() {
         "4111 1111 1111 1111",
         "4111-1111-1111-1111",
         "{{auto}}",
+        "adalovelace",
     ];
     let lower: Vec<String> = user_ids.iter().map(|id| id.to_lowercase()).collect();
     needles.extend(user_ids.iter().chain(&lower).map(String::as_str));

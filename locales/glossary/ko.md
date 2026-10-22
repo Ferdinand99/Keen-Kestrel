@@ -55,5 +55,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | sample / sampling | 샘플 / 샘플링 | sample rate: 샘플링 비율 |
 | tag | 태그 | VV |
 | analytics | 분석 | VV: 분석 |
+| notification channel / channel | 알림 채널 / 채널 | vole-kit: 채널 |
+| digest | 요약 | alerts gathered into one message; status pill 요약에 포함 |
+| cooldown (“at most every … per issue”) | 이슈당 최소 알림 간격 | summary: 이슈당 최소 간격 {time} (no particle on the placeholder) |
+| threshold | 기준 | spike form reads 시간당 이벤트 [100] 개 초과; message field 알림 기준 |
+| multiplier (× the usual) | 배 | 평소의 {k}배 초과 |
+| adoption | 채택률 | share of the sessions in the last 7 days |
+| crash-free rate | 크래시 없는 비율 | |
+| errored (session) | 오류 있음, 크래시 없음 | |
+| abnormal (session ended abnormally) | 비정상 종료 | |
+| finalized (release) | 확정됨 | lowercase status after a date in English |
+| header (webhook) | 헤더 | vole-kit: 사용자 지정 헤더 |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer 기호화됨 phrasing in sentences |

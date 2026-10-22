@@ -122,6 +122,7 @@ pub static KIT: KitConfig = KitConfig {
             SettingsTab::USERS,
             SettingsTab::SECURITY,
             SettingsTab::TOKENS,
+            crate::alerts::channels::TAB,
         ],
         home_url: "https://hedgerow.tools/Keen-Kestrel/",
     },

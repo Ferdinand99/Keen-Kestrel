@@ -1,6 +1,10 @@
-//! REST API v1 (`/api/v1/**`): projects and their DSN keys, and the route
+//! REST API v1 (`/api/v1/**`): projects and their DSN keys, issues and
+//! events ([`issues`]), releases and their health ([`releases`]), alert
+//! rules and the alerts they sent ([`rules`]), debug files, and the route
 //! table ([`DOCS`]) the kit turns into `/api-docs`, the OpenAPI document,
-//! `/api-docs.md` and `/llms.txt`.
+//! `/api-docs.md` and `/llms.txt`. The table also documents the ingest
+//! endpoints the SDKs call (with a DSN key, not an API token) and
+//! sentry-cli's.
 //!
 //! Conventions are the kit's (`vole_kit::http::rest`): bearer tokens (read
 //! tokens act as viewers), `{"error": {"code", "message", "fields"}}`, lists
@@ -14,11 +18,11 @@ use axum::extract::{Extension, State};
 use axum::http::HeaderMap;
 use axum::middleware;
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use vole_kit::auth::CurrentUser;
-use vole_kit::docs::{DocsSpec, ErrorCode, RouteDoc, r};
+use vole_kit::docs::{BearerScheme, Credential, DocsSpec, ErrorCode, RouteDoc, r};
 use vole_kit::http::rest::{
     Body, Id, Params, V1Error, V1Result, created, json_ok, limit, no_content, paginate,
     parse_cursor,
@@ -29,6 +33,10 @@ use vole_kit::state::Core;
 use crate::db::projects::{self as db, KeyChanges, Project, ProjectKey};
 use crate::dsn;
 use crate::project::{self, Platform};
+
+pub mod issues;
+pub mod releases;
+pub mod rules;
 
 // ---------------------------------------------------------------------------
 // Reference
@@ -76,6 +84,86 @@ const DIF_UPLOAD_EXAMPLE: &str = r#"{
   "skipped": ["Sylo.app.dSYM/Contents/Info.plist"]
 }"#;
 
+const ISSUE_EXAMPLE: &str = r#"{
+  "id": 42,
+  "project_id": 1,
+  "title": "ValueError: invalid literal for int() with base 10: 'abc'",
+  "culprit": "shop.views in checkout",
+  "level": "error",
+  "platform": "python",
+  "status": "unresolved",
+  "substatus": "new",
+  "first_seen": "2026-10-22 08:00:00",
+  "last_seen": "2026-10-22 09:15:00",
+  "events": 17,
+  "users": 4,
+  "first_release": "shop@1.4.0",
+  "last_release": "shop@1.4.1",
+  "resolved_in_release": null,
+  "ignore_until": null,
+  "ignore_until_count": null,
+  "grouping_config": "kestrel:v2",
+  "unsymbolicated": false,
+  "path": "/projects/1/issues/42"
+}"#;
+
+const EVENT_EXAMPLE: &str = r#"{
+  "event_id": "9ec79c33ec9942ab8353589fcb2e04dc",
+  "issue_id": 42,
+  "project_id": 1,
+  "timestamp": "2026-10-22 09:15:00",
+  "received_at": "2026-10-22 09:15:01",
+  "level": "error",
+  "release": "shop@1.4.1",
+  "environment": "production",
+  "has_details": true,
+  "path": "/projects/1/issues/42/events/9ec79c33ec9942ab8353589fcb2e04dc",
+  "payload": {"event_id": "9ec79c33ec9942ab8353589fcb2e04dc", "exception": {"values": [ … ]}, "…": "…"}
+}"#;
+
+const RELEASE_EXAMPLE: &str = r#"{
+  "id": 7,
+  "project_id": 1,
+  "version": "shop@1.4.1",
+  "first_seen": "2026-10-20 12:00:00",
+  "last_seen": "2026-10-22 09:15:00",
+  "date_released": "2026-10-20 11:58:00",
+  "first_crash_at": null,
+  "events": 120,
+  "new_issues": 2,
+  "health": {"sessions": 5400, "errored": 61, "crashed": 4, "abnormal": 1, "users": 812, "crashed_users": 3,
+             "crash_free_sessions": 99.93, "crash_free_users": 99.63},
+  "adoption_7d": 64.5,
+  "path": "/projects/1/releases/7"
+}"#;
+
+const HEALTH_EXAMPLE: &str = r#"{
+  "release": {"id": 7, "version": "shop@1.4.1"},
+  "from": "2026-10-16",
+  "to": "2026-10-22",
+  "environments": ["production"],
+  "totals": {"sessions": 5400, "errored": 61, "crashed": 4, "abnormal": 1, "users": 812, "crashed_users": 3,
+             "crash_free_sessions": 99.93, "crash_free_users": 99.63},
+  "days": [{"day": "2026-10-16", "sessions": 0, "errored": 0, "crashed": 0, "abnormal": 0, "users": 0,
+            "crashed_users": 0, "crash_free_sessions": null, "crash_free_users": null}, "…"]
+}"#;
+
+const RULE_EXAMPLE: &str = r#"{
+  "id": 3,
+  "project_id": 1,
+  "name": "Spikes in production",
+  "kind": "spike",
+  "enabled": true,
+  "environment": "",
+  "threshold": 100,
+  "multiplier": 5.0,
+  "cooldown_minutes": 60,
+  "digest_minutes": null,
+  "channel_ids": [2],
+  "created_at": "2026-10-22 08:00:00",
+  "updated_at": "2026-10-22 08:00:00"
+}"#;
+
 const ERROR_EXAMPLE: &str = r#"{
   "error": {
     "code": "validation_failed",
@@ -117,18 +205,101 @@ pub static ROUTES: &[RouteDoc] = &[
         .q(&[LIMIT_Q, CURSOR_Q])
         .res(r#"{"data": [ …debug file… ], "next_cursor": null}"#),
     r("DELETE", "/api/v1/projects/{id}/debug-files/{dif_id}", "editor", "Debug files", "Delete a debug file and its SymCache. Events that arrive later for its build stay unsymbolicated."),
+    // -- Issues --
+    r("GET", "/api/v1/projects/{id}/issues", "viewer", "Issues", "Search a project's issues with the issue list's syntax, newest activity first. `query` takes terms like `is:unresolved level:error release:1.4 env:production os:iOS checkout` (an `is:` in it wins over `status`); terms it can't read are listed in `unknown_terms`.")
+        .q(&["query: search terms (also `q`)", "status: unresolved (default), resolved, ignored or all", "sort: last_seen (default), first_seen, events or users", LIMIT_Q, CURSOR_Q])
+        .res(r#"{"data": [ …issue… ], "next_cursor": "50", "total": 132, "unknown_terms": []}"#),
+    r("GET", "/api/v1/projects/{id}/issues/{issue_id}", "viewer", "Issues", "Get one issue, with its grouping hashes and what went into them (`grouping`).").res(ISSUE_EXAMPLE),
+    r("PATCH", "/api/v1/projects/{id}/issues/{issue_id}", "editor", "Issues", "Change an issue's status: `resolved` (with `in_next_release: true`, events from releases first seen after the project's newest one regress it), `unresolved`, or `ignored` (forever, or with `ignore_events` 1–1,000,000 more events or `ignore_hours` 1–8760). Noted in the issue's activity under the token owner's name.")
+        .req(r#"{"status": "ignored", "ignore_hours": 24}"#)
+        .res(ISSUE_EXAMPLE),
+    r("POST", "/api/v1/projects/{id}/issues/merge", "editor", "Issues", "Merge 2–500 issues into the one with the most events: hashes, events, tag values, users and hourly counts move over; the others are deleted. Answers the issue that is left.")
+        .req(r#"{"ids": [42, 57]}"#)
+        .res(ISSUE_EXAMPLE),
+    r("DELETE", "/api/v1/projects/{id}/issues/{issue_id}", "editor", "Issues", "Delete an issue with its events and their details. New events like it start a new issue."),
+    r("GET", "/api/v1/projects/{id}/issues/{issue_id}/events", "viewer", "Issues", "An issue's stored events, newest first (without their payloads).")
+        .q(&[LIMIT_Q, CURSOR_Q])
+        .res(r#"{"data": [ …event… ], "next_cursor": null, "total": 17}"#),
+    r("GET", "/api/v1/projects/{id}/issues/{issue_id}/events/latest", "viewer", "Issues", "The issue's newest event that still has its details, with the normalised payload as stored (already scrubbed at ingest).").res(EVENT_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/events/{event_id}", "viewer", "Issues", "One event by its id (32 hex characters, dashes allowed), with its issue and payload.").res(EVENT_EXAMPLE),
+    // -- Releases --
+    r("GET", "/api/v1/projects/{id}/releases", "viewer", "Releases", "A project's releases, newest first, each with its events, new issues, all-time health (sessions, crash-free sessions and users) and its share of the last 7 days' sessions (`adoption_7d`).")
+        .q(&[LIMIT_Q, CURSOR_Q])
+        .res(r#"{"data": [ …release… ], "next_cursor": null, "total": 12}"#),
+    r("GET", "/api/v1/projects/{id}/releases/{release_id}", "viewer", "Releases", "Get one release.").res(RELEASE_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/releases/{release_id}/health", "viewer", "Releases", "A release's health per UTC day and in total: sessions, errored (crashed and abnormal included), crashed, abnormal, distinct users and crashed users, crash-free sessions and users in percent (`null` without sessions).")
+        .q(&["days: days up to today (1–400, default 30)", "environment: one environment only"])
+        .res(HEALTH_EXAMPLE),
+    // -- Alerts --
+    r("GET", "/api/v1/projects/{id}/alert-rules", "viewer", "Alerts", "A project's alert rules, oldest first.")
+        .q(&[LIMIT_Q, CURSOR_Q])
+        .res(r#"{"data": [ …alert rule… ], "next_cursor": null}"#),
+    r("POST", "/api/v1/projects/{id}/alert-rules", "editor", "Alerts", "Create an alert rule. `kind`: new_issue, regression, spike (more than `threshold` events in an hour and more than `multiplier` times the hourly average of the 7 days before) or first_crash (the first crash of a release). `environment` limits new_issue, regression and first_crash to one environment. An issue alerts a rule at most once per `cooldown_minutes` (0–525600, default 60); with `digest_minutes` (1–1440) its channels get one message for everything in that many minutes. `channel_ids`: at least one notification channel.")
+        .req(r#"{"name": "Spikes in production", "kind": "spike", "threshold": 100, "multiplier": 5, "channel_ids": [2]}"#)
+        .res(RULE_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/alert-rules/{rule_id}", "viewer", "Alerts", "Get one alert rule.").res(RULE_EXAMPLE),
+    r("PATCH", "/api/v1/projects/{id}/alert-rules/{rule_id}", "editor", "Alerts", "Change an alert rule; fields you leave out stay (`digest_minutes: null` turns the digest off).")
+        .req(r#"{"enabled": false}"#)
+        .res(RULE_EXAMPLE),
+    r("DELETE", "/api/v1/projects/{id}/alert-rules/{rule_id}", "editor", "Alerts", "Delete an alert rule. Alerts it queued and didn't send yet are skipped."),
+    r("GET", "/api/v1/projects/{id}/alerts", "viewer", "Alerts", "What the project's rules sent, newest first: one entry per alert and channel, with its result (`pending`, `digest`, `sent`, `failed`, `skipped`), attempts and error.")
+        .q(&[LIMIT_Q, CURSOR_Q])
+        .res(r#"{"data": [{"id": 9, "rule_id": 3, "rule_name": "New issues", "channel_id": 2, "channel_name": "Ops Slack", "issue_id": 42, "kind": "new_issue", "status": "sent", "attempts": 1, "error": null, "created_at": "2026-10-22 08:00:01", "sent_at": "2026-10-22 08:00:02", "summary": "New issue in Shop", "issue_title": "ValueError: bad input"}], "next_cursor": null, "total": 1}"#),
+    r("GET", "/api/v1/notification-channels", "editor", "Alerts", "The notification channels rules can send to: id, name, kind, active and language. Their settings (with secrets) are only on the Notifications page.")
+        .q(&[LIMIT_Q, CURSOR_Q])
+        .res(r#"{"data": [{"id": 2, "name": "Ops Slack", "kind": "slack", "active": true, "language": "", "created_at": "2026-10-22 08:00:00"}], "next_cursor": null}"#),
+    // -- Ingest --
+    r("POST", "/api/{project_id}/envelope/", "dsn key", "Ingest", "Where the Sentry SDKs send events, sessions, user feedback and attachments: a Sentry envelope (newline-delimited JSON), optionally gzip, deflate, br or zstd encoded (20 MB at most, 1 MB per event, 10 MB per attachment). Authenticated with the project's DSN key in `X-Sentry-Auth: Sentry sentry_key=<public key>, sentry_version=7`, `?sentry_key=` or the envelope header's `dsn`; API tokens don't work here. Answers `{\"id\": \"<event id>\"}` at once; 429 with `Retry-After` and `X-Sentry-Rate-Limits` when a limit or the queue is full. Point an SDK at it with the DSN from the project's settings.")
+        .req("{\"event_id\":\"9ec79c33ec9942ab8353589fcb2e04dc\",\"dsn\":\"https://<public key>@kestrel.example.com/1\"}\n{\"type\":\"event\"}\n{\"message\":\"Hello\",\"level\":\"warning\"}")
+        .res(r#"{"id": "9ec79c33ec9942ab8353589fcb2e04dc"}"#),
+    r("POST", "/api/{project_id}/store/", "dsn key", "Ingest", "The older endpoint for one event as JSON (old SDKs), with the same authentication and limits as the envelope endpoint.")
+        .req(r#"{"message": "Hello", "level": "warning"}"#)
+        .res(r#"{"id": "9ec79c33ec9942ab8353589fcb2e04dc"}"#),
+    // -- sentry-cli --
+    r("GET", "/api/0/", "api token", "sentry-cli", "What sentry-cli's `info` and upload commands ask first: the token's user and scopes (`project:releases` when it may upload debug files and manage releases).")
+        .res(r#"{"version": "0", "auth": {"scopes": ["org:read", "project:read", "project:write", "project:releases"]}, "user": {"id": "1", "name": "Ada", "username": "ada", "email": "ada"}}"#),
+    r("POST", "/api/0/organizations/{org}/releases/", "api token", "sentry-cli", "`sentry-cli releases new`: creates the release in each project of `projects` (slugs or ids; any organization slug works). Needs a token that may upload debug files.")
+        .req(r#"{"version": "shop@1.4.1", "projects": ["shop"]}"#)
+        .res(r#"{"version": "shop@1.4.1", "dateCreated": "2026-10-22T08:00:00Z", "dateReleased": null, "newGroups": 0, "projects": [{"id": 1, "slug": "shop", "name": "Shop"}], "…": "…"}"#),
+    r("PUT", "/api/0/organizations/{org}/releases/{version}/", "api token", "sentry-cli", "`sentry-cli releases finalize` (sets `dateReleased`) and `set-commits` (commits and refs are accepted and not kept: Kestrel has no repository integration).")
+        .req(r#"{"projects": ["shop"], "dateReleased": "2026-10-22T08:05:00Z"}"#),
+    r("GET", "/api/0/organizations/{org}/releases/{version}/", "api token", "sentry-cli", "`sentry-cli releases info`: the release across the projects that have it."),
     // -- System --
     r("GET", "/api/v1/openapi.json", "viewer", "System", "This reference as an OpenAPI 3.1 document."),
-    r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants, with the tool list_projects. Bearer API token; GET answers 405.")
-        .req(r#"{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_projects", "arguments": {}}}"#),
+    r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants. Tools: list_projects, list_issues, get_issue, release_health; with a read-and-write token of an editor also resolve_issue and ignore_issue. Bearer API token; GET answers 405.")
+        .req(r#"{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_issues", "arguments": {"project": "shop", "query": "is:unresolved level:error"}}}"#),
     r("GET", "/healthz", "public", "System", "Liveness probe: always \"ok\"."),
+];
+
+/// Machine credentials besides API tokens and sessions.
+const CREDENTIALS: &[Credential] = &[
+    Credential {
+        access: "dsn key",
+        words: "a project's DSN key (`X-Sentry-Auth: Sentry sentry_key=<public key>`, `?sentry_key=` or the envelope's `dsn` header), not an API token",
+        bearer: None,
+    },
+    Credential {
+        access: "api token",
+        words: "any API token (`Authorization: Bearer kk_…`); a session doesn't work",
+        bearer: Some(BearerScheme {
+            name: "apiToken",
+            description: "API token (kk_…), sessions not accepted",
+            variable: "TOKEN",
+        }),
+    },
 ];
 
 fn curl_path_param(_route: &RouteDoc, segment: &str) -> Option<String> {
     match segment {
-        "{id}" => Some("1".into()),
+        "{id}" | "{project_id}" => Some("1".into()),
         "{key_id}" => Some("3".into()),
         "{dif_id}" => Some("4".into()),
+        "{issue_id}" => Some("42".into()),
+        "{event_id}" => Some("9ec79c33ec9942ab8353589fcb2e04dc".into()),
+        "{release_id}" => Some("7".into()),
+        "{rule_id}" => Some("3".into()),
+        "{org}" => Some("any".into()),
+        "{version}" => Some("shop@1.4.1".into()),
         _ => None,
     }
 }
@@ -139,7 +310,8 @@ fn markdown_intro(out: &mut String, base: &str) {
         out,
         "# Keen Kestrel API\n\n\
          > REST API of a Keen Kestrel instance (version {version}), generated from the server's own route table. \
-         Keen Kestrel is a self-hosted, Sentry-compatible error tracker; this version manages projects and their DSN keys.\n\n\
+         Keen Kestrel is a self-hosted, Sentry-compatible error tracker: projects and their DSN keys, issues and events, \
+         releases and their health, alert rules and debug files. The official Sentry SDKs send to it (see Ingest).\n\n\
          - Instance: {base}\n\
          - API base URL: {base}/api/v1\n\
          - Browsable reference: {base}/api-docs (sign in) · OpenAPI 3.1: {base}/api/v1/openapi.json\n\
@@ -155,13 +327,13 @@ fn markdown_intro(out: &mut String, base: &str) {
          are shown once and can expire (30, 90, 365 days or never).\n\
          - Send it on every request: `Authorization: Bearer $KK_TOKEN`.\n\
          - Scope `read` acts as a **viewer** (every GET); scope `write` acts as the token's owner with their role.\n\
-         - Roles: **viewer** reads everything; **editor** and **admin** also create, change and delete projects and keys.\n\
+         - Roles: **viewer** reads everything; **editor** and **admin** also create, change and delete projects, keys, issues and alert rules.\n\
          - API tokens work only under `/api/` and for `/mcp`; they can't open the web interface.\n\
          - A project's DSN (`https://<public key>@<host>/<project id>`) is not an API token: it can only send events.\n\n\
          ## Conventions\n\n\
          - JSON in and out; send bodies with `Content-Type: application/json`.\n\
          - Lists return `{{\"data\": [...], \"next_cursor\": \"42\" | null}}`. Pass `?limit=` (1–500, default 50) and \
-         `?cursor=<next_cursor>` for the next page; stop when `next_cursor` is `null`.\n\
+         `?cursor=<next_cursor>` for the next page; stop when `next_cursor` is `null`. Treat the cursor as opaque.\n\
          - GETs send a weak `ETag` and answer `If-None-Match` with `304 Not Modified`.\n\
          - Times are UTC strings `YYYY-MM-DD HH:MM:SS`.\n\
          - `POST` that creates returns `201 Created` with a `Location` header; `DELETE` returns `204 No Content`.\n\
@@ -188,7 +360,24 @@ fn markdown_middle(out: &mut String) {
          and the older `POST /api/0/projects/{org}/{project}/files/dsyms/`; any organization slug is accepted.\n\
          - Uploading needs a token made on the project's Debug files page (grant `difs:write`; it only reads otherwise) or a \
          read-and-write token, and the token's owner must be an editor or admin.\n\
-         - A debug file applies to events that arrive after it; stored events are not symbolicated again.\n\n",
+         - A debug file applies to events that arrive after it; stored events are not symbolicated again.\n\n\
+         ## Issues, events and releases\n\n\
+         - An issue is a group of events that share a grouping hash (configuration `kestrel:v2`; issues made by `kestrel:v1` keep it). \
+         `status` is `unresolved`, `resolved` or `ignored`; `substatus` `new`, `regressed` or `ongoing`. \
+         `events` and `users` count every event, stored or not; at most 1000 events per issue and day keep their details.\n\
+         - The search syntax: `is:unresolved|resolved|ignored|all|new|regressed|ongoing|unsymbolicated`, `level:`, `release:` \
+         (as sent, or only the version; `*` is a wildcard), `env:`, `os:`, `browser:`, `device:`, `runtime:`, any other `key:value` tag, \
+         `!` to negate, double quotes for values with spaces; other words search titles and culprits; an event id finds its issue.\n\
+         - Event payloads are the normalised events as stored: IP addresses are never kept, secrets and card numbers are `[Filtered]`, \
+         user ids, emails and names are keyed hashes unless the project keeps them.\n\
+         - Releases are created on first sight (an event or a session names one) or by `sentry-cli releases new`. Health comes from the \
+         SDKs' sessions, rolled up per release, environment and day: crash-free sessions are `1 − crashed / sessions`, crash-free users \
+         `1 − crashed users / users` (users are distinct device ids per day, so over several days they add up).\n\n\
+         ## Alerts\n\n\
+         - Alert rules belong to a project and send to the instance's notification channels (Settings → Notifications: Slack, Discord, \
+         Teams, Telegram, ntfy, email, webhooks, PagerDuty and about 30 more).\n\
+         - Rules are evaluated after events are written and messages are sent by a task of their own, retried after 1, 5 and 15 minutes; \
+         `GET …/alerts` shows each result. Messages link to the issue when the instance's public URL (`KK_PUBLIC_URL`) is set.\n\n",
     );
 }
 
@@ -200,8 +389,9 @@ pub static DOCS: DocsSpec = DocsSpec {
     openapi_title: "Keen Kestrel API",
     openapi_description: "REST API for Keen Kestrel. Authenticate with `Authorization: Bearer kk_…` (create tokens under Settings → API tokens). Read-only tokens act as viewers. Errors use `{\"error\": {\"code\", \"message\", \"fields\"}}`; lists use `?limit=&cursor=` and return `next_cursor`.",
     bearer_description: "API token (kk_…)",
-    // Only API tokens and sessions: DSN keys can't call the API.
-    credentials: &[],
+    // DSN keys only ingest; sentry-cli's routes and MCP take API tokens
+    // without sessions.
+    credentials: CREDENTIALS,
     error_example: ERROR_EXAMPLE,
     error_codes: ERROR_CODES,
     config_document: None,
@@ -257,6 +447,39 @@ pub fn router() -> Router<Core> {
             "/projects/{id}/debug-files/{dif_id}",
             axum::routing::delete(crate::difs::upload::v1_delete),
         )
+        .route("/projects/{id}/issues", get(issues::list))
+        .route("/projects/{id}/issues/merge", post(issues::merge))
+        .route(
+            "/projects/{id}/issues/{issue_id}",
+            get(issues::show)
+                .patch(issues::update)
+                .delete(issues::delete),
+        )
+        .route(
+            "/projects/{id}/issues/{issue_id}/events",
+            get(issues::events),
+        )
+        .route(
+            "/projects/{id}/issues/{issue_id}/events/latest",
+            get(issues::latest_event),
+        )
+        .route("/projects/{id}/events/{event_id}", get(issues::event))
+        .route("/projects/{id}/releases", get(releases::list))
+        .route("/projects/{id}/releases/{release_id}", get(releases::show))
+        .route(
+            "/projects/{id}/releases/{release_id}/health",
+            get(releases::show_health),
+        )
+        .route(
+            "/projects/{id}/alert-rules",
+            get(rules::list).post(rules::create),
+        )
+        .route(
+            "/projects/{id}/alert-rules/{rule_id}",
+            get(rules::show).patch(rules::update).delete(rules::delete),
+        )
+        .route("/projects/{id}/alerts", get(rules::history))
+        .route("/notification-channels", get(rules::channels))
         .fallback(fallback)
         .route_layer(middleware::from_fn(
             vole_kit::http::rest::session_write_guard,

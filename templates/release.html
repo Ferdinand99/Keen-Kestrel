@@ -1,0 +1,116 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+<header class="page-head">
+  <a class="page-back" href="{{ back_href }}">{{ m::icon("chevron-left") }}{{ tr("releases.title") }}</a>
+  <div class="page-head-row">
+    <div class="page-head-text">
+      <h1 class="page-title break">{{ release.version }}</h1>
+      <p class="page-sub">{{ project.name }} · {{ tr("releases.first_seen") }} {{ m::time_ago(&release.first_seen) }} · {{ tr("releases.last_seen") }} {{ m::time_ago(&release.last_seen) }}{% if let Some(at) = release.date_released %} · {{ tr("releases.finalized") }} {{ m::time_ago(at) }}{% endif %}</p>
+    </div>
+    <div class="page-actions">{{ m::link_button(issues_href.as_str(), tr("release.all_issues"), "secondary", "", "sm") }}</div>
+  </div>
+</header>
+
+<div class="stats">
+  {{ m::stat(tr("releases.crash_free_sessions"), pct(stats.crash_free_sessions), stats.health_status, trn("release.sessions_meta", stats.sessions)) }}
+  {{ m::stat(tr("releases.crash_free_users"), pct(stats.crash_free_users), "", trn("release.users_meta", stats.users)) }}
+  {{ m::stat(tr("releases.adoption"), pct(stats.adoption), "", tr("release.adoption_meta")) }}
+  {{ m::stat(tr("releases.new_issues"), num(release.new_issues), "", trn("release.events_meta", release.events)) }}
+</div>
+
+<section class="card" aria-labelledby="health-title">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title" id="health-title">{{ tr("release.health_title") }}</h2>
+      <p class="card-sub">{{ tr("release.health_sub") }}</p>
+    </div>
+  </div>
+  {%- match sessions_chart %}
+  {%- when Some(c) %}
+  <h3 class="label">{{ tr("release.sessions_chart") }}</h3>
+  <div class="chart">
+    <svg viewBox="0 0 600 120" preserveAspectRatio="none" role="img" aria-label="{{ c.label }}">
+      <line class="chart-grid" x1="0" x2="600" y1="60" y2="60"></line>
+      <line class="chart-grid" x1="0" x2="600" y1="120" y2="120"></line>
+      <polygon class="chart-area" points="{{ c.area }}"></polygon>
+      <polyline class="chart-line" points="{{ c.line }}"></polyline>
+    </svg>
+    <div class="chart-scale" aria-hidden="true"><span><bdi>{{ c.max_label }}</bdi></span><span><bdi>{{ c.min_label }}</bdi></span></div>
+  </div>
+  <div class="chart-axis" aria-hidden="true"><span>{{ tr("release.days_ago") }}</span><span>{{ tr("common.today") }}</span></div>
+  {%- if let Some(cf) = crash_free_chart %}
+  <h3 class="label">{{ tr("releases.crash_free_sessions") }}</h3>
+  <div class="chart">
+    <svg viewBox="0 0 600 120" preserveAspectRatio="none" role="img" aria-label="{{ cf.label }}">
+      <line class="chart-grid" x1="0" x2="600" y1="60" y2="60"></line>
+      <line class="chart-grid" x1="0" x2="600" y1="120" y2="120"></line>
+      <polyline class="chart-line" points="{{ cf.line }}"></polyline>
+    </svg>
+    <div class="chart-scale" aria-hidden="true"><span><bdi>{{ cf.max_label }}</bdi></span><span><bdi>{{ cf.min_label }}</bdi></span></div>
+  </div>
+  <div class="chart-axis" aria-hidden="true"><span>{{ tr("release.days_ago") }}</span><span>{{ tr("common.today") }}</span></div>
+  {%- endif %}
+  <dl class="dl">
+    <div class="dl-row"><dt>{{ tr("release.sessions") }}</dt><dd class="num">{{ num(stats.sessions) }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("release.crashed") }}</dt><dd class="num">{{ num(stats.crashed) }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("release.errored") }}</dt><dd class="num">{{ num(stats.errored) }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("release.abnormal") }}</dt><dd class="num">{{ num(stats.abnormal) }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("release.users") }}</dt><dd class="num">{{ num(stats.users) }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("release.crashed_users") }}</dt><dd class="num">{{ num(stats.crashed_users) }}</dd></div>
+  </dl>
+  {%- when None %}
+  {{ m::empty_state("pulse", tr("release.no_sessions_title"), tr("release.no_sessions_text")) }}
+  {%- endmatch %}
+</section>
+
+<div class="grid-2">
+  <section class="section" aria-labelledby="new-title">
+    {% call m::section_head(tr("release.new_issues"), tr("release.new_issues_sub"), "new-title") %}{% endcall %}
+    {%- if new_issues.is_empty() %}
+    <div class="card card-flush">{{ m::empty_state("check-circle", tr("release.no_new_title"), tr("release.no_new_text")) }}</div>
+    {%- else %}
+    <ul class="list" role="list">
+      {%- for i in new_issues %}
+      {% include "partials/release_issue.html" %}
+      {%- endfor %}
+    </ul>
+    {%- endif %}
+  </section>
+
+  <section class="section" aria-labelledby="regressed-title">
+    {% call m::section_head(tr("release.regressions"), tr("release.regressions_sub"), "regressed-title") %}{% endcall %}
+    {%- if regressions.is_empty() %}
+    <div class="card card-flush">{{ m::empty_state("check-circle", tr("release.no_regressions_title"), tr("release.no_regressions_text")) }}</div>
+    {%- else %}
+    <ul class="list" role="list">
+      {%- for i in regressions %}
+      {% include "partials/release_issue.html" %}
+      {%- endfor %}
+    </ul>
+    {%- endif %}
+  </section>
+</div>
+
+<section class="section" aria-labelledby="difs-title">
+  {% call m::section_head(tr("release.debug_files"), tr("release.debug_files_sub"), "difs-title") %}
+    {{ m::link_button(difs_href.as_str(), tr("difs.tab"), "plain", "", "sm") }}
+  {% endcall %}
+  {%- if difs.is_empty() %}
+  <div class="card card-flush">{{ m::empty_state("archive", tr("release.no_difs_title"), tr("release.no_difs_text")) }}</div>
+  {%- else %}
+  <ul class="list" role="list">
+    {%- for d in difs %}
+    <li class="list-row">
+      <div class="list-main">
+        <span class="list-title break">{{ d.object_name }} <span class="badge">{{ d.arch }}</span></span>
+        <span class="list-sub mono break">{{ d.debug_id }}</span>
+      </div>
+      {%- if let Some(at) = d.last_used_at %}<span class="list-sub nowrap">{{ m::time_ago(at) }}</span>{% endif %}
+    </li>
+    {%- endfor %}
+  </ul>
+  {%- endif %}
+</section>
+{% endblock %}

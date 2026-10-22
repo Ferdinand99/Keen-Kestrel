@@ -6,8 +6,8 @@ title: Error: Invalid order 1234
 culprit: app in placeOrder
 level: error
 platform: node
-config: kestrel:v1
-hash: ec42a5d766f6b85780e8aaf05e368dfa
+config: kestrel:v2
+hash: 60b2f89613447d91c8da20d19ef47f5b
 unsymbolicated: false
 tags: level=error, environment=fixtures, release=fixture-node@1.0.0, server_name=fixture-host, os.name=Alpine Linux, os=Alpine Linux 3.24.3, runtime.name=node, runtime=node v22.23.4, handled=yes, mechanism=generic
 components:

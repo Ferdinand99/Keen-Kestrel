@@ -4,8 +4,9 @@ Keen Kestrel is one Rust crate (`keen-kestrel`, binary `kestrel`) on top of
 [vole-kit](https://github.com/Ferdinand99/Vigilant-Vole/blob/main/docs/vole-kit.md), the shared kit that lives in the
 Vigilant Vole repository. The kit brings sign-in, users, API tokens, Security, the API reference, i18n, the
 database plumbing and the design system; Kestrel adds its own pages, API, migrations and strings, the
-Sentry-compatible ingest ([below](#ingest)) and debug files with symbolication
-([below](#debug-files-and-symbolication)).
+Sentry-compatible ingest ([below](#ingest)), debug files with symbolication
+([below](#debug-files-and-symbolication)), alerts ([below](#alerts)), release health
+([below](#releases-and-release-health)) and the REST API and MCP tools ([below](#rest-api-and-mcp)).
 
 ## Layout
 
@@ -24,7 +25,7 @@ src/
                       # triage (the issue pages' reads, lifecycle actions, retention deletes)
   dsn.rs              # public address, DSNs, SDK snippets
   ingest/             # Sentry endpoints: keys, body decoding and limits, envelopes, rate limits, capture mode
-  event/              # normalisation and privacy (scrub.rs), grouping (kestrel:v1), title, culprit, tags
+  event/              # normalisation and privacy (scrub.rs, paths.rs), grouping (kestrel:v2), title, culprit, tags
   difs/               # debug files: on disk (files.rs), sentry-cli upload (upload.rs), symbolication
                       # (symbolicate.rs), the symbolication queue (worker.rs), the Debug files page (pages.rs)
   writer.rs           # the single batch writer
@@ -32,14 +33,19 @@ src/
   pages.rs            # project pages: list, overview, settings (keys, retention)
   issues/             # issue pages: list (search.rs: the search syntax), issue, event (view.rs: the
                       # payload as the pages show it), actions, the live list (live.rs, SSE)
-  retention.rs        # the daily retention job and the end of time-limited ignoring
-  api.rs              # REST API v1 and its route table (API reference)
+  alerts/             # rules, evaluation and delivery (mod.rs), message wording (message.rs), the Alerts tab
+                      # (pages.rs), Settings → Notifications (channels.rs)
+  releases/           # the releases pages (mod.rs), release-health rollup (health.rs), sentry-cli's release
+                      # commands (cli.rs)
+  retention.rs        # the daily retention job; every minute the end of time-limited ignoring and the rollup
+  api.rs, api/        # REST API v1 and its route table (API reference); issues and events, releases, alert rules
   mcp.rs              # MCP tools
 templates/            # Kestrel's pages (extend kit/layout.html)
 static/               # favicon, home-screen icons, web manifest
 migrations/           # Kestrel's migrations (after the kit's core set); store/ has store.sqlite's own
 locales/              # Kestrel's strings, 26 languages; glossaries in locales/glossary/
-tests/                # in-process app tests, translation coverage, ingest, grouping, issue pages
+tests/                # in-process app tests, translation coverage, ingest, grouping, issue pages, debug files,
+                      # alerts, releases, the API and MCP for errors
   fixtures/sentry/    # requests recorded from real SDKs, per SDK and version
   fixtures/dsym/      # the dSYM of the sentry-cocoa fixtures' app (symbolication tests)
   snapshots/          # grouping snapshots (insta)
@@ -95,8 +101,8 @@ What happens to a request (docs/design.md §4):
    check (`csrf_exempt_path` in `src/product.rs`) and answer CORS with `*` or the key's allowed origins.
 2. **Decoding**: gzip, deflate, br or zstd, at most 20 MB per envelope, 1 MB per event and 10 MB per attachment
    once decompressed (413 when larger, 400 when broken). Larger attachments are dropped, the event is kept.
-3. **Items**: `event` is normalised and grouped; `session`/`sessions`, `user_report`/`feedback` and the
-   attachments of stored events are kept for later phases; `transaction`, `span`, `profile`, `replay_*`,
+3. **Items**: `event` is normalised and grouped; `session`/`sessions` are kept for the release-health rollup
+   ([below](#releases-and-release-health)); `user_report`/`feedback` and the attachments of stored events are kept; `transaction`, `span`, `profile`, `replay_*`,
    `check_in`, `statsd`, `metrics`, `log`, `client_report`, minidumps and unknown types are accepted and dropped.
 4. **Normalisation and privacy** (`src/event/normalize.rs`, `scrub.rs`): defaults, at most 100 breadcrumbs, 250
    frames per stack and 8 KB per string, `in_app` from the SDK or per-platform rules. No IP address is ever kept
@@ -105,13 +111,23 @@ What happens to a request (docs/design.md §4):
    Luhn-valid card numbers become `[Filtered]`. `user.id` (on iOS the SDK's install id), `user.email` and
    `user.username` become keyed hashes unless the project's `keep_user_details` is on (no setting in the
    interface yet); the distinct-user counts hash the id either way. The user agent fills the browser and OS
-   contexts and is then dropped. Session device ids are hashed with a key that changes daily.
+   contexts and is then dropped. Session device ids are hashed with a key that changes daily. Paths from build
+   machines lose their home directory (`src/event/paths.rs`): `/Users/<name>/…`, `/home/<name>/…`,
+   `C:\Users\<name>\…` and CI workspaces (GitHub Actions, Xcode Cloud, Bitrise, CircleCI, GitLab, Jenkins …)
+   become a path relative to the project (or at least without the home directory), in frames (`abs_path`,
+   `filename`, `package`) and loaded images (`code_file`, `debug_file`), for what the SDKs send and what
+   symbolication takes from a dSYM alike. The file names stay, so grouping doesn't change.
 5. **Symbolication** ([below](#debug-files-and-symbolication)): an event with an image the project has a debug
    file for goes through the symbolication queue first; everything else goes straight on.
-6. **Grouping** (`src/event/grouping.rs`, configuration `kestrel:v1`): fingerprint (with `{{ default }}`),
+6. **Grouping** (`src/event/grouping.rs`, configuration `kestrel:v2`): fingerprint (with `{{ default }}`),
    exception chain with in-app frames, exception type plus normalised value, message template, crashed thread.
    Native frames without symbols count as image and offset, and the issue is marked unsymbolicated. The
-   components are stored in `issue_hashes`, so the issue page can explain them.
+   components are stored in `issue_hashes`, so the issue page can explain them. v2 is v1 plus one rule: the
+   Sentry SDKs' own frames (Cocoa `Sentry…`, `SentryCrash…`, `-[Sentry…]`, `Sentry.framework`; `@sentry/…`;
+   `sentry_sdk`; the Rust crates and sentry-native's `sentry_…`) are never in-app, so an app that links the SDK
+   statically isn't grouped by it. Each event is grouped by both: an event whose v2 hash is unknown joins the
+   issue its v1 hash points at, which keeps `kestrel:v1` and gets the v2 hash too (both show on the Grouping tab).
+   A crash (fatal, or an exception the SDK says nothing handled) notes its release's first crash.
 7. **The writer** (`src/writer.rs`): ingest puts the jobs on a bounded queue (2000 jobs; full means 429). One task
    writes them every 100 ms or 500 jobs in one IMMEDIATE transaction, on its own connection with `store.sqlite`
    attached: issues (new or updated, counts, first and last seen), releases and environments on first sight, tag
@@ -119,7 +135,8 @@ What happens to a request (docs/design.md §4):
    events per issue and hour (`issue_hours`), the search index. A resolved issue that gets an event becomes
    `regressed`, an ignored one whose condition is met `unresolved` again; both are noted in `issue_activity`. At
    most `payloads_per_day` (1000 unless the project says otherwise) payloads per issue and day are stored; the
-   counts go on.
+   counts go on. After each committed batch the writer hands the alerts what may set them off (new issues,
+   regressions, first crashes, issues with events) without waiting ([below](#alerts)).
 
 `kestrel.sqlite` holds the index; `store.sqlite` (own migrations in `migrations/store/`, incremental auto-vacuum,
 no backup before migrating) holds payloads, attachments, sessions and feedback, and can be deleted without
@@ -133,10 +150,12 @@ it has one) is written to that directory as
 files hold everything the SDK sent, keys and personal data included: use it on test instances only.
 
 `tests/fixtures/sentry/<sdk>/<version>/<name>.{json,body}` are such recordings. `tests/ingest.rs` sends each one
-and checks the answer, what is stored, and that no IP address, user agent, raw email address or secret ends up in
-either database. `tests/grouping.rs` snapshots the title, culprit, tags and grouping of every event into
+and checks the answer, what is stored, and that no IP address, user agent, raw email address, secret or user name
+in a build machine's path ends up in either database. `tests/grouping.rs` snapshots the title, culprit, tags and grouping of every event into
 `tests/snapshots/` (`cargo insta review`). A changed grouping snapshot means changed grouping, which needs a new
-grouping configuration rather than an accepted snapshot.
+grouping configuration rather than an accepted snapshot. The move to `kestrel:v2` changed every snapshot's
+configuration and hash (the configuration's name is part of the hash) and nothing else, because no fixture has a
+Sentry SDK frame marked in-app; the rule has its own tests in `src/event/grouping.rs`.
 
 | SDK | Version | Recorded with | Shapes |
 |---|---|---|---|
@@ -224,10 +243,11 @@ Everyone signed in reads them; editors and admins act.
 3. hourly counts older than 30 days go;
 
 then rows in `store.sqlite` of projects that no longer exist go, new issues first seen (and regressed ones last
-regressed) more than 7 days ago become `ongoing`, and `store.sqlite` gives up to 10,000 freed pages back
-(`incremental_vacuum`). Every minute the same task ends ignoring that ran out by time, so an issue ignored for
-an hour comes back without a new event. Session items are left for the release-health rollups (phase 7). Debug
-files follow their own rule ([below](#debug-files-and-symbolication)).
+regressed) more than 7 days ago become `ongoing`, release-health rollups older than 400 days go, so does the
+alert history older than 90 days, and `store.sqlite` gives up to 10,000 freed pages back (`incremental_vacuum`).
+Every minute the same task ends ignoring that ran out by time, so an issue ignored for an hour comes back without
+a new event, and rolls the session items up into release health (which deletes them). Debug files follow their
+own rule ([below](#debug-files-and-symbolication)).
 
 ## Debug files and symbolication
 
@@ -336,6 +356,99 @@ docker run --rm -v <dir with the dSYM>:/work -e SENTRY_AUTH_TOKEN=kk_… getsent
 ```
 
 then send the sentry-cocoa fixtures with the project's key and open the issues.
+
+## Alerts
+
+docs/design.md §4.7. `src/alerts/`, tables in `migrations/0005_alerts_releases.sql`.
+
+**Channels** (Settings → Notifications, `/settings/notifications`, editors and admins) are the instance's, with
+vole-kit's ~40 providers: the provider picker, the provider's form rendered from its schema, secrets never shown
+again (an empty secret keeps the stored one; changing a destination asks for its secrets again), "Send test",
+pause and delete. Each channel has a message language ("" means the instance's); new channels start in the
+language of the person adding them. The page follows Vigilant Vole's, whose form view-model and templates the
+kit doesn't share yet, so `src/alerts/channels.rs` and `templates/partials/notification_*.html` carry a port.
+
+**Rules** (a project's Alerts tab, `/projects/{id}/alerts`; editors change them, everyone reads them):
+
+| Kind | Fires when |
+|---|---|
+| `new_issue` | an issue is made |
+| `regression` | a resolved issue gets an event (and becomes regressed) |
+| `spike` | the issue's events in the last hour are more than `max(threshold, multiplier × the hourly average of the 168 hours before)`; the last hour is this hour's events plus the share of the previous hour the 60 minutes still cover (`issue_hours`); checked at most once a minute per issue, unresolved issues only |
+| `first_crash` | a release gets its first crash: a `fatal` event, or an exception with `mechanism.handled: false` (`releases.first_crash_at`, once per release) |
+
+`environment` limits the other kinds to one environment. An issue sets a rule off at most once per
+`cooldown_minutes` (default 60, `alert_cooldowns`). With `digest_minutes`, a channel gets one message with
+everything its digest rules raised in that many minutes.
+
+**Delivery never waits for anyone.** The writer hands its triggers over a bounded queue it never waits for (a full
+queue drops the batch with a warning). A task evaluates the rules on the read pool and writes one `alert_log` entry
+per channel (`pending`, or `digest` with the channel's `due_at`); a paused channel gets none. Another task, woken
+by new entries and every 15 seconds, sends what is due, at most eight at a time, through `vole_kit::notify::send`,
+retries after 1, 5 and 15 minutes (then `failed`), and notes every result, which the Alerts tab and
+`GET /api/v1/projects/{id}/alerts` show. The queue is in SQLite, so a restart loses nothing.
+
+**Messages** (`src/alerts/message.rs`) are built when they are sent, in the channel's language, as vole-kit
+`Alert`s: "New issue in Shop — ValueError: bad input", "Issue regressed in Shop", "Spike in Shop: 512 events in
+the last hour", "First crash in shop@1.4.1 (Shop)", "3 alerts from Keen Kestrel" (a digest), with the project,
+level, release, environment, culprit, events and users as facts. Kind and level follow the issue: a new issue,
+regression or first crash is a `Problem`, a spike an `Escalation`; fatal and error are `Critical`, warning
+`Warning`, the rest `Info` (first crashes are always `Critical`). The link is the issue on `KK_PUBLIC_URL`; without
+it the message says to set it.
+
+To try it on a test instance, run a receiver nobody else uses, for example
+`docker run --rm -p 8099:8080 mendhak/http-https-echo` on a test machine, add a Webhook channel pointing at it, a
+"New issue" rule on a project, and send an event with `curl` ([above](#ingest)).
+
+## Releases and release health
+
+docs/design.md §4.9. A release is made on first sight (an event or a session names it) or by
+`sentry-cli releases new`; `releases.events` counts every event of it.
+
+**The rollup** (`src/releases/health.rs`, every minute on the writer's connection) reads `store.sqlite`'s
+`session_items`, adds them to `release_health` (per project, release, environment and UTC day) and deletes them.
+A session counts on the day it started, clamped to the day it arrived or the one before. `session` updates:
+`init: true` counts a session; `errors > 0` or an `errored`, `crashed` or `abnormal` status counts it as errored,
+and `crashed`/`abnormal` as such, each session once by its id; the `did` (already hashed with the day's key at
+ingest) counts distinct users and crashed users. `sessions` aggregates (server SDKs) add their counts as they are.
+The hashes counted on a day are kept in `release_health_seen` until the day can't get sessions any more (two days),
+then deleted. Crash-free sessions are `1 − crashed / sessions`, crash-free users `1 − crashed users / users`; over
+several days the daily user counts add up. Rollups are kept 400 days.
+
+**Pages**: the Releases tab (`/projects/{id}/releases`: version, crash-free sessions and users, adoption as the
+share of the last 7 days' sessions, new issues, events, first and last seen) and a release's page (crash-free
+rates, sessions, crashes, errors and users, charts of sessions and crash-free sessions per day over 30 days, the
+issues first seen in the release, the issues it brought back, and the debug files its crashes were symbolicated
+with). The issue and event pages link their releases (`/projects/{id}/releases/find?version=…`).
+
+**sentry-cli** (`src/releases/cli.rs`): `releases new`, `finalize`, `info`, `list`, `set-commits` and
+`deploys new` get answers in Sentry's shape (`/api/0/organizations/{org}/releases/…`,
+`/api/0/projects/{org}/{project}/releases/…`, `/api/0/organizations/{org}/repos/` is empty). Releases are made in
+the named projects and `finalize` notes `dateReleased`; commits, refs and deploys are accepted and not kept.
+Reading takes any API token; changing takes one that may upload debug files.
+
+## REST API and MCP
+
+The REST API v1 (`src/api.rs`, `src/api/`; reference at `/api-docs`, `/api-docs.md`, `/llms.txt` and
+`/api/v1/openapi.json`, all from the same route table) has, besides projects, keys and debug files:
+
+- issues: `GET …/issues?query=` with the issue list's search syntax (`status`, `sort`, opaque `cursor`), one issue
+  with its grouping, `PATCH` its status (`resolved`, `in_next_release`, `unresolved`, `ignored` with
+  `ignore_events` or `ignore_hours`), `POST …/issues/merge`, `DELETE`;
+- events: an issue's events, its latest event with the payload, an event by its id;
+- releases with their all-time health and 7-day adoption, a release's health per day (`?days=&environment=`);
+- alert rules (list, create, change, delete, with validation per field), the alerts sent, and the notification
+  channels by name and kind (never their settings, editors only);
+- the ingest endpoints (group "Ingest", access "a project's DSN key") and sentry-cli's (group "sentry-cli",
+  "any API token").
+
+Read tokens act as viewers; changing needs a read-and-write token of an editor or admin, and is noted in the
+issue's activity under the token owner's name.
+
+The MCP server (`/mcp`) has `list_projects`, `list_issues` (the search syntax), `get_issue` (the issue and its
+latest event as text for a model: the exception chain, in-app frames innermost first with `file:line` and the
+line of code, folded runs of other frames, the last ten breadcrumbs, the request line and tags; never the user
+section), `release_health`, and for a read-and-write token of an editor `resolve_issue` and `ignore_issue`.
 
 ## Working on vole-kit at the same time
 

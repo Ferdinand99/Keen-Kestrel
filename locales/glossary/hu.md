@@ -60,3 +60,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | analytics | analitika | VV: „Analitika” |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; suffixes with a hyphen only if unavoidable („DSN-t”), better rephrase |
 | symbolication | symbolication | unchanged noun; prefer „szimbolizált” phrasing in sentences |
+| notification channel / channel | értesítési csatorna / csatorna | VV: „értesítési csatorna”; short „Csatorna” in tables and buttons |
+| digest | összesítő | „Küldés összesítőként”; status pill „Összesítőben” |
+| cooldown (at most every … per issue) | „problémánként legfeljebb … időnként” | label „Problémánként legfeljebb ennyi időnként”, then the duration |
+| threshold / alert above | küszöb / riasztási küszöb | form label „Több mint … esemény óránként” |
+| multiplier (× the usual) | a szokásosnál …× több | „…-szoros” would need a suffix on the number; avoid |
+| adoption | elterjedtség | the release's share of sessions in the last 7 days |
+| errored (session) | hibával, összeomlás nélkül | |
+| abnormal (session) | rendellenesen ért véget | |
+| finalized (release) | véglegesítve | lowercase status after a date |
+| culprit (alert message field) | hibaforrás | as in the issue search help |
+| attempt (delivery) | próbálkozás | „{n} próbálkozás” (delivery attempts) |
+| header (webhook) | fejléc | VV kit: „Egyéni fejlécek” |

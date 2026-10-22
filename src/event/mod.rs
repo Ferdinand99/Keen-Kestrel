@@ -3,6 +3,7 @@
 
 pub mod grouping;
 pub mod normalize;
+pub mod paths;
 pub mod scrub;
 
 use serde_json::{Map, Value};
@@ -83,13 +84,21 @@ pub fn parse(
 /// writer's record of it (the second half of [`prepare`]).
 pub fn finish(p: Prepared) -> EventRecord {
     let Prepared {
-        event,
+        mut event,
         event_id,
         project_id,
         received,
         user_hash,
     } = p;
+    // Paths from build machines (the SDK's and symbolication's) lose their
+    // home directories; file names stay, so grouping doesn't change.
+    paths::reduce_event(&mut event);
+    // The issues of the previous configuration keep their events (the
+    // writer looks this hash up when the current one is unknown).
+    let legacy = grouping::group_with(&event, grouping::LEGACY_CONFIG);
+    grouping::mark_sdk_frames(&mut event);
     let grouping = grouping::group(&event);
+    let crash = is_crash(&event);
     let title = title(&event);
     let culprit = culprit(&event);
     let tags = tags(&event);
@@ -113,11 +122,25 @@ pub fn finish(p: Prepared) -> EventRecord {
         user_hash,
         tags,
         grouping_config: grouping.config,
+        legacy_hash: (legacy.hash != grouping.hash).then_some(legacy.hash),
         hash: grouping.hash,
         components: grouping.components.to_string(),
         unsymbolicated: grouping.unsymbolicated,
+        crash,
         payload,
     }
+}
+
+/// A crash: a fatal event, or an exception its SDK says nothing handled.
+pub fn is_crash(event: &Map<String, Value>) -> bool {
+    if text(event, "level") == "fatal" {
+        return true;
+    }
+    main_exception(event)
+        .and_then(|e| e.get("mechanism"))
+        .and_then(|m| m.get("handled"))
+        .and_then(Value::as_bool)
+        == Some(false)
 }
 
 fn cut(s: &str, max: usize) -> String {

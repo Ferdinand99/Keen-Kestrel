@@ -1,8 +1,16 @@
 //! Grouping snapshots: every event in every recorded SDK fixture, with the
 //! title, culprit, tags and the grouping components and hash it gets
-//! (`kestrel:v1`). A changed snapshot means changed grouping: that needs a
+//! (`kestrel:v2`). A changed snapshot means changed grouping: that needs a
 //! new grouping configuration, not an updated snapshot (docs/design.md §4.4).
 //! Review with `cargo insta review`.
+//!
+//! Moving from `kestrel:v1` to `kestrel:v2` (SDK frames never in-app)
+//! changed every snapshot's `config` and `hash` (the configuration's name
+//! is part of the hash) and nothing else: no fixture has an SDK frame marked
+//! in-app (the sentry-cocoa crashes are unsymbolicated here, the Rust SDK's
+//! frames were already left out by v1's Rust rules, and the JavaScript and
+//! Python SDK frames are in `node_modules` and `site-packages`). The rule
+//! itself is tested in `src/event/grouping.rs`.
 
 mod common;
 

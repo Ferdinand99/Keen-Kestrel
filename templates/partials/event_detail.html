@@ -7,7 +7,7 @@
     <div class="dl-row"><dt>{{ tr("event.received") }}</dt><dd>{{ m::time_ago(&ev.received_at) }}</dd></div>
     <div class="dl-row"><dt>{{ tr("issues.level") }}</dt><dd><span class="pill status-{{ ev.level_status }}"><span class="dot"></span>{{ ev.level_label }}</span></dd></div>
     {%- if !ev.release.is_empty() %}
-    <div class="dl-row"><dt>{{ tr("issues.release") }}</dt><dd class="break">{{ ev.release }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("issues.release") }}</dt><dd class="break"><a href="{{ ev.release_href }}">{{ ev.release }}</a></dd></div>
     {%- endif %}
     {%- if !ev.environment.is_empty() %}
     <div class="dl-row"><dt>{{ tr("issues.environment") }}</dt><dd>{{ ev.environment }}</dd></div>
