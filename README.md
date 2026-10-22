@@ -12,10 +12,11 @@
   <a href="https://hedgerow.tools/Keen-Kestrel/"><img src="https://img.shields.io/badge/website-hedgerow.tools%2FKeen--Kestrel-black.svg" alt="Website"></a>
 </p>
 
-> **Status: early development.** The skeleton runs: setup and sign-in with two-factor authentication,
-> users, API tokens, projects and their DSN keys (web pages, REST API and one MCP tool), in 26 languages.
-> It can't receive events yet; ingest is the next phase. The design is in [`docs/design.md`](docs/design.md);
-> to build and run it, see [`docs/development.md`](docs/development.md).
+> **Status: early development.** Setup and sign-in with two-factor authentication, users, API tokens,
+> projects and their DSN keys (web pages, REST API and one MCP tool) run in 26 languages. Ingest works: the
+> official Sentry SDKs can send events, which are scrubbed of personal data, grouped into issues and stored.
+> The pages that show issues and events come next. The design is in [`docs/design.md`](docs/design.md); to
+> build and run it, see [`docs/development.md`](docs/development.md).
 
 Keen Kestrel answers two questions about the apps and sites you run:
 
