@@ -124,7 +124,7 @@ pub static KIT: KitConfig = KitConfig {
             SettingsTab::SECURITY,
             SettingsTab::TOKENS,
         ],
-        home_url: "https://ferdinand99.github.io/Keen-Kestrel/",
+        home_url: "https://hedgerow.tools/Keen-Kestrel/",
     },
 };
 

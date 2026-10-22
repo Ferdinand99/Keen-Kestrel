@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ferdinand99.github.io/Keen-Kestrel/sitemap.xml
+Sitemap: https://hedgerow.tools/Keen-Kestrel/sitemap.xml

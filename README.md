@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://ferdinand99.github.io/Keen-Kestrel/"><img src="https://img.shields.io/badge/website-ferdinand99.github.io%2FKeen--Kestrel-black.svg" alt="Website"></a>
+  <a href="https://hedgerow.tools/Keen-Kestrel/"><img src="https://img.shields.io/badge/website-hedgerow.tools%2FKeen--Kestrel-black.svg" alt="Website"></a>
 </p>
 
 > **Status: early development.** The skeleton runs: setup and sign-in with two-factor authentication,
