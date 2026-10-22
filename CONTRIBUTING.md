@@ -4,9 +4,10 @@ Thanks for your interest in Keen Kestrel.
 
 ## Status
 
-Kestrel is **in design**: there is no code to build or run yet. The design is in
-[`docs/design.md`](docs/design.md); it is the reference for everything that gets built, and it changes when a
-decision changes. Questions and comments on the design are welcome as issues.
+Kestrel is **in early development**: the skeleton (sign-in, users, tokens, projects and keys) runs, ingest
+doesn't exist yet. The design is in [`docs/design.md`](docs/design.md); it is the reference for everything that
+gets built, and it changes when a decision changes. Questions and comments on the design are welcome as issues.
+How to build, run and test: [`docs/development.md`](docs/development.md).
 
 ## Translations
 

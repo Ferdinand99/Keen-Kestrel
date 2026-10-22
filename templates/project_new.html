@@ -1,0 +1,21 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{% call m::page_header(tr("projects.new"), tr("projects.new_sub"), "/projects", tr("projects.title")) %}{% endcall %}
+
+<form class="form form-narrow" method="post" action="/projects" data-warn-unsaved>
+  <section class="form-section" aria-labelledby="sec-project">
+    <h2 class="form-section-title" id="sec-project">{{ tr("projects.basics") }}</h2>
+    <div class="card">
+      {{ m::field_text("name", tr("projects.name"), value=&self.name, placeholder=tr("projects.name_placeholder"), required=true, error=&self.name_error) }}
+      {% include "partials/platform_choices.html" %}
+    </div>
+  </section>
+
+  <div class="form-actions">
+    {{ m::link_button("/projects", tr("common.cancel"), "secondary") }}
+    {{ m::button(tr("projects.create")) }}
+  </div>
+</form>
+{% endblock %}

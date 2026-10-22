@@ -1,0 +1,13 @@
+{#- Platform radio cards. Expects `platforms: Vec<PlatformChoice>` and `m`. -#}
+<div class="field">
+  <span class="label" id="platform-label">{{ tr("projects.platform") }}</span>
+  <div class="choices" role="radiogroup" aria-labelledby="platform-label" aria-describedby="platform-help">
+    {%- for p in platforms %}
+    <label class="choice">
+      <input type="radio" name="platform" value="{{ p.value }}"{% if p.selected %} checked{% endif %}>
+      <span class="choice-body">{{ m::icon(p.icon) }}<span class="choice-title">{{ p.label }}</span></span>
+    </label>
+    {%- endfor %}
+  </div>
+  <p class="help" id="platform-help">{{ tr("projects.platform_help") }}</p>
+</div>

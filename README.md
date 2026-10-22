@@ -12,9 +12,10 @@
   <a href="https://ferdinand99.github.io/Keen-Kestrel/"><img src="https://img.shields.io/badge/website-ferdinand99.github.io%2FKeen--Kestrel-black.svg" alt="Website"></a>
 </p>
 
-> **Status: early development.** Nothing to install yet. The design is in [`docs/design.md`](docs/design.md),
-> and a throwaway [spike](https://github.com/Ferdinand99/kestrel-spike) has proved iOS crash symbolication.
-> The shared foundation with Vigilant Vole is being built next.
+> **Status: early development.** The skeleton runs: setup and sign-in with two-factor authentication,
+> users, API tokens, projects and their DSN keys (web pages, REST API and one MCP tool), in 26 languages.
+> It can't receive events yet; ingest is the next phase. The design is in [`docs/design.md`](docs/design.md);
+> to build and run it, see [`docs/development.md`](docs/development.md).
 
 Keen Kestrel answers two questions about the apps and sites you run:
 
