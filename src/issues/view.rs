@@ -6,9 +6,15 @@
 //! view, runs of frames outside the app fold into one collapsed group; the
 //! "all frames" view shows every frame. A trace without in-app frames is
 //! always shown in full.
+//!
+//! Native frames symbolicated at ingest show their function, file and line;
+//! an inlined function shows as its own frame, marked inlined. An in-app
+//! native frame that wasn't symbolicated names the debug id of its image, so
+//! the page can say which dSYM was missing.
 
 use serde_json::{Map, Value};
 
+use crate::difs::symbolicate::{self, Image};
 use crate::event::grouping;
 use crate::event::normalize;
 
@@ -39,6 +45,13 @@ pub struct FrameView {
     pub vars: Vec<(String, String)>,
     /// Shown expanded: the innermost in-app frame with source or variables.
     pub open: bool,
+    /// Resolved from a debug file at ingest.
+    pub symbolicated: bool,
+    /// A function inlined into the frame below it.
+    pub inlined: bool,
+    /// For an in-app native frame without symbols: the debug id of its
+    /// image, whose dSYM was missing when the event arrived.
+    pub missing_dsym: String,
 }
 
 impl FrameView {
@@ -189,7 +202,16 @@ fn hex(v: Option<&Value>) -> Option<u64> {
     v.and_then(grouping::address)
 }
 
-fn frame_view(frame: &Map<String, Value>, native: bool) -> FrameView {
+fn frame_view(frame: &Map<String, Value>, native: bool, images: &[Image]) -> FrameView {
+    let symbolicated = symbolicate::is_symbolicated(frame);
+    let missing_dsym = if native && !symbolicated && grouping::in_app(frame) {
+        symbolicate::image_of(images, frame)
+            .and_then(|i| i.debug_id)
+            .map(|d| d.to_string())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
     let raw_function = text(frame, "function");
     let package = text(frame, "package");
     let package_name = grouping::basename(package).to_string();
@@ -283,6 +305,9 @@ fn frame_view(frame: &Map<String, Value>, native: bool) -> FrameView {
         context,
         vars,
         open: false,
+        symbolicated,
+        inlined: frame.get("inlined").and_then(Value::as_bool) == Some(true),
+        missing_dsym,
     }
 }
 
@@ -290,13 +315,14 @@ fn frame_view(frame: &Map<String, Value>, native: bool) -> FrameView {
 fn stack(
     holder: &Map<String, Value>,
     native: bool,
+    images: &[Image],
     all_frames: bool,
     opened: &mut bool,
 ) -> (Vec<FrameGroup>, usize) {
     let mut frames: Vec<FrameView> = grouping::frames(holder)
         .into_iter()
         .rev()
-        .map(|f| frame_view(f, native))
+        .map(|f| frame_view(f, native, images))
         .collect();
     let count = frames.len();
     if !*opened && let Some(f) = frames.iter_mut().find(|f| f.in_app && f.has_details()) {
@@ -348,6 +374,7 @@ pub fn build(payload: &Value, all_frames: bool) -> EventView {
         platform.as_str(),
         "cocoa" | "native" | "objc" | "swift" | "c"
     );
+    let images = symbolicate::images(event);
     let mut opened = false;
 
     let chain = values(event, "exception");
@@ -355,7 +382,7 @@ pub fn build(payload: &Value, all_frames: bool) -> EventView {
         .iter()
         .rev()
         .map(|e| {
-            let (frames, frame_count) = stack(e, native, all_frames, &mut opened);
+            let (frames, frame_count) = stack(e, native, &images, all_frames, &mut opened);
             let mechanism = e.get("mechanism").and_then(Value::as_object);
             ExceptionView {
                 ty: text(e, "type").to_string(),
@@ -376,7 +403,7 @@ pub fn build(payload: &Value, all_frames: bool) -> EventView {
 
     let thread = if exceptions.iter().all(|e| e.frame_count == 0) {
         grouping::main_thread(event).and_then(|t| {
-            let (frames, frame_count) = stack(t, native, all_frames, &mut opened);
+            let (frames, frame_count) = stack(t, native, &images, all_frames, &mut opened);
             (frame_count > 0).then(|| ThreadView {
                 name: match (text(t, "name"), t.get("id")) {
                     ("", Some(id)) => scalar(id),
@@ -793,6 +820,45 @@ mod tests {
         assert!(t.crashed);
         assert_eq!(t.name, "0");
         assert_eq!(frames(&t.frames), ["App + 0x2558", "[1 system]"]);
+    }
+
+    #[test]
+    fn symbolicated_inlined_and_missing_dsym_frames() {
+        let v = build(
+            &json!({
+                "platform": "cocoa",
+                "debug_meta": {"images": [
+                    {"debug_id": "74B62DF4-771F-3338-8A76-EFFF43E57038", "image_addr": "0x104c34000",
+                     "image_size": 4096, "code_file": "/x/App.app/App"}]},
+                "exception": {"values": [{"type": "EXC_BREAKPOINT", "stacktrace": {"frames": [
+                    {"package": "/x/App.app/App", "instruction_addr": "0x104c34010",
+                     "image_addr": "0x104c34000", "in_app": true},
+                    {"package": "/x/App.app/App", "instruction_addr": "0x104c36048",
+                     "image_addr": "0x104c34000", "in_app": true, "function": "Stage.detonate(CrashKind)",
+                     "filename": "CrashSite.swift", "lineno": 43, "data": {"symbolicator_status": "symbolicated"}},
+                    {"package": "/x/App.app/App", "instruction_addr": "0x104c36048",
+                     "image_addr": "0x104c34000", "in_app": true, "function": "trigger(_: CrashKind, depth: Int)",
+                     "filename": "CrashSite.swift", "lineno": 21, "inlined": true,
+                     "data": {"symbolicator_status": "symbolicated"}}]}}]},
+            }),
+            true,
+        );
+        let frames: Vec<&FrameView> = v.exceptions[0]
+            .frames
+            .iter()
+            .map(|g| match g {
+                FrameGroup::Frame(f) => f,
+                FrameGroup::System(_) => panic!(),
+            })
+            .collect();
+        assert_eq!(frames[0].location, "CrashSite.swift:21");
+        assert!(frames[0].inlined && frames[0].symbolicated && frames[0].missing_dsym.is_empty());
+        assert!(!frames[1].inlined && frames[1].symbolicated);
+        assert_eq!(frames[2].function, "App + 0x10");
+        assert_eq!(
+            frames[2].missing_dsym,
+            "74b62df4-771f-3338-8a76-efff43e57038"
+        );
     }
 
     #[test]

@@ -194,6 +194,8 @@ struct RetentionView {
     event_days: i64,
     issue_days: i64,
     per_day: i64,
+    dif_days: i64,
+    dif_releases: i64,
 }
 
 #[derive(Template)]
@@ -515,6 +517,8 @@ async fn render_settings(
             event_days: retention.event_days,
             issue_days: retention.issue_days,
             per_day: retention.payloads_per_day,
+            dif_days: retention.dif_days,
+            dif_releases: retention.dif_releases,
         },
     };
     let status = if invalid {
@@ -600,6 +604,9 @@ struct RetentionForm {
     issue_days: String,
     #[serde(default)]
     per_day: String,
+    /// Older forms (and API clients) leave these out: they stay as they are.
+    dif_days: Option<String>,
+    dif_releases: Option<String>,
 }
 
 /// A whole number in `min..=max` from a form field, or `err`.
@@ -611,12 +618,21 @@ fn whole(text: &str, min: i64, max: i64, err: &'static str) -> Result<i64, &'sta
         .ok_or(err)
 }
 
-/// The retention a form asks for, or the translation key of the problem.
-fn retention_from(form: &RetentionForm) -> Result<Retention, &'static str> {
+/// The retention a form asks for (fields it leaves out stay as `current`),
+/// or the translation key of the problem.
+fn retention_from(form: &RetentionForm, current: Retention) -> Result<Retention, &'static str> {
     Ok(Retention {
         event_days: whole(&form.event_days, 1, 3650, "retention.err_days")?,
         issue_days: whole(&form.issue_days, 1, 3650, "retention.err_days")?,
         payloads_per_day: whole(&form.per_day, 1, 100_000, "retention.err_per_day")?,
+        dif_days: match &form.dif_days {
+            Some(t) => whole(t, 1, 3650, "retention.err_days")?,
+            None => current.dif_days,
+        },
+        dif_releases: match &form.dif_releases {
+            Some(t) => whole(t, 0, 1000, "difs.err_releases")?,
+            None => current.dif_releases,
+        },
     })
 }
 
@@ -633,7 +649,11 @@ async fn save_retention(
 ) -> ApiResult<Response> {
     user.require_editor()?;
     load(&core, id).await?;
-    let retention = match retention_from(&form) {
+    let current = core
+        .with_conn(move |c| triage::retention(c, id))
+        .await?
+        .unwrap_or_default();
+    let retention = match retention_from(&form, current) {
         Ok(r) => r,
         Err(key) => return Ok(back_to(jar, "error", i18n::t(key), retention_url(id))),
     };
@@ -668,6 +688,7 @@ async fn delete(
         })
         .await
         .map_err(ApiError::internal)?;
+    ingest.difs().forget_project(id);
     tracing::info!(user = %user.username, project = %project.name, id, "project deleted");
     Ok(back_to(
         jar,

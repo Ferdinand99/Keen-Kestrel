@@ -20,7 +20,8 @@ path = "src/main.rs"
 vole-kit = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.1.1" }
 # The versions below match vole-kit's, so both use one copy of each crate.
 askama = "0.16.1"
-axum = "0.8.9"
+# multipart: sentry-cli's chunk upload and the legacy dSYM endpoint.
+axum = { version = "0.8.9", features = ["multipart"] }
 axum-extra = { version = "0.12.6", features = ["cookie", "cookie-signed", "form"] }
 clap = { version = "4.6.7", features = ["derive", "env"] }
 deadpool-sqlite = "0.14.0"
@@ -50,6 +51,16 @@ regex = "1.13.1"
 sha2 = "0.11.1"
 symbolic-common = "13.9.0"
 symbolic-demangle = { version = "13.9.0", default-features = false, features = ["swift"] }
+# Symbolication (docs/design.md §4.8): debug files (Mach-O/DWARF and the other
+# object formats symbolic reads) become one SymCache per debug id. sentry-cli
+# names chunks by SHA-1; dSYM bundles also arrive as zip archives.
+symbolic-debuginfo = "13.9.0"
+symbolic-symcache = "13.9.0"
+sha1_smol = "1.0.1"
+# Streams the REST API's multipart uploads to disk (axum's own multipart
+# parser, used directly).
+multer = "3.1.0"
+zip = { version = "7.4.0", default-features = false, features = ["deflate-flate2"] }
 
 [build-dependencies]
 # Copies the kit's templates into templates/kit/ for askama (build.rs).

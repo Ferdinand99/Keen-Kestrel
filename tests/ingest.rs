@@ -131,7 +131,36 @@ async fn nothing_personal_is_stored() {
     assert_eq!(app.store_count("SELECT COUNT(*) FROM feedback").await, 2);
     assert_eq!(app.store_count("SELECT COUNT(*) FROM attachments").await, 1);
 
-    let needles: &[&str] = &[
+    // The SDKs' own user ids (sentry-cocoa's is its install id) are hashed
+    // like email addresses and user names. An id written into the fixture
+    // apps' code (`setUser({ id: "user-42" })`) also arrives as source
+    // context, which is kept as code: those ids aren't searched for.
+    let payloads: Vec<String> = common::fixtures()
+        .iter()
+        .flat_map(|f| f.events())
+        .map(|(payload, _)| String::from_utf8_lossy(&payload).into_owned())
+        .collect();
+    let in_code = |id: &str| {
+        payloads.iter().any(|p| {
+            p.contains(&format!("id: \\\"{id}\\\""))
+                || p.contains(&format!("\\\"id\\\": \\\"{id}\\\""))
+        })
+    };
+    let user_ids: Vec<String> = payloads
+        .iter()
+        .filter_map(|p| {
+            let event: serde_json::Value = serde_json::from_str(p).ok()?;
+            Some(event["user"]["id"].as_str()?.to_string())
+        })
+        .filter(|id| !in_code(id))
+        .collect();
+    assert!(
+        user_ids
+            .iter()
+            .any(|id| id == "90712615-8B72-4805-9A69-013EFE8FB8E4"),
+        "{user_ids:?}"
+    );
+    let mut needles: Vec<&str> = vec![
         CLIENT_IP,
         "KestrelFixture/1.0",
         "ada.lovelace@example.com",
@@ -145,6 +174,8 @@ async fn nothing_personal_is_stored() {
         "4111-1111-1111-1111",
         "{{auto}}",
     ];
+    let lower: Vec<String> = user_ids.iter().map(|id| id.to_lowercase()).collect();
+    needles.extend(user_ids.iter().chain(&lower).map(String::as_str));
     let mut scanned = 0;
     for file in ["kestrel.sqlite", "store.sqlite"] {
         let c = Connection::open_with_flags(app.dir.join(file), OpenFlags::SQLITE_OPEN_READ_ONLY)
@@ -174,7 +205,7 @@ async fn nothing_personal_is_stored() {
                     };
                     scanned += 1;
                     let text = String::from_utf8_lossy(&bytes);
-                    for needle in needles {
+                    for needle in &needles {
                         assert!(!text.contains(needle), "{needle} in {file} {table}: {text}");
                     }
                 }
@@ -182,6 +213,28 @@ async fn nothing_personal_is_stored() {
         }
     }
     assert!(scanned > 200, "{scanned}");
+    // Every stored user id is a hash, those written into code included.
+    let conn = app.kestrel.ingest.store().get().await.unwrap();
+    let blobs: Vec<Vec<u8>> = conn
+        .interact(|c| {
+            c.prepare("SELECT data FROM payloads")?
+                .query_map([], |r| r.get(0))?
+                .collect::<Result<_, _>>()
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let mut ids = 0;
+    for blob in blobs {
+        let event: serde_json::Value =
+            serde_json::from_slice(&keen_kestrel::store::decompress(&blob, 64 << 20).unwrap())
+                .unwrap();
+        if let Some(id) = event["user"]["id"].as_str() {
+            assert!(id.starts_with("hash:"), "{id}");
+            ids += 1;
+        }
+    }
+    assert!(ids >= 5, "{ids}");
     // The hashes are there instead.
     let conn = app.kestrel.ingest.store().get().await.unwrap();
     let report: String = conn

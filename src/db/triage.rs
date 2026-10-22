@@ -865,6 +865,10 @@ pub struct Retention {
     pub event_days: i64,
     pub issue_days: i64,
     pub payloads_per_day: i64,
+    /// Debug files neither uploaded nor used for this long go …
+    pub dif_days: i64,
+    /// … unless one of this many newest releases used them.
+    pub dif_releases: i64,
 }
 
 impl Default for Retention {
@@ -873,19 +877,25 @@ impl Default for Retention {
             event_days: 30,
             issue_days: 90,
             payloads_per_day: super::issues::MAX_PAYLOADS_PER_DAY,
+            dif_days: 180,
+            dif_releases: 5,
         }
     }
 }
 
 pub fn retention(c: &Connection, project_id: i64) -> rusqlite::Result<Option<Retention>> {
     c.query_row(
-        "SELECT retention_event_days, retention_issue_days, payloads_per_day FROM projects WHERE id = ?1",
+        "SELECT retention_event_days, retention_issue_days, payloads_per_day, retention_dif_days,
+             retention_dif_releases
+         FROM projects WHERE id = ?1",
         [project_id],
         |r| {
             Ok(Retention {
                 event_days: r.get(0)?,
                 issue_days: r.get(1)?,
                 payloads_per_day: r.get(2)?,
+                dif_days: r.get(3)?,
+                dif_releases: r.get(4)?,
             })
         },
     )
@@ -895,16 +905,25 @@ pub fn retention(c: &Connection, project_id: i64) -> rusqlite::Result<Option<Ret
 pub fn set_retention(c: &Connection, project_id: i64, r: Retention) -> rusqlite::Result<bool> {
     Ok(c.execute(
         "UPDATE projects SET retention_event_days = ?2, retention_issue_days = ?3,
-             payloads_per_day = ?4
+             payloads_per_day = ?4, retention_dif_days = ?5, retention_dif_releases = ?6
          WHERE id = ?1",
-        params![project_id, r.event_days, r.issue_days, r.payloads_per_day],
+        params![
+            project_id,
+            r.event_days,
+            r.issue_days,
+            r.payloads_per_day,
+            r.dif_days,
+            r.dif_releases
+        ],
     )? > 0)
 }
 
 /// Every project's id and retention.
 pub fn all_retention(c: &Connection) -> rusqlite::Result<Vec<(i64, Retention)>> {
     c.prepare(
-        "SELECT id, retention_event_days, retention_issue_days, payloads_per_day FROM projects ORDER BY id",
+        "SELECT id, retention_event_days, retention_issue_days, payloads_per_day, retention_dif_days,
+             retention_dif_releases
+         FROM projects ORDER BY id",
     )?
     .query_map([], |r| {
         Ok((
@@ -913,6 +932,8 @@ pub fn all_retention(c: &Connection) -> rusqlite::Result<Vec<(i64, Retention)>> 
                 event_days: r.get(1)?,
                 issue_days: r.get(2)?,
                 payloads_per_day: r.get(3)?,
+                dif_days: r.get(4)?,
+                dif_releases: r.get(5)?,
             },
         ))
     })?

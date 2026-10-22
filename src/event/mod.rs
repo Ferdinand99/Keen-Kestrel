@@ -30,6 +30,17 @@ impl std::fmt::Display for EventError {
     }
 }
 
+/// An event parsed and normalised, waiting to be grouped (symbolication
+/// happens in between when the project has debug files for it).
+#[derive(Debug)]
+pub struct Prepared {
+    pub event: Map<String, Value>,
+    pub event_id: String,
+    pub project_id: i64,
+    pub received: jiff::Timestamp,
+    pub user_hash: Option<String>,
+}
+
 /// Parses, normalises and groups one event. `fallback_id` is the id from
 /// the envelope or item header, used when the payload has none.
 pub fn prepare(
@@ -37,6 +48,15 @@ pub fn prepare(
     ctx: &Context<'_>,
     fallback_id: Option<&str>,
 ) -> Result<EventRecord, EventError> {
+    Ok(finish(parse(raw, ctx, fallback_id)?))
+}
+
+/// Parses and normalises one event (the first half of [`prepare`]).
+pub fn parse(
+    raw: &[u8],
+    ctx: &Context<'_>,
+    fallback_id: Option<&str>,
+) -> Result<Prepared, EventError> {
     let value: Value =
         serde_json::from_slice(raw).map_err(|e| EventError::Invalid(e.to_string()))?;
     let Value::Object(mut event) = value else {
@@ -49,8 +69,26 @@ pub fn prepare(
         .or_else(|| fallback_id.and_then(normalize::event_id))
         .unwrap_or_else(normalize::new_event_id);
     event.insert("event_id".into(), Value::from(event_id.clone()));
-
     let facts = normalize::normalize(&mut event, ctx);
+    Ok(Prepared {
+        event,
+        event_id,
+        project_id: ctx.project_id,
+        received: ctx.received,
+        user_hash: facts.user_hash,
+    })
+}
+
+/// Groups a normalised (and perhaps symbolicated) event and makes the
+/// writer's record of it (the second half of [`prepare`]).
+pub fn finish(p: Prepared) -> EventRecord {
+    let Prepared {
+        event,
+        event_id,
+        project_id,
+        received,
+        user_hash,
+    } = p;
     let grouping = grouping::group(&event);
     let title = title(&event);
     let culprit = culprit(&event);
@@ -61,25 +99,25 @@ pub fn prepare(
         .and_then(Value::as_f64)
         .unwrap_or_default();
     let payload = crate::store::compress(&serde_json::to_vec(&event).unwrap_or_default());
-    Ok(EventRecord {
-        project_id: ctx.project_id,
+    EventRecord {
+        project_id,
         event_id,
         timestamp: normalize::sql_time(timestamp),
-        received_at: normalize::sql_time(normalize::ts_seconds(ctx.received)),
+        received_at: normalize::sql_time(normalize::ts_seconds(received)),
         level: field("level").unwrap_or_else(|| "error".into()),
         platform: field("platform").unwrap_or_else(|| "other".into()),
         release: field("release"),
         environment: field("environment").unwrap_or_else(|| "production".into()),
         title,
         culprit,
-        user_hash: facts.user_hash,
+        user_hash,
         tags,
         grouping_config: grouping.config,
         hash: grouping.hash,
         components: grouping.components.to_string(),
         unsymbolicated: grouping.unsymbolicated,
         payload,
-    })
+    }
 }
 
 fn cut(s: &str, max: usize) -> String {

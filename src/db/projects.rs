@@ -83,6 +83,16 @@ pub fn get(conn: &Connection, id: i64) -> rusqlite::Result<Option<Project>> {
     .optional()
 }
 
+/// The project with `slug`.
+pub fn by_slug(conn: &Connection, slug: &str) -> rusqlite::Result<Option<Project>> {
+    conn.query_row(
+        &format!("SELECT {PROJECT_COLUMNS} FROM projects WHERE slug = ?1"),
+        [slug],
+        project,
+    )
+    .optional()
+}
+
 /// Whether another project (not `except`) has `slug`.
 pub fn slug_taken(conn: &Connection, slug: &str, except: Option<i64>) -> rusqlite::Result<bool> {
     conn.query_row(

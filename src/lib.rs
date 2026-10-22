@@ -5,13 +5,15 @@
 //! kit; Kestrel adds projects and their DSN keys (pages, REST API, one MCP
 //! tool), Sentry-compatible ingest (normalisation, privacy scrubbing,
 //! grouping into issues, the single batch writer), the issue pages with
-//! search and triage, and retention (docs/design.md §4).
+//! search and triage, retention, and debug files with symbolication of
+//! native crashes (docs/design.md §4).
 
 #![forbid(unsafe_code)]
 
 pub mod api;
 pub mod config;
 pub mod db;
+pub mod difs;
 pub mod dsn;
 pub mod event;
 pub mod ingest;
@@ -98,6 +100,8 @@ pub fn router(app: Kestrel) -> Router {
     let protected = Router::new()
         .merge(pages::router())
         .merge(issues::router())
+        .merge(difs::pages::router())
+        .merge(difs::upload::router())
         .merge(api::router())
         .merge(kit_pages::router())
         .route_layer(from_fn_with_state(core.clone(), guard::require_auth))
