@@ -877,23 +877,35 @@ sentry-cli debug-files upload --org any --project notes build/</code></pre>
                 </p>
               </div>
             </li>
+            <li class="milestone is-done reveal">
+              <span class="ms-marker" aria-hidden="true"><svg class="icon"><use href="assets/icons.svg#check"></use></svg></span>
+              <div class="ms-body">
+                <p class="ms-status"><span class="pill status-up"><span class="dot"></span>Done</span></p>
+                <h3>Shared foundation: vole-kit</h3>
+                <p>
+                  Sign-in, users, API tokens, settings, translations, notifications and the design system
+                  moved out of Vigilant Vole into a shared crate, with Vigilant Vole’s behaviour unchanged.
+                </p>
+              </div>
+            </li>
+            <li class="milestone is-done reveal">
+              <span class="ms-marker" aria-hidden="true"><svg class="icon"><use href="assets/icons.svg#check"></use></svg></span>
+              <div class="ms-body">
+                <p class="ms-status"><span class="pill status-up"><span class="dot"></span>Done</span></p>
+                <h3>Skeleton, ingest and issues</h3>
+                <p>
+                  Projects and DSN keys, Sentry-compatible ingest with scrubbing and grouping, and pages to
+                  search, resolve, ignore and merge issues, tested with the official Python, JavaScript, Rust
+                  and Cocoa SDKs.
+                </p>
+              </div>
+            </li>
             <li class="milestone is-now reveal">
               <span class="ms-marker" aria-hidden="true"><span class="dot is-live"></span></span>
               <div class="ms-body">
                 <p class="ms-status"><span class="pill status-accent"><span class="dot"></span>In progress</span></p>
-                <h3>Shared foundation: vole-kit</h3>
-                <p>
-                  Sign-in, users, API tokens, settings, translations, notifications and the design system
-                  move out of Vigilant Vole into a shared crate, with Vigilant Vole’s behaviour unchanged.
-                </p>
-              </div>
-            </li>
-            <li class="milestone reveal">
-              <span class="ms-marker" aria-hidden="true"></span>
-              <div class="ms-body">
-                <p class="ms-status"><span class="pill">Then</span></p>
                 <h3>v0.1 “errors”</h3>
-                <p>Ingest, grouping, issues and search, symbolication, alerts, release health, API and MCP tools.</p>
+                <p>Symbolication with uploaded dSYMs now, then alerts, release health, the API and MCP tools.</p>
               </div>
             </li>
             <li class="milestone reveal">
@@ -934,7 +946,7 @@ sentry-cli debug-files upload --org any --project notes build/</code></pre>
                 <summary>When can I use it?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
                 <div class="faq-body">
                   <p>
-                    Not yet, and there’s no date. The design is done, the symbolication spike worked, and the shared foundation is being built now. The first
+                    Not yet, and there’s no date. Ingest, grouping and the issue pages work; symbolication, alerts and release health come next. The first
                     usable release will be v0.1 “errors”; analytics follow in v0.2. Watch or star the
                     <a href="https://github.com/Ferdinand99/Keen-Kestrel">repository</a> to hear when it
                     ships.
