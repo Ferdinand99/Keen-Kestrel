@@ -1,6 +1,6 @@
 # Keen Kestrel – design
 
-Status: approved design. Phases 1–7 are built (v0.1 "errors" is feature-complete, its release pending);
+Status: approved design. Phases 1–7 are built and released as v0.1 "errors"; phase 8 (web analytics) is built;
 the phase table in §11 has the state. This document is the reference for everyone building Kestrel, people and
 agents alike; change it when a decision changes.
 
@@ -197,6 +197,14 @@ the rollup. This gives crash-free sessions and crash-free users per release.
   `GET /js/k.js` (under 2 KB, single-page-app aware). Raw signals are kept 30 days.
 - Rollups: hourly counts per signal type; daily counts and uniques per dimension (version, OS, device,
   locale, path, referrer, UTM, browser); daily active users. Kept 400 days.
+- Web analytics (phase 8, as built): any enabled key of a project sends, its allowed origins checked against `Origin`
+  or `Referer`; a per-project switch turns pageviews off. Raw events and a seen-set of today's and yesterday's visitor
+  hashes are in `store.sqlite`; a minute's rollup adds counts and distinct visitors per hour, day and dimension (page,
+  entry page, referrer, UTM source/medium/campaign, browser, OS, device class, screen bucket, custom event). Events of
+  older days roll their day up again from the raw events. Dashboards read the rollups; filters combine dimensions,
+  which one-dimensional rollups can't, so filtered views read the raw events (the raw retention, 30 days). Custom web
+  events are named events with up to 20 properties, stored with the raw event. `DNT` and `Sec-GPC` are not acted on
+  (nothing personal is kept either way); whether to is an open question.
 - Dashboards: apps (users, sessions, signals over time, top signal types, version adoption, OS, devices,
   locales) and web (visitors, pageviews, top pages, referrers, UTM, browsers, OS, devices), with one
   filter bar (date range, version, platform, signal type).
@@ -287,8 +295,8 @@ on GHCR, a Linux installer, Proxmox and Unraid templates, a GitHub Pages site in
 | 4 | Kestrel skeleton: auth, users, tokens, settings, i18n, layout, projects and keys, Docker, CI | Sign-in and projects in the family design, 26 languages |
 | 5 | Ingest, normalisation, grouping, issues and events UI, search, retention, writer | All SDK fixtures grouped correctly; load targets met |
 | 6 | Debug file upload, SymCache, symbolication | Xcode build phase uploads; crashes symbolicated |
-| 7 | Alerts, release health, releases, API and MCP for errors | **v0.1 "errors"** (done, release pending) |
-| 8 | Analytics ingest, rollups, dashboards, `k.js`, privacy tests | Web analytics on the owner's sites |
+| 7 | Alerts, release health, releases, API and MCP for errors | **v0.1 "errors"** (released) |
+| 8 | Analytics ingest, rollups, dashboards, `k.js`, privacy tests | Web analytics on the owner's sites (built) |
 | 9 | KestrelKit, adoption in the owner's apps, linked release view, analytics API and MCP | **v0.2 "analytics"** |
 | 10 | Hardening: load tests, site, installers, templates, translations | **v1.0** |
 

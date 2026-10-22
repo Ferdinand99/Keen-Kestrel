@@ -18,9 +18,12 @@
 > symbolicated from dSYMs uploaded with `sentry-cli`; alerts for new issues, regressions, spikes and a release's
 > first crash to ~40 notification channels (Slack, Discord, Teams, Telegram, ntfy, email, webhooks …); release
 > health with crash-free sessions and users; and a REST API, OpenAPI document and MCP tools for all of it.
-> Analytics come in v0.2; installers and Unraid/Proxmox templates by v1.0. The translations are unreviewed
-> drafts. **[Sending errors to Kestrel](docs/sending-errors.md)** shows how to point each SDK at it,
-> upload dSYMs and set up alerts. The design is in [`docs/design.md`](docs/design.md); to build and run it, see
+> **Web analytics works too** (not released yet): a script under 2 KB, no cookies and no stored IP addresses, a Web
+> tab with visitors, pageviews, pages, referrers, UTM, browsers and devices, filters and live current visitors.
+> App analytics (KestrelKit) come in v0.2; installers and Unraid/Proxmox templates by v1.0. The translations are
+> unreviewed drafts. **[Sending errors to Kestrel](docs/sending-errors.md)** shows how to point each SDK at it,
+> upload dSYMs and set up alerts; **[Web analytics](docs/web-analytics.md)** shows how to add the snippet and what is
+> kept. The design is in [`docs/design.md`](docs/design.md); to build and run it, see
 > [`docs/development.md`](docs/development.md).
 
 Keen Kestrel answers two questions about the apps and sites you run:

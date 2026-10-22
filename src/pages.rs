@@ -187,6 +187,7 @@ struct OverviewTemplate {
     latest: Vec<IssueRowView>,
     frequent: Vec<IssueRowView>,
     issues_href: String,
+    web: Option<crate::analytics::pages::Overview>,
 }
 
 /// The retention form's values.
@@ -196,6 +197,8 @@ struct RetentionView {
     per_day: i64,
     dif_days: i64,
     dif_releases: i64,
+    analytics_raw_days: i64,
+    analytics_days: i64,
 }
 
 #[derive(Template)]
@@ -211,6 +214,8 @@ struct SettingsTemplate {
     platforms: Vec<PlatformChoice>,
     keys: Vec<KeyView>,
     retention: RetentionView,
+    web_enabled: bool,
+    web_href: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +370,7 @@ async fn create(
 
 async fn overview(
     State(core): State<Core>,
+    Extension(ingest): Extension<crate::ingest::Ingest>,
     user: CurrentUser,
     jar: SignedCookieJar,
     headers: HeaderMap,
@@ -428,6 +434,7 @@ async fn overview(
             max_label: i18n::fmt_int(max),
         }
     });
+    let web = crate::analytics::pages::overview(&core, &ingest, id).await?;
     let (ctx, jar) = PageCtx::build(
         &core,
         Some(&user),
@@ -438,6 +445,7 @@ async fn overview(
     )
     .await;
     let page = OverviewTemplate {
+        web,
         ctx,
         tab: "overview",
         first_tab: dsn::first_snippet(project.platform),
@@ -486,11 +494,12 @@ async fn render_settings(
     attempt: Option<Attempt>,
 ) -> ApiResult<Response> {
     let id = project.id;
-    let (keys, retention) = core
+    let (keys, retention, web_enabled) = core
         .with_conn(move |c| {
             Ok((
                 db::keys(c, id)?,
                 triage::retention(c, id)?.unwrap_or_default(),
+                db::web_analytics(c, id)?.unwrap_or(true),
             ))
         })
         .await?;
@@ -519,7 +528,11 @@ async fn render_settings(
             per_day: retention.payloads_per_day,
             dif_days: retention.dif_days,
             dif_releases: retention.dif_releases,
+            analytics_raw_days: retention.analytics_raw_days,
+            analytics_days: retention.analytics_days,
         },
+        web_enabled,
+        web_href: format!("/projects/{id}/web"),
     };
     let status = if invalid {
         StatusCode::UNPROCESSABLE_ENTITY
@@ -607,6 +620,8 @@ struct RetentionForm {
     /// Older forms (and API clients) leave these out: they stay as they are.
     dif_days: Option<String>,
     dif_releases: Option<String>,
+    analytics_raw_days: Option<String>,
+    analytics_days: Option<String>,
 }
 
 /// A whole number in `min..=max` from a form field, or `err`.
@@ -632,6 +647,14 @@ fn retention_from(form: &RetentionForm, current: Retention) -> Result<Retention,
         dif_releases: match &form.dif_releases {
             Some(t) => whole(t, 0, 1000, "difs.err_releases")?,
             None => current.dif_releases,
+        },
+        analytics_raw_days: match &form.analytics_raw_days {
+            Some(t) => whole(t, 1, 400, "web.err_raw_days")?,
+            None => current.analytics_raw_days,
+        },
+        analytics_days: match &form.analytics_days {
+            Some(t) => whole(t, 1, 3650, "retention.err_days")?,
+            None => current.analytics_days,
         },
     })
 }

@@ -71,3 +71,13 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | AI assistant | tekoälyavustaja | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer ”symboloitu” phrasing in sentences |
+| web analytics | verkkoanalytiikka | tab ”Web”; page title ”Verkkoanalytiikka: …” |
+| entry page | aloitussivu | count column ”Aloitukset” |
+| screen size | näyttökoko | |
+| device type (desktop / mobile / tablet) | laitetyyppi (tietokone / mobiili / tabletti) | card ”Laitteet” |
+| operating system | käyttöjärjestelmä | |
+| browser | selain | |
+| custom event | oma tapahtuma (pl. omat tapahtumat) | shorter than ”mukautettu tapahtuma” |
+| current visitors | kävijät nyt | live counter, last 5 minutes |
+| direct / none (no referrer) | suora / ei mitään | |
+| raw events | raakatapahtumat | settings label ”Säilytä verkon raakatapahtumat” |

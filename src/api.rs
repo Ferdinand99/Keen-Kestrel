@@ -1,6 +1,7 @@
 //! REST API v1 (`/api/v1/**`): projects and their DSN keys, issues and
 //! events ([`issues`]), releases and their health ([`releases`]), alert
-//! rules and the alerts they sent ([`rules`]), debug files, and the route
+//! rules and the alerts they sent ([`rules`]), debug files, web analytics
+//! ([`analytics`]), and the route
 //! table ([`DOCS`]) the kit turns into `/api-docs`, the OpenAPI document,
 //! `/api-docs.md` and `/llms.txt`. The table also documents the ingest
 //! endpoints the SDKs call (with a DSN key, not an API token) and
@@ -34,6 +35,7 @@ use crate::db::projects::{self as db, KeyChanges, Project, ProjectKey};
 use crate::dsn;
 use crate::project::{self, Platform};
 
+pub mod analytics;
 pub mod issues;
 pub mod releases;
 pub mod rules;
@@ -164,6 +166,37 @@ const RULE_EXAMPLE: &str = r#"{
   "updated_at": "2026-10-22 08:00:00"
 }"#;
 
+const TIMESERIES_EXAMPLE: &str = r#"{
+  "source": "web",
+  "period": "7d",
+  "from": "2026-10-16",
+  "to": "2026-10-22",
+  "interval": "day",
+  "filters": {"browser": "Firefox"},
+  "totals": {"visitors": 812, "pageviews": 2140, "events": 37},
+  "current_visitors": 4,
+  "data": [{"start": "2026-10-16", "visitors": 101, "pageviews": 288, "events": 5}, "…"]
+}"#;
+
+const BREAKDOWN_EXAMPLE: &str = r#"{
+  "source": "web",
+  "dimension": "referrer",
+  "metric": "pageviews",
+  "period": "30d",
+  "from": "2026-09-23",
+  "to": "2026-10-22",
+  "filters": {},
+  "data": [
+    {"value": "", "label": "Direct / none", "visitors": 1204, "count": 3012},
+    {"value": "news.ycombinator.com", "label": "news.ycombinator.com", "visitors": 388, "count": 452}
+  ]
+}"#;
+
+const PERIOD_Q: &str =
+    "period: today, yesterday, 7d (default), 30d, any 1d–400d, or custom with from and to";
+const FROM_Q: &str = "from, to: YYYY-MM-DD (UTC days, both included; at most 400 days)";
+const FILTER_Q: &str = "page, referrer, utm_source, utm_medium, utm_campaign, browser, os, device, screen: only events with this value (counted from the raw events, which are kept 30 days)";
+
 const ERROR_EXAMPLE: &str = r#"{
   "error": {
     "code": "validation_failed",
@@ -230,6 +263,13 @@ pub static ROUTES: &[RouteDoc] = &[
     r("GET", "/api/v1/projects/{id}/releases/{release_id}/health", "viewer", "Releases", "A release's health per UTC day and in total: sessions, errored (crashed and abnormal included), crashed, abnormal, distinct users and crashed users, crash-free sessions and users in percent (`null` without sessions).")
         .q(&["days: days up to today (1–400, default 30)", "environment: one environment only"])
         .res(HEALTH_EXAMPLE),
+    // -- Analytics --
+    r("GET", "/api/v1/projects/{id}/analytics/timeseries", "viewer", "Analytics", "A project's web analytics over a period: totals (unique visitors, the sum of each day's; pageviews; custom events), visitors seen in the last five minutes, and the series by hour (one-day periods) or by UTC day. Without filters it reads the rollups (kept 400 days); with filters the raw events.")
+        .q(&[PERIOD_Q, FROM_Q, FILTER_Q])
+        .res(TIMESERIES_EXAMPLE),
+    r("GET", "/api/v1/projects/{id}/analytics/breakdown", "viewer", "Analytics", "The top values of one dimension over a period, most visitors first: `page`, `entry` (a visitor's first page of the day), `referrer` (the referring domain; \"\" is direct or none), `utm_source`, `utm_medium`, `utm_campaign`, `browser`, `os`, `device` (desktop, mobile, tablet), `screen` (a width bucket) or `event` (custom events by name). `count` is pageviews, entries for `entry`, events for `event` (`metric` says which).")
+        .q(&["dimension: which values to count (required)", "limit: values (1–100, default 10)", PERIOD_Q, FROM_Q, FILTER_Q])
+        .res(BREAKDOWN_EXAMPLE),
     // -- Alerts --
     r("GET", "/api/v1/projects/{id}/alert-rules", "viewer", "Alerts", "A project's alert rules, oldest first.")
         .q(&[LIMIT_Q, CURSOR_Q])
@@ -255,6 +295,9 @@ pub static ROUTES: &[RouteDoc] = &[
     r("POST", "/api/{project_id}/store/", "dsn key", "Ingest", "The older endpoint for one event as JSON (old SDKs), with the same authentication and limits as the envelope endpoint.")
         .req(r#"{"message": "Hello", "level": "warning"}"#)
         .res(r#"{"id": "9ec79c33ec9942ab8353589fcb2e04dc"}"#),
+    r("POST", "/ingest/v1/event", "dsn key", "Ingest", "Where the k.js snippet sends pageviews and custom events: one JSON object, as `text/plain` (no CORS preflight) or `application/json` (64 KB at most). `k` (or `key`, `X-Kestrel-Key`, `?key=`) is the project's public key; `n` the event (`pageview` or a custom event's name); `u` the page's URL; `r` the referrer; `w` the screen width; `h: 1` keeps a `#/route` in the path; `p` up to 20 properties of a custom event. The key's allowed origins are checked against `Origin` (else `Referer`); the project must have web analytics on. Bots are answered like everyone else and not counted. Answers `202 Accepted` with an empty body and never sets a cookie; 429 with `Retry-After` when a limit or the queue is full.")
+        .req(r#"{"k": "<public key>", "n": "pageview", "u": "https://shop.example/pricing?utm_source=newsletter", "r": "https://news.example/", "w": 1440}"#),
+    r("GET", "/js/k.js", "public", "Ingest", "The web analytics snippet (under 2 KB gzip-compressed): `<script defer src=\"https://kestrel.example.com/js/k.js\" data-key=\"<public key>\"></script>`. Cached for a day, with an ETag."),
     // -- sentry-cli --
     r("GET", "/api/0/", "api token", "sentry-cli", "What sentry-cli's `info` and upload commands ask first: the token's user and scopes (`project:releases` when it may upload debug files and manage releases).")
         .res(r#"{"version": "0", "auth": {"scopes": ["org:read", "project:read", "project:write", "project:releases"]}, "user": {"id": "1", "name": "Ada", "username": "ada", "email": "ada"}}"#),
@@ -266,7 +309,7 @@ pub static ROUTES: &[RouteDoc] = &[
     r("GET", "/api/0/organizations/{org}/releases/{version}/", "api token", "sentry-cli", "`sentry-cli releases info`: the release across the projects that have it."),
     // -- System --
     r("GET", "/api/v1/openapi.json", "viewer", "System", "This reference as an OpenAPI 3.1 document."),
-    r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants. Tools: list_projects, list_issues, get_issue, release_health; with a read-and-write token of an editor also resolve_issue and ignore_issue. Bearer API token; GET answers 405.")
+    r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants. Tools: list_projects, list_issues, get_issue, release_health, analytics_summary, analytics_breakdown; with a read-and-write token of an editor also resolve_issue and ignore_issue. Bearer API token; GET answers 405.")
         .req(r#"{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_issues", "arguments": {"project": "shop", "query": "is:unresolved level:error"}}}"#),
     r("GET", "/healthz", "public", "System", "Liveness probe: always \"ok\"."),
 ];
@@ -310,8 +353,9 @@ fn markdown_intro(out: &mut String, base: &str) {
         out,
         "# Keen Kestrel API\n\n\
          > REST API of a Keen Kestrel instance (version {version}), generated from the server's own route table. \
-         Keen Kestrel is a self-hosted, Sentry-compatible error tracker: projects and their DSN keys, issues and events, \
-         releases and their health, alert rules and debug files. The official Sentry SDKs send to it (see Ingest).\n\n\
+         Keen Kestrel is a self-hosted, Sentry-compatible error tracker with privacy-friendly web analytics: projects and \
+         their DSN keys, issues and events, releases and their health, alert rules, debug files and web analytics. The \
+         official Sentry SDKs and the k.js snippet send to it (see Ingest).\n\n\
          - Instance: {base}\n\
          - API base URL: {base}/api/v1\n\
          - Browsable reference: {base}/api-docs (sign in) · OpenAPI 3.1: {base}/api/v1/openapi.json\n\
@@ -373,6 +417,15 @@ fn markdown_middle(out: &mut String) {
          - Releases are created on first sight (an event or a session names one) or by `sentry-cli releases new`. Health comes from the \
          SDKs' sessions, rolled up per release, environment and day: crash-free sessions are `1 − crashed / sessions`, crash-free users \
          `1 − crashed users / users` (users are distinct device ids per day, so over several days they add up).\n\n\
+         ## Web analytics\n\n\
+         - Sites send pageviews and custom events with the k.js snippet (`GET /js/k.js`, with `data-key` set to a public key \
+         of the project) to `POST /ingest/v1/event`. No cookies; IP addresses and user agents are never stored.\n\
+         - A visitor is a hash of a salt that changes at midnight UTC, the project, the IP address, the user agent and the \
+         host, so unique visitors are counted per UTC day; over a period they are the sum of the days.\n\
+         - Paths are kept without their query (UTM parameters apart), referrers as their domain; email addresses, phone \
+         numbers and card numbers in paths, UTM values and custom event names and properties are `[Filtered]`.\n\
+         - Raw events are kept 30 days and rolled up every minute into hourly and daily counts kept 400 days (per project: \
+         Settings → Retention). Queries without filters read the rollups; with filters, the raw events.\n\n\
          ## Alerts\n\n\
          - Alert rules belong to a project and send to the instance's notification channels (Settings → Notifications: Slack, Discord, \
          Teams, Telegram, ntfy, email, webhooks, PagerDuty and about 30 more).\n\
@@ -469,6 +522,14 @@ pub fn router() -> Router<Core> {
         .route(
             "/projects/{id}/releases/{release_id}/health",
             get(releases::show_health),
+        )
+        .route(
+            "/projects/{id}/analytics/timeseries",
+            get(analytics::timeseries),
+        )
+        .route(
+            "/projects/{id}/analytics/breakdown",
+            get(analytics::breakdown),
         )
         .route(
             "/projects/{id}/alert-rules",

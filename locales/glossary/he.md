@@ -69,5 +69,17 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | abnormal (session ended abnormally) | הסתיימו באופן חריג | plural, agrees with סשנים |
 | finalized (release) | סופית | lowercase status after a date in English (feminine: גרסה) |
 | header (webhook) | כותרת | vole-kit: “כותרות מותאמות” |
+| web analytics / Web tab | אנליטיקת אתר / אתר | tab “אתר” |
+| entry page | דף כניסה (pl. דפי כניסה) | count column “כניסות” |
+| screen size | גודל מסך (pl. גדלי מסך) | |
+| device type (desktop / mobile / tablet) | סוג מכשיר (מחשב שולחני / נייד / טאבלט) | |
+| operating system | מערכת הפעלה (pl. מערכות הפעלה) | |
+| browser | דפדפן | |
+| custom event | אירוע מותאם (pl. אירועים מותאמים) | sent with `kestrel('event', …)` |
+| current visitors | מבקרים כעת | the last 5 minutes |
+| direct / none (no referrer) | ישיר / ללא | |
+| raw events | אירועים גולמיים | “אירועי אתר גולמיים” in retention |
+| traffic sources (card) | מקורות תנועה | not “מקורות” alone: that is the keys' allowed origins |
+| UTM source / medium / campaign | מקור UTM / אמצעי UTM / קמפיין UTM | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer “עם סמלים” phrasing in sentences |

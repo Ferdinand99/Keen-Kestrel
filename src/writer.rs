@@ -78,6 +78,8 @@ pub enum Job {
     Feedback(FeedbackItem),
     Attachment(Box<AttachmentItem>),
     DifUse(DifUse),
+    /// A pageview or custom event from k.js (docs/design.md §5).
+    Web(Box<crate::analytics::WebEvent>),
 }
 
 /// Work for the writer's connection besides ingest jobs.
@@ -148,6 +150,15 @@ pub struct Writer {
     tx: mpsc::Sender<Msg>,
     stats: Arc<Stats>,
     changes: broadcast::Sender<i64>,
+    web: broadcast::Sender<WebChange>,
+}
+
+/// What changed in a project's web analytics: new raw events (current
+/// visitors) or new rollups (the dashboard's numbers).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WebChange {
+    Events(i64),
+    Rollup(i64),
 }
 
 impl Writer {
@@ -163,6 +174,7 @@ impl Writer {
         let (tx, rx) = mpsc::channel(settings.queue_capacity.max(1));
         let stats = Arc::new(Stats::default());
         let (changes, _) = broadcast::channel(64);
+        let (web, _) = broadcast::channel(64);
         let paths = (main.to_path_buf(), store.to_path_buf());
         tokio::spawn(run(
             rx,
@@ -170,10 +182,15 @@ impl Writer {
             paths,
             settings,
             stats.clone(),
-            changes.clone(),
+            (changes.clone(), web.clone()),
             alerts,
         ));
-        Ok(Writer { tx, stats, changes })
+        Ok(Writer {
+            tx,
+            stats,
+            changes,
+            web,
+        })
     }
 
     /// Queues `jobs`, all or none.
@@ -250,6 +267,16 @@ impl Writer {
     pub fn notify(&self, project_id: i64) {
         let _ = self.changes.send(project_id);
     }
+
+    /// Changes to projects' web analytics (the Web tab's live updates).
+    pub fn subscribe_web(&self) -> broadcast::Receiver<WebChange> {
+        self.web.subscribe()
+    }
+
+    /// Tells the Web tabs that something changed.
+    pub fn notify_web(&self, change: WebChange) {
+        let _ = self.web.send(change);
+    }
 }
 
 fn open(main: &Path, store: &Path) -> rusqlite::Result<Connection> {
@@ -269,7 +296,7 @@ async fn run(
     paths: (PathBuf, PathBuf),
     settings: WriterSettings,
     stats: Arc<Stats>,
-    changes: broadcast::Sender<i64>,
+    (changes, web): (broadcast::Sender<i64>, broadcast::Sender<WebChange>),
     alerts: Option<Sink>,
 ) {
     let mut conn = Some(conn);
@@ -306,10 +333,13 @@ async fn run(
         })
         .await
         {
-            Ok((c, acks, projects, triggers)) => {
+            Ok((c, acks, (projects, web_projects), triggers)) => {
                 conn = Some(c);
                 for project in projects {
                     let _ = changes.send(project);
+                }
+                for project in web_projects {
+                    let _ = web.send(WebChange::Events(project));
                 }
                 if let Some(alerts) = &alerts {
                     alerts.send(triggers);
@@ -323,13 +353,12 @@ async fn run(
     }
 }
 
-/// Writes a batch's jobs, then runs its other work. Returns the flush acks,
-/// the projects that got events and what may alert.
-fn write_batch(
-    c: &mut Connection,
-    batch: Vec<Msg>,
-    stats: &Stats,
-) -> (Vec<oneshot::Sender<()>>, Vec<i64>, Vec<Trigger>) {
+/// What a written batch hands on: the flush acks, the projects that got
+/// events and those that got web events, and what may alert.
+type BatchOut = (Vec<oneshot::Sender<()>>, (Vec<i64>, Vec<i64>), Vec<Trigger>);
+
+/// Writes a batch's jobs, then runs its other work.
+fn write_batch(c: &mut Connection, batch: Vec<Msg>, stats: &Stats) -> BatchOut {
     let mut acks = Vec::new();
     let mut execs = Vec::new();
     let mut jobs = Vec::with_capacity(batch.len());
@@ -341,11 +370,14 @@ fn write_batch(
         }
     }
     let mut projects: Vec<i64> = Vec::new();
+    let mut web_projects: Vec<i64> = Vec::new();
     for job in &jobs {
-        if let Job::Event(e) = job
-            && !projects.contains(&e.project_id)
-        {
-            projects.push(e.project_id);
+        match job {
+            Job::Event(e) if !projects.contains(&e.project_id) => projects.push(e.project_id),
+            Job::Web(e) if !web_projects.contains(&e.project_id) => {
+                web_projects.push(e.project_id);
+            }
+            _ => {}
         }
     }
     let triggers = if jobs.is_empty() {
@@ -356,7 +388,7 @@ fn write_batch(
     for f in execs {
         f(c);
     }
-    (acks, projects, triggers)
+    (acks, (projects, web_projects), triggers)
 }
 
 /// Writes the jobs (trying once more if the transaction fails). Returns
@@ -498,6 +530,10 @@ fn write_job(c: &Connection, job: &Job) -> rusqlite::Result<Option<Written>> {
             for id in &u.debug_ids {
                 crate::db::difs::mark_used(c, u.project_id, id, u.release.as_deref(), &u.at)?;
             }
+            Ok(None)
+        }
+        Job::Web(e) => {
+            crate::analytics::rollup::insert_event(c, e)?;
             Ok(None)
         }
         Job::Attachment(a) => {

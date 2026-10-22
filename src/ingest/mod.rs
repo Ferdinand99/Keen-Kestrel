@@ -1,5 +1,6 @@
 //! Sentry-compatible ingest (docs/design.md §4.2): `POST
-//! /api/{project_id}/envelope/` and the legacy `POST /api/{project_id}/store/`.
+//! /api/{project_id}/envelope/` and the legacy `POST /api/{project_id}/store/`;
+//! and web analytics ([`web`]: `POST /ingest/v1/event`, with `GET /js/k.js`).
 //!
 //! A request is checked in this order: the per-IP bucket, the project id,
 //! the body size, the DSN key (`X-Sentry-Auth`, `?sentry_key=` or the
@@ -19,6 +20,7 @@ pub mod body;
 pub mod capture;
 pub mod envelope;
 pub mod limit;
+pub mod web;
 
 use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -97,6 +99,8 @@ struct Inner {
     hash_key: [u8; 32],
     key_buckets: Buckets<i64>,
     ip_buckets: Buckets<IpAddr>,
+    /// The web visitor ids' salt (memory only, docs/design.md §5.2).
+    salt: crate::analytics::DailySalt,
 }
 
 /// Why a request is refused.
@@ -108,6 +112,7 @@ pub enum Reject {
     TooLarge(&'static str),
     RateLimited { secs: u64, scope: &'static str },
     Unavailable(&'static str),
+    Unsupported(&'static str),
 }
 
 impl Reject {
@@ -119,6 +124,7 @@ impl Reject {
             Reject::TooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Reject::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
             Reject::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Reject::Unsupported(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
         }
     }
 
@@ -128,7 +134,8 @@ impl Reject {
             Reject::Unauthorized(d)
             | Reject::Forbidden(d)
             | Reject::TooLarge(d)
-            | Reject::Unavailable(d) => (*d).to_string(),
+            | Reject::Unavailable(d)
+            | Reject::Unsupported(d) => (*d).to_string(),
             Reject::RateLimited { .. } => "rate limited".to_string(),
         }
     }
@@ -248,6 +255,7 @@ impl Ingest {
                 hash_key,
                 key_buckets: Buckets::new(),
                 ip_buckets: Buckets::new(),
+                salt: crate::analytics::DailySalt::new(),
             }),
         })
     }
@@ -300,6 +308,11 @@ impl Ingest {
                 "/api/{project_id}/store",
                 post(store_route).options(preflight),
             )
+            .route(
+                "/ingest/v1/event",
+                post(web::event_route).options(web::preflight),
+            )
+            .route("/js/k.js", axum::routing::get(crate::analytics::kjs::serve))
             .with_state(self.clone())
     }
 
@@ -788,6 +801,9 @@ async fn preflight() -> Response {
 
 /// Whether `path` is an ingest route (exempt from the CSRF check).
 pub fn is_ingest_path(path: &str) -> bool {
+    if path == "/ingest/v1/event" {
+        return true;
+    }
     let Some(rest) = path.strip_prefix("/api/") else {
         return false;
     };
@@ -810,6 +826,7 @@ mod tests {
             "/api/42/store/",
             "/api/7/envelope",
             "/api/7/store",
+            "/ingest/v1/event",
         ] {
             assert!(is_ingest_path(p), "{p}");
         }

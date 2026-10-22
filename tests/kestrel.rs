@@ -886,6 +886,7 @@ async fn static_files_and_health() {
         ("/static/icon-512.png", "image/png"),
         ("/static/icon-maskable-512.png", "image/png"),
         ("/static/site.webmanifest", "application/manifest+json"),
+        ("/static/analytics.css", "text/css"),
     ] {
         let res = app.get(path).await;
         assert_eq!(res.status, StatusCode::OK, "{path}");
@@ -1018,6 +1019,9 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "alert_log",
             "alert_rule_channels",
             "alert_rules",
+            "analytics_breakdown",
+            "analytics_days",
+            "analytics_hours",
             "api_tokens",
             "dif_files",
             "environments",
@@ -1053,7 +1057,8 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "0002_errors.sql",
             "0003_triage.sql",
             "0004_debug_files.sql",
-            "0005_alerts_releases.sql"
+            "0005_alerts_releases.sql",
+            "0006_analytics.sql"
         ]
     );
     assert!(app.dir.join("store.sqlite").exists());

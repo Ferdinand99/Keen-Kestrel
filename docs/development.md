@@ -6,7 +6,8 @@ Vigilant Vole repository. The kit brings sign-in, users, API tokens, Security, t
 database plumbing and the design system; Kestrel adds its own pages, API, migrations and strings, the
 Sentry-compatible ingest ([below](#ingest)), debug files with symbolication
 ([below](#debug-files-and-symbolication)), alerts ([below](#alerts)), release health
-([below](#releases-and-release-health)) and the REST API and MCP tools ([below](#rest-api-and-mcp)).
+([below](#releases-and-release-health)), the REST API and MCP tools ([below](#rest-api-and-mcp)) and web analytics
+([below](#web-analytics)).
 
 ## Layout
 
@@ -24,7 +25,8 @@ src/
   db/                 # migration set, projects and project_keys, issues (the writer's upsert),
                       # triage (the issue pages' reads, lifecycle actions, retention deletes)
   dsn.rs              # public address, DSNs, SDK snippets
-  ingest/             # Sentry endpoints: keys, body decoding and limits, envelopes, rate limits, capture mode
+  ingest/             # Sentry endpoints: keys, body decoding and limits, envelopes, rate limits, capture mode;
+                      # web.rs: POST /ingest/v1/event
   event/              # normalisation and privacy (scrub.rs, paths.rs), grouping (kestrel:v2), title, culprit, tags
   difs/               # debug files: on disk (files.rs), sentry-cli upload (upload.rs), symbolication
                       # (symbolicate.rs), the symbolication queue (worker.rs), the Debug files page (pages.rs)
@@ -37,15 +39,19 @@ src/
                       # (pages.rs), Settings → Notifications (channels.rs)
   releases/           # the releases pages (mod.rs), release-health rollup (health.rs), sentry-cli's release
                       # commands (cli.rs)
-  retention.rs        # the daily retention job; every minute the end of time-limited ignoring and the rollup
+  analytics/          # web analytics: k.js and its handler (kjs.rs), what a pageview keeps (clean.rs, ua.rs),
+                      # the rollups (rollup.rs), the queries (query.rs), the Web tab (pages.rs)
+  retention.rs        # the daily retention job; every minute the end of time-limited ignoring and the rollups
   api.rs, api/        # REST API v1 and its route table (API reference); issues and events, releases, alert rules
   mcp.rs              # MCP tools
 templates/            # Kestrel's pages (extend kit/layout.html)
-static/               # favicon, home-screen icons, web manifest
+static/               # favicon, home-screen icons, web manifest, the Web tab's stylesheet
 migrations/           # Kestrel's migrations (after the kit's core set); store/ has store.sqlite's own
 locales/              # Kestrel's strings, 26 languages; glossaries in locales/glossary/
 tests/                # in-process app tests, translation coverage, ingest, grouping, issue pages, debug files,
-                      # alerts, releases, the API and MCP for errors
+                      # alerts, releases, the API and MCP for errors, web analytics
+  kjs/                # k.js's behaviour in Node (behaviour.mjs)
+tools/loadtest/web.py # load generator for web analytics ingest
   fixtures/sentry/    # requests recorded from real SDKs, per SDK and version
   fixtures/dsym/      # the dSYM of the sentry-cocoa fixtures' app (symbolication tests)
   snapshots/          # grouping snapshots (insta)
@@ -139,8 +145,8 @@ What happens to a request (docs/design.md §4):
    regressions, first crashes, issues with events) without waiting ([below](#alerts)).
 
 `kestrel.sqlite` holds the index; `store.sqlite` (own migrations in `migrations/store/`, incremental auto-vacuum,
-no backup before migrating) holds payloads, attachments, sessions and feedback, and can be deleted without
-losing issues.
+no backup before migrating) holds payloads, attachments, sessions, feedback and raw analytics events, and can be deleted
+without losing issues or analytics rollups.
 
 ### Capture mode and SDK fixtures
 
@@ -241,6 +247,7 @@ Everyone signed in reads them; editors and admins act.
    rows, so counts, users and the event list stay, and the event page says the details are gone;
 2. issues last seen longer ago than the issue retention go, with their events and details;
 3. hourly counts older than 30 days go;
+4. raw analytics events and analytics rollups older than the project's analytics retention go ([below](#web-analytics));
 
 then rows in `store.sqlite` of projects that no longer exist go, new issues first seen (and regressed ones last
 regressed) more than 7 days ago become `ongoing`, release-health rollups older than 400 days go, so does the
@@ -439,8 +446,9 @@ The REST API v1 (`src/api.rs`, `src/api/`; reference at `/api-docs`, `/api-docs.
 - releases with their all-time health and 7-day adoption, a release's health per day (`?days=&environment=`);
 - alert rules (list, create, change, delete, with validation per field), the alerts sent, and the notification
   channels by name and kind (never their settings, editors only);
-- the ingest endpoints (group "Ingest", access "a project's DSN key") and sentry-cli's (group "sentry-cli",
-  "any API token").
+- web analytics: a time series with totals and a breakdown by one dimension ([below](#web-analytics));
+- the ingest endpoints (group "Ingest", access "a project's DSN key", with `POST /ingest/v1/event` and `GET /js/k.js`)
+  and sentry-cli's (group "sentry-cli", "any API token").
 
 Read tokens act as viewers; changing needs a read-and-write token of an editor or admin, and is noted in the
 issue's activity under the token owner's name.
@@ -448,7 +456,119 @@ issue's activity under the token owner's name.
 The MCP server (`/mcp`) has `list_projects`, `list_issues` (the search syntax), `get_issue` (the issue and its
 latest event as text for a model: the exception chain, in-app frames innermost first with `file:line` and the
 line of code, folded runs of other frames, the last ten breadcrumbs, the request line and tags; never the user
-section), `release_health`, and for a read-and-write token of an editor `resolve_issue` and `ignore_issue`.
+section), `release_health`, `analytics_summary`, `analytics_breakdown`, and for a read-and-write token of an editor
+`resolve_issue` and `ignore_issue`.
+
+## Web analytics
+
+docs/design.md §5; the user guide is [web-analytics.md](web-analytics.md). `src/analytics/`, `src/ingest/web.rs`,
+`migrations/0006_analytics.sql` (rollups and per-project settings) and `migrations/store/0002_analytics.sql` (raw
+events).
+
+**The snippet** (`src/analytics/k.js`, served by `kjs.rs` at `GET /js/k.js`): readable source with comments, served
+with comment lines, indentation and blank lines removed (a rule that can't change what it does, because the source has
+no comment after code and no multi-line string; a unit test holds it to that), gzip-compressed when the browser takes
+it, `Cache-Control: public, max-age=86400`, an ETag (304 on `If-None-Match`), `Access-Control-Allow-Origin: *` and
+`Cross-Origin-Resource-Policy: cross-origin`. Served: about 2.1 KB, 1.0 KB gzip-compressed (a unit test and
+`tests/analytics.rs` keep it under 2 KB). It sends a pageview on load (after prerendering), on `pushState`,
+`replaceState` and `popstate` when the path changed, and on `hashchange` with `data-hash`; it skips `localhost`,
+`127.x`, `[::1]` and `file:` unless `data-localhost`, paths matching `data-exclude`, `navigator.webdriver` and
+`localStorage.kestrel_ignore = 'true'`. `window.kestrel('event', name, props)` sends a custom event (calls queued in
+`kestrel.q` before it loaded are sent too). It posts with `fetch(…, {keepalive: true, credentials: 'omit'})`, so no
+cookie of the Kestrel domain goes along, and falls back to `navigator.sendBeacon`; the body is a JSON string, so the
+browser sends `text/plain` and needs no preflight.
+
+`tests/kjs/behaviour.mjs` runs k.js in Node with a small fake DOM, as written and as served (52 checks: the payload,
+SPA navigation, hash mode, localhost, exclusions, opt-out, webdriver, custom and queued events, `data-api`,
+`sendBeacon`, prerendering, no cookie or storage writes):
+
+```bash
+tar -cf - src/analytics/k.js tests/kjs | docker run --rm -i -w /w --tmpfs /w:exec node:22-alpine \
+  sh -c 'tar -xf - && node tests/kjs/behaviour.mjs src/analytics/k.js'
+# or against a running instance: node tests/kjs/behaviour.mjs http://<kestrel>:3002/js/k.js
+```
+
+**Ingest** (`POST /ingest/v1/event`, also on the ingest port; exempt from the CSRF check): in order, the per-IP bucket
+(`KK_INGEST_IP_RATE_LIMIT`), bots (user agents that aren't Mozilla-compatible or name a crawler, preview, monitor,
+script, headless or automated browser; `Sec-Purpose: prefetch`; client hints naming HeadlessChrome) are answered 202 and
+dropped, the media type (`text/plain`, `application/json` or none, else 415), the body (64 KB, 413), JSON (400), the key
+(`X-Kestrel-Key`, the body's `k`/`key` or `?key=`: 401 when missing or unknown, 403 when disabled), the project's
+`web_analytics` switch (403 when off), the key's allowed origins against `Origin`, else the `Referer`'s origin (a key
+limited to origins needs one; 403), the key's bucket (`rate_limit_per_minute`, 429 with `Retry-After`). The event name
+is `pageview` or a custom name (400 when it can't be one), the page URL is required (http or https, 400). Then one job
+goes to the writer (429 when the queue is full) and the answer is `202 Accepted`, empty, `Cache-Control: no-store`, no
+cookie. Web analytics is on by default for every project and can be switched off in the project's settings (Settings →
+Web analytics); it uses the project's keys, the same as errors.
+
+**What is kept** (`clean.rs`, `ua.rs`): the host (lowercase, no port) and the percent-decoded path without query (the
+fragment's route in hash mode, without its query), at most 512 characters; `utm_source`, `utm_medium`, `utm_campaign`,
+`utm_term`, `utm_content` (200 characters each); the referrer's domain without `www.` (nothing for a self-referral or a
+non-web referrer); browser, OS (names only) and device class (desktop, mobile, tablet) from the user agent; the
+screen-width bucket (`0-575`, `576-991`, `992-1439`, `1440-1919`, `1920+`); for custom events the name (100 characters)
+and up to 20 properties as text (200 characters), without keys that look secret or name an IP address or user agent.
+Paths, UTM values, names and properties have email addresses, IP addresses, phone numbers (9–15 digits written with `+`
+or `00`, or in at least three groups), Luhn-valid card numbers and credentials replaced by `[Filtered]`. The visitor id
+is `trunc64(sha256(salt ‖ project ‖ IP ‖ user agent ‖ host))` (`analytics::visitor_id`), with a salt that lives in
+memory only (`DailySalt`) and changes when the UTC day does and at every start. The IP address and user agent are
+used for that and for the browser, OS and device, then dropped.
+
+**Storage and rollups.** Raw events go to `store.analytics_events` (one row each, Unix seconds, `source = 'web'`; app
+signals will add `'app'`). Every minute (the retention task's tick) `rollup.rs` reads the events after
+`store.analytics_rollup_state.last_id` in batches of 5,000, each batch one writer turn, and adds them to
+`analytics_hours`, `analytics_days` and `analytics_breakdown` (per day, dimension and value: page, entry, referrer,
+`utm_*`, browser, os, device, screen, event) in `kestrel.sqlite`: counts are added, visitors counted once per day (or
+hour) and value through `store.analytics_seen`, which keeps the hashes of today and yesterday (UTC) and drops older
+days. An entry page is a visitor's first pageview of the day. An event of an earlier day (*late*: the server was down,
+the rollup fell behind) has its whole day rolled up again from the raw events, as long as the project's raw retention
+still has the complete day; older ones aren't counted. Unique visitors over a range are the sum of the days'. After a
+rollup the writer tells the Web tabs (`Writer::subscribe_web`).
+
+**Retention** (daily job; Settings → Retention): raw events older than `retention_analytics_raw_days` (30, at most
+400) and rollups older than `retention_analytics_days` (400) go; deleting a project takes both along.
+
+**The Web tab** (`/projects/{id}/web`, `pages.rs`, `templates/web.html`, `partials/web_*.html`,
+`static/analytics.css`): a period (today by hour; 7 or 30 days or a custom range of up to 400 days by day; `?period=`,
+`from`, `to`), visitors, pageviews, views per visitor and custom events, a chart of visitors and pageviews, and cards
+with tabs: top and entry pages; referrers and UTM sources, mediums and campaigns; browsers, operating systems, device
+types, screen sizes; custom events. Clicking a value adds a filter (`?page=`, `referrer=`, `utm_*=`, `browser=`, `os=`,
+`device=`, `screen=`); chips remove them. Without filters everything reads the rollups; with filters the raw events (so
+at most the raw retention, which the page says when the period starts earlier). `…/web/live` streams `web-live` (current
+visitors: distinct visitors in the last five minutes, from the raw events; after new events, at most every two seconds,
+and every 30 seconds) and `web-updated` (the numbers and chart again, after a rollup, while the period includes today).
+Before the first pageview the tab shows the snippet with an enabled key and how to use it. The overview shows the last
+7 days once the project has data.
+
+**API and MCP**: `GET /api/v1/projects/{id}/analytics/timeseries` and `…/breakdown?dimension=` (period, `from`, `to`,
+filters as above, `limit`); MCP `analytics_summary` (totals, the period before, current visitors, the series, top 5 of
+pages, referrers, UTM sources, browsers, devices and events) and `analytics_breakdown`. Counts only, never a visitor id.
+
+**Tests**: `tests/analytics.rs`: the ingest contract (text/plain and JSON, the three ways to give the key, 202 with an
+empty body and no cookie, the preflight, keys, the project switch, media types, sizes, origins via `Origin` and
+`Referer`, bots and headless browsers, both rate limits), what a pageview keeps, visitor ids, rollups (incremental
+uniques, entry pages, hours, ranges, the raw-event filters), late events, retention, the Web tab (empty and with data,
+periods, filters, live stream, the switch, retention fields), the API and MCP, k.js (size, caching, ETag, ingest port)
+and a privacy scan of every text and blob column of both databases after events with a known IP address, user agent,
+email address, phone and card number. Unit tests cover parsing, scrubbing, user agents, the salt and the periods.
+
+### Load check (web)
+
+`tools/loadtest/web.py` (standard library only; open loop, k.js-style pageviews with 400 paths, 10 referrers, 12
+user agents and a random client address each, 3 % custom events) against the release image limited to 2 CPUs and
+2 GB, data on tmpfs, `KK_TRUST_PROXY=1` and `KK_INGEST_IP_RATE_LIMIT=0`:
+
+| Rate | Accepted | p50 | p99 | Max |
+|---|---|---|---|---|
+| 1000 events/s for 20 s | all | 1.0 ms | 1.6 ms | 18 ms |
+| 3000 events/s for 30 s | all | 0.8 ms | 1.6 ms | 25 ms |
+| 3000 events/s for 120 s (two rollups during it) | all | 0.8 ms | 1.6 ms | 24 ms |
+| 6000 events/s for 20 s | all | 0.8 ms | 1.4 ms | 31 ms |
+| 10,000 events/s for 15 s | all | 0.7 ms | 1.5 ms | 58 ms |
+
+All 741,000 events were rolled up (the rollup's totals equal the raw count) in batches that took 2–3 seconds a minute
+at 3000 events/s; the container used about 40 MB at 3000/s and 220 MB with 741,000 raw events and 3.7 million seen-set
+rows on tmpfs (every request a new visitor, the worst case for the seen-set). With that many raw events, a filtered
+breakdown takes about 220 ms and the current-visitor count (410,000 visitors in five minutes) about 0.8 s; unfiltered
+views read the rollups and stay fast.
 
 ## Working on vole-kit at the same time
 

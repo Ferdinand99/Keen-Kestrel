@@ -58,14 +58,15 @@ pub static KIT: KitConfig = KitConfig {
     env_prefix: "KK",
     // `/api/0`: sentry-cli's debug file upload, which takes API tokens only.
     csrf_exempt_prefixes: &["/api/v1", "/api/0", "/mcp"],
-    // Ingest (`/api/{project_id}/envelope/`, `/api/{project_id}/store/`):
-    // SDKs post from any site with a DSN key, never with a session cookie.
+    // Ingest (`/api/{project_id}/envelope/`, `/api/{project_id}/store/`,
+    // `/ingest/v1/event`): SDKs and k.js post from any site with a DSN key,
+    // never with a session cookie.
     csrf_exempt_path: crate::ingest::is_ingest_path,
     extra_common_passwords: &["keenkestrel", "kestrel123"],
     migrations: &crate::db::MIGRATIONS,
     embeddable_prefixes: &[],
     static_file,
-    machine_path_prefixes: &["/static/", "/api/"],
+    machine_path_prefixes: &["/static/", "/api/", "/ingest/", "/js/"],
     machine_paths: &["/healthz", "/mcp"],
     browser_language_prefixes: &[],
     docs: &crate::api::DOCS,

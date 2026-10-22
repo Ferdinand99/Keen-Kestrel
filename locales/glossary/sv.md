@@ -69,3 +69,13 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | AI assistant | AI-assistent | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer ”symboliserad” phrasing in sentences |
+| web analytics | webbstatistik | tab ”Webb”; page title ”Webbstatistik för …” |
+| entry page | landningssida (en) | count column ”Ingångar” |
+| screen size | skärmstorlek (en) | |
+| device type (desktop / mobile / tablet) | enhetstyp (dator / mobil / surfplatta) | card ”Enheter” |
+| operating system | operativsystem (ett; pl. operativsystem) | |
+| browser | webbläsare (en) | |
+| custom event | egen händelse (pl. egna händelser) | shorter than ”anpassad händelse” |
+| current visitors | besökare just nu | live counter, last 5 minutes |
+| direct / none (no referrer) | direkt / ingen | |
+| raw events | råa händelser | settings label ”Spara råa webbhändelser” |

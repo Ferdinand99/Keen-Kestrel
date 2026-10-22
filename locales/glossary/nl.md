@@ -69,3 +69,13 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | AI assistant | AI-assistent | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer “gesymboliseerd” phrasing in sentences |
+| web analytics | webanalyse | tab “Web”; page title “Webanalyse voor …” |
+| entry page | instappagina (de; mv. instappagina’s) | count column “Instappen” |
+| screen size | schermformaat (het) | |
+| device type (desktop / mobile / tablet) | apparaattype (desktop / mobiel / tablet) | card “Apparaten” |
+| operating system | besturingssysteem (het) | |
+| browser | browser (de) | |
+| custom event | eigen gebeurtenis (mv. eigen gebeurtenissen) | shorter than “aangepaste gebeurtenis” |
+| current visitors | bezoekers nu | live counter, last 5 minutes |
+| direct / none (no referrer) | direct / geen | |
+| raw events | ruwe gebeurtenissen | settings label “Ruwe webgebeurtenissen bewaren” |

@@ -1,0 +1,127 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block head %}
+  <link rel="stylesheet" href="/static/analytics.css">
+{% endblock %}
+
+{% block content %}
+{% include "partials/project_head.html" %}
+
+{%- if !enabled %}
+{{ m::callout("warning", tr("web.off_text"), tr("web.off_title")) }}
+{%- endif %}
+
+{%- if has_data %}
+<div class="stack" hx-ext="sse" sse-connect="{{ live_href }}">
+  <div class="cluster cluster-between">
+    <nav class="chips" aria-label="{{ tr("web.period") }}">
+      {%- for c in periods %}
+      <a class="chip" href="{{ c.href }}"{% if c.current %} aria-current="page"{% endif %}>{{ c.label }}</a>
+      {%- endfor %}
+      <button type="button" class="chip" popovertarget="web-custom"{% if custom_current %} aria-pressed="true"{% endif %}>{{ m::icon("calendar") }}<span>{{ custom_label }}</span></button>
+    </nav>
+    <p class="web-live" role="status">
+      <span class="dot status-up" aria-hidden="true"></span>
+      <span>{{ tr("web.current_visitors") }}: <strong class="num" sse-swap="web-live" hx-swap="innerHTML">{{ live }}</strong></span>
+    </p>
+  </div>
+
+  <div class="popover" id="web-custom" popover>
+    <form class="stack-sm" method="get" action="/projects/{{ project.id }}/web">
+      <input type="hidden" name="period" value="custom">
+      {%- for (k, v) in hidden %}
+      <input type="hidden" name="{{ k }}" value="{{ v }}">
+      {%- endfor %}
+      <div class="field">
+        <label class="label" for="web-from">{{ tr("web.from") }}</label>
+        <input id="web-from" name="from" type="date" value="{{ custom_from }}" max="{{ max_day }}" required>
+      </div>
+      <div class="field">
+        <label class="label" for="web-to">{{ tr("web.to") }}</label>
+        <input id="web-to" name="to" type="date" value="{{ custom_to }}" max="{{ max_day }}" required>
+      </div>
+      <p class="help">{{ tr("web.custom_help") }}</p>
+      {{ m::button(tr("web.show"), "primary", "", "submit", "sm") }}
+    </form>
+  </div>
+
+  {%- if !filters.is_empty() %}
+  <div class="cluster" role="group" aria-label="{{ tr("web.filters") }}">
+    {%- for f in filters %}
+    <a class="chip" aria-pressed="true" href="{{ f.href }}" aria-label="{{ tr1("web.remove_filter", "filter", f.label) }}"><span class="break">{{ f.label }}</span>{{ m::icon("x", "icon-sm") }}</a>
+    {%- endfor %}
+    <a class="btn btn-plain btn-sm" href="{{ clear_href }}">{{ tr("web.clear_filters") }}</a>
+  </div>
+  {%- endif %}
+  {%- if !raw_note.is_empty() %}
+  {{ m::callout("info", raw_note) }}
+  {%- endif %}
+
+  <div id="web-summary" class="stack" sse-swap="web-updated" hx-swap="innerHTML">
+    {% include "partials/web_summary.html" %}
+  </div>
+
+  <div class="grid-2">
+    {%- for card in cards %}
+    <section class="card stack-sm" aria-labelledby="card-{{ card.id }}">
+      <h2 class="card-title" id="card-{{ card.id }}">{{ card.title }}</h2>
+      <div data-tabs>
+        {%- if card.panels.len() > 1 %}
+        <div class="tabs" role="tablist" aria-label="{{ card.title }}">
+          {%- for p in card.panels %}
+          <button class="tab" role="tab" type="button" id="t-{{ p.id }}" aria-controls="p-{{ p.id }}" aria-selected="{% if loop.first %}true{% else %}false{% endif %}">{{ p.label }}</button>
+          {%- endfor %}
+        </div>
+        {%- endif %}
+        {%- for p in card.panels %}
+        <div class="tab-panel"{% if card.panels.len() > 1 %} role="tabpanel" id="p-{{ p.id }}" aria-labelledby="t-{{ p.id }}"{% endif %}{% if !loop.first %} hidden{% endif %}>
+          {%- if p.rows.is_empty() %}
+          <p class="muted web-empty">{{ p.empty }}</p>
+          {%- else %}
+          <div class="bars-head" aria-hidden="true"><span>{{ p.label }}</span><span>{{ tr("web.visitors") }}</span>{% if p.id != "entry-pages" %}<span>{{ p.count_label }}</span>{% endif %}</div>
+          <ul class="bars" role="list" aria-label="{{ p.label }}">
+            {%- for b in p.rows %}
+            <li class="bar-row{% if p.id == "entry-pages" %} bar-row-2{% endif %}" style="--share: {{ b.share }}">
+              {%- if b.href.is_empty() %}
+              <span class="bar-label{% if b.mono %} mono{% endif %}" title="{{ b.label }}">{{ b.label }}</span>
+              {%- else %}
+              <a class="bar-label{% if b.mono %} mono{% endif %}" href="{{ b.href }}" title="{{ tr1("web.filter_by", "value", b.label) }}">{{ b.label }}</a>
+              {%- endif %}
+              <span class="bar-num" aria-label="{{ tr("web.visitors") }}">{{ b.visitors }}</span>
+              {%- if p.id != "entry-pages" %}
+              <span class="bar-num" aria-label="{{ p.count_label }}">{{ b.count }}</span>
+              {%- endif %}
+            </li>
+            {%- endfor %}
+          </ul>
+          {%- endif %}
+        </div>
+        {%- endfor %}
+      </div>
+    </section>
+    {%- endfor %}
+  </div>
+  <p class="section-foot">{{ tr("web.foot") }}</p>
+</div>
+
+<section class="section" aria-labelledby="setup-title">
+  <details class="disclosure card">
+    <summary><span id="setup-title">{{ tr("web.setup") }}</span><span class="disclosure-sub">{{ tr("web.setup_sub") }}</span>{{ m::icon("chevron-down") }}</summary>
+    <div class="disclosure-body stack">
+      {% include "partials/web_setup.html" %}
+    </div>
+  </details>
+</section>
+{%- else %}
+<div class="empty-card">
+  {{ m::empty_state("chart", tr("web.empty_title"), tr("web.empty_text")) }}
+</div>
+<section class="section" aria-labelledby="setup-title">
+  {% call m::section_head(tr("web.setup"), tr("web.setup_sub"), "setup-title") %}{% endcall %}
+  <div class="card stack">
+    {% include "partials/web_setup.html" %}
+  </div>
+</section>
+{%- endif %}
+{% endblock %}

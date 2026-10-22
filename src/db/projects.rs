@@ -242,6 +242,24 @@ pub fn update_key(
     Ok(true)
 }
 
+/// Whether the project takes web analytics (`None`: no such project).
+pub fn web_analytics(conn: &Connection, project_id: i64) -> rusqlite::Result<Option<bool>> {
+    conn.query_row(
+        "SELECT web_analytics FROM projects WHERE id = ?1",
+        [project_id],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+/// Turns web analytics on or off. `false` when there is no such project.
+pub fn set_web_analytics(conn: &Connection, project_id: i64, on: bool) -> rusqlite::Result<bool> {
+    Ok(conn.execute(
+        "UPDATE projects SET web_analytics = ?2 WHERE id = ?1",
+        params![project_id, on],
+    )? > 0)
+}
+
 /// Deletes one key. `false` when there is no such key.
 pub fn delete_key(conn: &Connection, project_id: i64, key_id: i64) -> rusqlite::Result<bool> {
     Ok(conn.execute(

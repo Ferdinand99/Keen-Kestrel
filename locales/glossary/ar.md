@@ -69,5 +69,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | finalized (release) | نهائي | lowercase status after a date in English (masculine: إصدار) |
 | header (webhook) | ترويسة (pl. ترويسات) | vole-kit: «ترويسات مخصصة» |
 | instance | التثبيت | as in existing Kestrel strings |
+| web analytics / Web tab | تحليلات الويب / الويب | tab «الويب» |
+| entry page | صفحة الدخول (pl. صفحات الدخول) | count column «مرات الدخول» |
+| screen size | حجم الشاشة (pl. أحجام الشاشات) | |
+| device type (desktop / mobile / tablet) | نوع الجهاز (سطح المكتب / الجوال / جهاز لوحي) | |
+| operating system | نظام التشغيل (pl. أنظمة التشغيل) | |
+| browser | متصفح (pl. متصفحات) | |
+| custom event | حدث مخصّص (pl. أحداث مخصّصة) | sent with `kestrel('event', …)` |
+| current visitors | الزوار الحاليون | the last 5 minutes |
+| direct / none (no referrer) | مباشر / بلا مُحيل | |
+| raw events | الأحداث الأولية | «أحداث الويب الأولية» in retention |
+| traffic sources (card) | مصادر الزيارات | not «المصادر» alone: that is the keys' allowed origins |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer «مع الرموز» phrasing in sentences |

@@ -74,3 +74,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | attempt (delivery) | tentativo (m.) | failed deliveries «vengono ritentati» |
 | header (HTTP) | intestazione (f.) | VV |
 | AI assistant | assistente IA | |
+| entry page | pagina di ingresso (f.) | tab «Pagine di ingresso»; count column «Ingressi» |
+| screen size | dimensione schermo (f.) | tab «Dimensioni schermo» |
+| device type (desktop / mobile / tablet) | tipo di dispositivo (desktop / mobile / tablet) | card «Dispositivi» |
+| operating system | sistema operativo (m.) | tab short form «Sistemi» |
+| browser | browser (m., invariable) |  |
+| custom event | evento personalizzato (m.) |  |
+| current visitors | visitatori ora | stat label; meta «Ultimi 5 minuti» |
+| direct / none (no referrer) | Diretto / nessuno | list row for visits without a referrer |
+| raw events | eventi grezzi | kept for filters |
+| snippet (k.js) | snippet (m.) | loanword, as with «stack trace» |
+| UTM source / medium / campaign | sorgente / mezzo / campagna UTM | as in Google Analytics |

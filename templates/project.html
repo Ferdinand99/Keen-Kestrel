@@ -4,6 +4,25 @@
 {% block content %}
 {% include "partials/project_head.html" %}
 
+{%- if let Some(w) = web %}
+<section class="section" aria-labelledby="web-title">
+  {% call m::section_head(tr("web.overview_title"), tr("web.overview_sub"), "web-title") %}
+    {{ m::link_button(w.href.as_str(), tr("web.open"), "plain", "", "sm") }}
+  {% endcall %}
+  <div class="stats">
+    <a class="stat" href="{{ w.href }}">
+      <span class="stat-label">{{ tr("web.visitors") }}</span>
+      <span class="stat-value num">{{ w.visitors }}</span>
+    </a>
+    <a class="stat" href="{{ w.href }}">
+      <span class="stat-label">{{ tr("web.pageviews") }}</span>
+      <span class="stat-value num">{{ w.pageviews }}</span>
+    </a>
+    {{ m::stat(tr("web.current_visitors"), w.current, "up", tr("web.current_meta")) }}
+  </div>
+</section>
+{%- endif %}
+
 {%- match stats %}
 {%- when Some(s) %}
 <div class="stats">

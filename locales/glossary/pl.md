@@ -75,3 +75,13 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | instance | instancja (f.) | kit: "nazwij instancję" |
 | header (webhook) | nagłówek (m.) | |
 | secrets | sekrety | channel form footer |
+| web analytics | analityka internetowa | tab „Web”; settings and overview card „Analityka internetowa” |
+| entry page | strona wejścia | list „Strony wejścia”; column „Wejścia” |
+| screen size | rozmiar ekranu | list „Rozmiary ekranu” |
+| device type (desktop / mobile / tablet) | typ urządzenia (komputer / telefon / tablet) | card „Urządzenia” |
+| operating system | system operacyjny |  |
+| browser | przeglądarka (f.) |  |
+| custom event | własne zdarzenie | „Własne zdarzenia”; keeps „zdarzenie” for event |
+| current visitors | odwiedzający teraz | stat card, last 5 minutes |
+| direct / none (no referrer) | bezpośrednio / brak |  |
+| raw events | surowe zdarzenia | „Liczby po filtrowaniu” for filtered numbers |

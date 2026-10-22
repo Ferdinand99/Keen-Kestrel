@@ -72,3 +72,13 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | culprit (alert message field) | hibaforrás | as in the issue search help |
 | attempt (delivery) | próbálkozás | „{n} próbálkozás” (delivery attempts) |
 | header (webhook) | fejléc | VV kit: „Egyéni fejlécek” |
+| web analytics | webanalitika | tab „Web” |
+| entry page | belépő oldal | column „Belépések” |
+| screen size | képernyőméret |  |
+| device type (desktop / mobile / tablet) | eszköztípus (asztali / mobil / táblagép) | card „Eszközök” |
+| operating system | operációs rendszer |  |
+| browser | böngésző |  |
+| custom event | egyéni esemény |  |
+| current visitors | jelenlegi látogatók | stat card, last 5 minutes |
+| direct / none (no referrer) | közvetlen / nincs |  |
+| raw events | nyers események | filtered numbers: „szűrt számok” |
