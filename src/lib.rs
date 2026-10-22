@@ -1,9 +1,11 @@
 //! Keen Kestrel: self-hosted, Sentry-compatible error tracking and
 //! privacy-friendly analytics, built on vole-kit.
 //!
-//! This is the skeleton: sign-in, users, API tokens, Security and the API
-//! reference come from the kit; Kestrel adds projects and their DSN keys
-//! (pages, REST API, one MCP tool). Ingest comes next (docs/design.md §11).
+//! Sign-in, users, API tokens, Security and the API reference come from the
+//! kit; Kestrel adds projects and their DSN keys (pages, REST API, one MCP
+//! tool) and Sentry-compatible ingest: normalisation, privacy scrubbing,
+//! grouping into issues and the single batch writer (docs/design.md §4).
+//! The issue pages come next (§11).
 
 #![forbid(unsafe_code)]
 
@@ -11,11 +13,15 @@ pub mod api;
 pub mod config;
 pub mod db;
 pub mod dsn;
+pub mod event;
+pub mod ingest;
 pub mod mcp;
 pub mod pages;
 pub mod product;
 pub mod project;
 pub mod server;
+pub mod store;
+pub mod writer;
 
 use std::path::Path;
 
@@ -31,11 +37,28 @@ pub use product::{VERSION, install};
 /// Why Kestrel could not start.
 pub type StartError = Box<dyn std::error::Error + Send + Sync>;
 
-/// Installs the configuration, opens and migrates the database in
-/// `data_dir` and returns the state. `public_url` (`KK_PUBLIC_URL`) is kept in
-/// the `base_url` setting, which the kit's same-origin checks, API examples
-/// and DSNs read; without one the setting is cleared.
-pub async fn start(data_dir: &Path, public_url: Option<&str>) -> Result<Core, StartError> {
+/// A running Kestrel: the kit's state and ingest's (writer, store, buckets).
+#[derive(Clone)]
+pub struct Kestrel {
+    pub core: Core,
+    pub ingest: ingest::Ingest,
+}
+
+/// [`start_with`] with the default ingest settings.
+pub async fn start(data_dir: &Path, public_url: Option<&str>) -> Result<Kestrel, StartError> {
+    start_with(data_dir, public_url, ingest::Settings::default()).await
+}
+
+/// Installs the configuration, opens and migrates both databases in
+/// `data_dir`, starts the writer and returns the state. `public_url`
+/// (`KK_PUBLIC_URL`) is kept in the `base_url` setting, which the kit's
+/// same-origin checks, API examples and DSNs read; without one the setting
+/// is cleared.
+pub async fn start_with(
+    data_dir: &Path,
+    public_url: Option<&str>,
+    settings: ingest::Settings,
+) -> Result<Kestrel, StartError> {
     install();
     std::fs::create_dir_all(data_dir).map_err(|e| {
         format!(
@@ -60,12 +83,14 @@ pub async fn start(data_dir: &Path, public_url: Option<&str>) -> Result<Core, St
     let public_url = public_url.map(str::to_string);
     core.with_conn(move |c| settings::set_opt(c, settings::BASE_URL, public_url.as_deref()))
         .await?;
-    Ok(core)
+    let ingest = ingest::Ingest::start(core.clone(), data_dir, settings).await?;
+    Ok(Kestrel { core, ingest })
 }
 
-/// The whole app: Kestrel's pages and API, the kit's pages, static files,
-/// MCP and the health probe, behind the kit's middleware.
-pub fn router(core: Core) -> Router {
+/// The whole app: Kestrel's pages and API, ingest, the kit's pages, static
+/// files, MCP and the health probe, behind the kit's middleware.
+pub fn router(app: Kestrel) -> Router {
+    let core = app.core;
     let protected = Router::new()
         .merge(pages::router())
         .merge(api::router())
@@ -75,6 +100,7 @@ pub fn router(core: Core) -> Router {
         .route("/healthz", get(vole_kit::http::healthz))
         .route("/static/{*path}", get(vole_kit::http::assets::static_asset))
         .route("/mcp", post(mcp::endpoint).get(vole_kit::mcp::not_offered))
+        .merge(app.ingest.router())
         .merge(kit_pages::public_router());
     protected
         .merge(public)
@@ -84,4 +110,16 @@ pub fn router(core: Core) -> Router {
         .layer(from_fn(vole_kit::http::error::negotiate))
         .layer(from_fn(vole_kit::http::headers::security_headers))
         .with_state(core)
+}
+
+/// Ingest alone, for the separate ingest port (`KK_INGEST_PORT`): the ingest
+/// routes and the health probe, nothing of the admin interface.
+pub fn ingest_router(app: Kestrel) -> Router {
+    Router::new()
+        .route("/healthz", get(vole_kit::http::healthz))
+        .merge(app.ingest.router())
+        .fallback(vole_kit::http::error::not_found)
+        .layer(from_fn(vole_kit::http::error::negotiate))
+        .layer(from_fn(vole_kit::http::headers::security_headers))
+        .with_state(app.core)
 }

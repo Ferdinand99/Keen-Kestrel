@@ -62,10 +62,10 @@ impl App {
             N.fetch_add(1, Ordering::SeqCst)
         ));
         let _ = std::fs::remove_dir_all(&dir);
-        let core = keen_kestrel::start(&dir, None).await.unwrap();
+        let kestrel = keen_kestrel::start(&dir, None).await.unwrap();
         App {
-            router: keen_kestrel::router(core.clone()),
-            core,
+            router: keen_kestrel::router(kestrel.clone()),
+            core: kestrel.core,
             cookies: BTreeMap::new(),
             dir,
         }
@@ -465,7 +465,8 @@ async fn the_public_url_makes_the_dsn() {
     let _ = std::fs::remove_dir_all(&dir);
     let core = keen_kestrel::start(&dir, Some("https://errors.example.com"))
         .await
-        .unwrap();
+        .unwrap()
+        .core;
     assert_eq!(
         core.base_url().await.as_deref(),
         Some("https://errors.example.com")
@@ -494,7 +495,7 @@ async fn the_public_url_makes_the_dsn() {
         format!("https://{key}@errors.example.com/{id}")
     );
     // Without the setting, it is cleared again.
-    let core = keen_kestrel::start(&dir, None).await.unwrap();
+    let core = keen_kestrel::start(&dir, None).await.unwrap().core;
     assert_eq!(core.base_url().await, None);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -1003,14 +1004,29 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
         tables,
         [
             "api_tokens",
+            "environments",
+            "events",
+            "issue_hashes",
+            "issue_tag_values",
+            "issues",
+            "issues_fts",
+            "issues_fts_config",
+            "issues_fts_data",
+            "issues_fts_docsize",
+            "issues_fts_idx",
             "project_keys",
             "projects",
+            "releases",
             "schema_migrations",
             "settings",
             "users"
         ]
     );
-    assert_eq!(applied, ["kit/0001_core.sql", "0001_projects.sql"]);
+    assert_eq!(
+        applied,
+        ["kit/0001_core.sql", "0001_projects.sql", "0002_errors.sql"]
+    );
+    assert!(app.dir.join("store.sqlite").exists());
 
     // Starting again changes nothing and takes no backup.
     let report = vole_kit::db::migrate(&app.core.db, &app.dir.join("backups"))

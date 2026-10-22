@@ -23,6 +23,7 @@ askama = "0.16.1"
 axum = "0.8.9"
 axum-extra = { version = "0.12.6", features = ["cookie", "cookie-signed", "form"] }
 clap = { version = "4.6.7", features = ["derive", "env"] }
+deadpool-sqlite = "0.14.0"
 rand = "0.10.3"
 reqwest = { version = "0.13.5", default-features = false }
 rusqlite = { version = "0.40", features = ["bundled"] }
@@ -34,10 +35,25 @@ tokio = { version = "1.53.1", features = ["full"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 url = "2.5.8"
+# Ingest: request bodies arrive gzip-, deflate-, br- or zstd-compressed;
+# event payloads are kept zstd-compressed in store.sqlite.
+brotli = { version = "8.0.2", default-features = false, features = ["std"] }
+flate2 = "1.1.10"
+zstd = { version = "0.13.3", default-features = false }
+# Grouping: hashes, value normalisation and Swift demangling (the C++
+# demangler builds with the C toolchain the bundled SQLite needs anyway).
+hex = "0.4.3"
+jiff = "0.2.38"
+regex = "1.13.1"
+sha2 = "0.11.1"
+symbolic-common = "13.9.0"
+symbolic-demangle = { version = "13.9.0", default-features = false, features = ["swift"] }
 
 [build-dependencies]
 # Copies the kit's templates into templates/kit/ for askama (build.rs).
 vole-kit-build = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.1.0" }
 
 [dev-dependencies]
+# Grouping snapshots (tests/snapshots); review changes with `cargo insta review`.
+insta = "1.43"
 tower = "0.5.3"
