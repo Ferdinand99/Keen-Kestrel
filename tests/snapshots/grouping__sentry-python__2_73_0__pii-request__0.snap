@@ -1,0 +1,27 @@
+---
+source: tests/grouping.rs
+expression: text
+---
+title: KeyError: 'missing basket for card [Filtered]'
+culprit: generic WSGI request
+level: error
+platform: python
+config: kestrel:v1
+hash: 77d0a2b48d074b5e6d29a2ae9b0fe975
+unsymbolicated: false
+tags: level=error, environment=fixtures, release=fixture-python@1.0.0, server_name=fixture-host, transaction=generic WSGI request, client_os.name=Linux, client_os=Linux, runtime.name=CPython, runtime=CPython 3.13.17, handled=no, mechanism=wsgi
+components:
+{
+  "kind": "exception",
+  "values": [
+    {
+      "frames": [
+        {
+          "function": "app",
+          "module": "__main__"
+        }
+      ],
+      "type": "KeyError"
+    }
+  ]
+}

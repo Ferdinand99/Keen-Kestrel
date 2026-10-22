@@ -1,0 +1,17 @@
+---
+source: tests/grouping.rs
+expression: text
+---
+title: Order A-17 failed after 3 retries
+culprit: app
+level: error
+platform: node
+config: kestrel:v1
+hash: c3501c18efb711dd2f4aa248c861d70f
+unsymbolicated: false
+tags: level=error, environment=fixtures, release=fixture-node@1.0.0, server_name=fixture-host, os.name=Alpine Linux, os=Alpine Linux 3.24.3, runtime.name=node, runtime=node v22.23.4, handled=yes, mechanism=generic
+components:
+{
+  "kind": "message",
+  "template": "Order %s failed after %s retries"
+}

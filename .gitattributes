@@ -28,3 +28,5 @@ Dockerfile text eol=lf
 *.woff2    binary
 *.sqlite   binary
 *.zip      binary
+# Recorded SDK requests (tests/fixtures/sentry): bodies as sent, byte for byte
+*.body     binary

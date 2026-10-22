@@ -1,0 +1,11 @@
+{
+  "method": "POST",
+  "uri": "/api/1/envelope/?sentry_version=7&sentry_key=0123456789abcdef0123456789abcdef&sentry_client=sentry.javascript.node%2F11.8.0",
+  "headers": {
+    "connection": "keep-alive",
+    "content-length": "4708",
+    "host": "kk-ingest-capture:3002",
+    "transfer-encoding": "chunked",
+    "user-agent": "sentry.javascript.node/11.8.0"
+  }
+}

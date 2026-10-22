@@ -1,0 +1,11 @@
+{
+  "method": "POST",
+  "uri": "/api/1/envelope/",
+  "headers": {
+    "accept": "*/*",
+    "content-length": "12034",
+    "host": "kk-ingest-capture:3002",
+    "user-agent": "ureq/3.5.0",
+    "x-sentry-auth": "Sentry sentry_key=0123456789abcdef0123456789abcdef, sentry_version=7, sentry_timestamp=1792677545.4768772, sentry_client=sentry.rust/0.49.3"
+  }
+}
