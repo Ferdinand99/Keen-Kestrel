@@ -1,0 +1,29 @@
+services:
+  keen-kestrel:
+    build: .
+    image: keen-kestrel:latest
+    container_name: keen-kestrel
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    volumes:
+      # Database (kestrel.sqlite), session key and pre-migration backups. The
+      # container hands this folder to its `kestrel` user (uid 1000) on start;
+      # with `user:` set, it must already be writable by that user.
+      - ./data:/data # -> /mnt/user/appdata/keen-kestrel on Unraid
+    environment:
+      - KK_DATA_DIR=/data
+      # - KK_PUBLIC_URL=https://kestrel.example.com  # the address in DSNs; without it, each request's own
+      # - KK_TRUST_PROXY=1               # behind a reverse proxy (Caddy/Traefik/nginx) that sets X-Forwarded-*
+      # - KK_SETUP_TOKEN=change-me       # /setup only opens with ?token=change-me
+      # - TZ=Europe/Oslo                 # log timestamps
+      # - RUST_LOG=info,keen_kestrel=debug
+      # Run the app as another uid:gid, e.g. Unraid's nobody:users.
+      # - PUID=99
+      # - PGID=100
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3002/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

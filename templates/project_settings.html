@@ -1,0 +1,122 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{% include "partials/project_head.html" %}
+
+<section class="section" aria-labelledby="details-title">
+  {% call m::section_head(tr("project.details"), "", "details-title") %}{% endcall %}
+  {%- if ctx.can_edit() %}
+  <form class="card form" method="post" action="/projects/{{ project.id }}/settings" data-warn-unsaved>
+    {{ m::field_text("name", tr("projects.name"), value=&self.form_name, required=true, error=&self.name_error) }}
+    {{ m::field_text("slug", tr("project.slug"), value=&self.form_slug, help=tr("project.slug_help"), required=true, error=&self.slug_error) }}
+    {% include "partials/platform_choices.html" %}
+    <div class="form-actions">
+      {{ m::button(tr("project.save")) }}
+    </div>
+  </form>
+  {%- else %}
+  <div class="card">
+    <dl class="dl">
+      <div class="dl-row"><dt>{{ tr("projects.name") }}</dt><dd>{{ project.name }}</dd></div>
+      <div class="dl-row"><dt>{{ tr("project.slug") }}</dt><dd class="mono">{{ project.slug }}</dd></div>
+      <div class="dl-row"><dt>{{ tr("projects.platform") }}</dt><dd>{{ project.platform }}</dd></div>
+    </dl>
+  </div>
+  {%- endif %}
+  <p class="section-foot">{{ tr("project.id") }}: <span class="mono num">{{ project.id }}</span> · {{ tr("common.created") }} {{ m::time_ago(&project.created_at) }}</p>
+</section>
+
+<section class="section" aria-labelledby="keys-title" id="keys">
+  {% call m::section_head(tr("keys.title"), tr("keys.sub"), "keys-title") %}
+    {%- if ctx.can_edit() %}
+    <button type="button" class="btn btn-secondary btn-sm" data-sheet-open="#new-key" commandfor="new-key" command="show-modal">{{ m::icon("plus") }}<span>{{ tr("keys.new") }}</span></button>
+    {%- endif %}
+  {% endcall %}
+  {%- if keys.is_empty() %}
+  <div class="card card-flush">
+    {{ m::empty_state("key", tr("keys.empty_title"), tr("keys.empty_text")) }}
+  </div>
+  {%- endif %}
+  {%- for k in keys %}
+  <article class="card stack-sm" id="key-{{ k.id }}">
+    {% call m::card_head(&k.name, tr1("keys.public_key_is", "key", k.public_key)) %}
+      {%- if k.enabled %}<span class="pill status-up"><span class="dot"></span>{{ tr("keys.enabled") }}</span>{% else %}<span class="pill status-paused">{{ tr("keys.disabled") }}</span>{% endif %}
+    {% endcall %}
+    {{ m::copy_field(&k.dom_id, &k.dsn) }}
+    <dl class="dl">
+      <div class="dl-row"><dt>{{ tr("keys.rate_limit") }}</dt><dd>{% match k.rate_limit %}{% when Some(n) %}{{ tr1("keys.per_minute", "n", num(n)) }}{% when None %}{{ tr("keys.no_limit") }}{% endmatch %}</dd></div>
+      <div class="dl-row"><dt>{{ tr("keys.origins") }}</dt><dd class="break">{% if k.origins.is_empty() %}{{ tr("keys.any_origin") }}{% else %}{{ k.origins.join(", ") }}{% endif %}</dd></div>
+      <div class="dl-row"><dt>{{ tr("common.created") }}</dt><dd>{{ m::time_ago(&k.created_at) }}</dd></div>
+    </dl>
+    {%- if ctx.can_edit() %}
+    <div class="card-foot">
+      <form method="post" action="/projects/{{ project.id }}/keys/{{ k.id }}/delete" data-confirm="{{ tr1("keys.delete_q", "name", k.name) }}" data-confirm-message="{{ tr("keys.delete_msg") }}" data-confirm-label="{{ tr("common.delete") }}">
+        {{ m::button(tr("common.delete"), "danger", "trash", "submit", "sm") }}
+      </form>
+      <button type="button" class="btn btn-secondary btn-sm" data-sheet-open="#edit-key-{{ k.id }}" commandfor="edit-key-{{ k.id }}" command="show-modal">{{ m::icon("pencil") }}<span>{{ tr("common.edit") }}</span></button>
+    </div>
+    {%- endif %}
+  </article>
+  {%- endfor %}
+</section>
+
+{%- if ctx.can_edit() %}
+<section class="section" aria-labelledby="danger-title">
+  {% call m::section_head(tr("project.delete"), tr("project.delete_sub"), "danger-title") %}{% endcall %}
+  <form class="card" method="post" action="/projects/{{ project.id }}/delete" data-confirm="{{ tr1("project.delete_q", "name", project.name) }}" data-confirm-message="{{ tr("project.delete_msg") }}" data-confirm-label="{{ tr("project.delete") }}">
+    {{ m::button(tr("project.delete"), "danger", "trash") }}
+  </form>
+</section>
+
+<dialog class="sheet" id="new-key" aria-labelledby="new-key-title">
+  <div class="sheet-grabber" aria-hidden="true"></div>
+  <header class="sheet-head">
+    <h2 class="sheet-title" id="new-key-title">{{ tr("keys.new") }}</h2>
+    <button type="button" class="btn btn-icon btn-plain btn-sm" data-sheet-close commandfor="new-key" command="close" aria-label="{{ tr("common.close") }}">{{ m::icon("x") }}</button>
+  </header>
+  <div class="sheet-body">
+    <form id="new-key-form" class="form" method="post" action="/projects/{{ project.id }}/keys">
+      {{ m::field_text("name", tr("projects.name"), placeholder=tr("keys.name_placeholder"), required=true, sfx="-new-key") }}
+    </form>
+  </div>
+  <footer class="sheet-foot">
+    <button type="button" class="btn btn-secondary" data-sheet-close commandfor="new-key" command="close">{{ tr("common.cancel") }}</button>
+    <button type="submit" class="btn btn-primary" form="new-key-form">{{ tr("keys.create") }}</button>
+  </footer>
+</dialog>
+
+{%- for k in keys %}
+<dialog class="sheet" id="edit-key-{{ k.id }}" aria-labelledby="edit-key-{{ k.id }}-title">
+  <div class="sheet-grabber" aria-hidden="true"></div>
+  <header class="sheet-head">
+    <h2 class="sheet-title" id="edit-key-{{ k.id }}-title">{{ tr1("keys.edit_title", "name", k.name) }}</h2>
+    <button type="button" class="btn btn-icon btn-plain btn-sm" data-sheet-close commandfor="edit-key-{{ k.id }}" command="close" aria-label="{{ tr("common.close") }}">{{ m::icon("x") }}</button>
+  </header>
+  <div class="sheet-body">
+    <form id="edit-key-{{ k.id }}-form" class="form" method="post" action="/projects/{{ project.id }}/keys/{{ k.id }}">
+      {{ m::field_text("name", tr("projects.name"), value=&k.name, required=true, sfx=&k.dom_sfx) }}
+      {{ m::switch("enabled", tr("keys.enabled"), k.enabled, tr("keys.enabled_help"), &k.dom_sfx) }}
+      <div class="field">
+        <label class="label" for="f-rate{{ k.dom_sfx }}">{{ tr("keys.rate_limit") }} <span class="label-optional">{{ tr("common.optional") }}</span></label>
+        <div class="input-group">
+          <input id="f-rate{{ k.dom_sfx }}" name="rate_limit" type="number" inputmode="numeric" autocomplete="off" min="1" max="1000000" value="{{ k.rate_limit_value }}" placeholder="{{ tr("keys.no_limit") }}" aria-describedby="f-rate{{ k.dom_sfx }}-help">
+          <span class="input-addon" aria-hidden="true">{{ tr("keys.rate_limit_unit") }}</span>
+        </div>
+        <p class="help" id="f-rate{{ k.dom_sfx }}-help">{{ tr("keys.rate_limit_help") }}</p>
+      </div>
+      <div class="field">
+        <label class="label" for="f-origins{{ k.dom_sfx }}">{{ tr("keys.origins") }} <span class="label-optional">{{ tr("common.optional") }}</span></label>
+        <textarea id="f-origins{{ k.dom_sfx }}" name="allowed_origins" rows="3" class="textarea-code" spellcheck="false" placeholder="https://example.com…" aria-describedby="f-origins{{ k.dom_sfx }}-help">{{ k.origins_text }}</textarea>
+        <p class="help" id="f-origins{{ k.dom_sfx }}-help">{{ tr("keys.origins_help") }}</p>
+      </div>
+    </form>
+  </div>
+  <footer class="sheet-foot">
+    <button type="button" class="btn btn-secondary" data-sheet-close commandfor="edit-key-{{ k.id }}" command="close">{{ tr("common.cancel") }}</button>
+    <button type="submit" class="btn btn-primary" form="edit-key-{{ k.id }}-form">{{ tr("keys.save") }}</button>
+  </footer>
+</dialog>
+{%- endfor %}
+{%- endif %}
+{% endblock %}

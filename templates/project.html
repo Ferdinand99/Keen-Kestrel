@@ -1,0 +1,46 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{% include "partials/project_head.html" %}
+
+<div class="empty-card">
+  {{ m::empty_state("clock", tr("project.no_events_title"), tr("project.no_events_text")) }}
+</div>
+
+<section class="section" aria-labelledby="setup-title">
+  {% call m::section_head(tr("project.send_first"), tr("project.send_first_sub"), "setup-title") %}{% endcall %}
+  {%- match dsn %}
+  {%- when Some(dsn) %}
+  <div class="card stack">
+    <div class="stack-sm">
+      <span class="label" id="dsn-label">{{ tr("project.dsn") }}</span>
+      {{ m::copy_field("project-dsn", dsn) }}
+      <p class="help">{{ tr("project.dsn_help") }}</p>
+    </div>
+    <div data-tabs>
+      <div class="tabs" role="tablist" aria-label="{{ tr("project.sdk_tabs") }}">
+        {%- for s in snippets %}
+        <button class="tab" role="tab" type="button" id="t-{{ s.id }}" aria-controls="p-{{ s.id }}" aria-selected="{% if s.id == first_tab %}true{% else %}false{% endif %}">{{ s.label }}</button>
+        {%- endfor %}
+      </div>
+      {%- for s in snippets %}
+      <div class="tab-panel stack-sm" role="tabpanel" id="p-{{ s.id }}" aria-labelledby="t-{{ s.id }}"{% if s.id != first_tab %} hidden{% endif %}>
+        <p class="help">{{ tr1("project.install_sdk", "sdk", s.sdk) }}</p>
+        <pre class="code"><code id="install-{{ s.id }}">{{ s.install }}</code></pre>
+        <div class="toolbar"><button type="button" class="btn btn-secondary btn-sm" data-copy="#install-{{ s.id }}">{{ m::icon("copy") }}<span>{{ tr("project.copy_command") }}</span></button></div>
+        <p class="help">{{ tr("project.start_sdk") }}</p>
+        <pre class="code"><code id="code-{{ s.id }}">{{ s.code }}</code></pre>
+        <div class="toolbar"><button type="button" class="btn btn-secondary btn-sm" data-copy="#code-{{ s.id }}">{{ m::icon("copy") }}<span>{{ tr("project.copy_code") }}</span></button></div>
+      </div>
+      {%- endfor %}
+    </div>
+  </div>
+  <p class="section-foot">{{ tr("project.ingest_later") }}</p>
+  {%- when None %}
+  <div class="card card-flush">
+    {{ m::empty_state("key", tr("project.no_key_title"), tr("project.no_key_text"), &self.settings_href, tr("project.open_settings")) }}
+  </div>
+  {%- endmatch %}
+</section>
+{% endblock %}

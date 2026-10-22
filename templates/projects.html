@@ -1,0 +1,36 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{% call m::page_header(tr("projects.title"), tr("projects.sub")) %}
+  {%- if ctx.can_edit() && !projects.is_empty() %}{{ m::link_button("/projects/new", tr("projects.new"), "primary", "plus") }}{% endif %}
+{% endcall %}
+
+{% if projects.is_empty() -%}
+<div class="empty-card">
+  {%- if ctx.can_edit() %}
+  {{ m::empty_state("box", tr("projects.empty_title"), tr("projects.empty_text"), "/projects/new", tr("projects.create_first")) }}
+  {%- else %}
+  {{ m::empty_state("box", tr("projects.empty_title"), tr("projects.empty_viewer")) }}
+  {%- endif %}
+</div>
+{%- else -%}
+<ul class="list" role="list">
+  {%- for p in projects %}
+  <li>
+    <a class="list-row" href="/projects/{{ p.id }}">
+      <span class="list-icon">{{ m::icon(p.icon) }}</span>
+      <span class="list-main">
+        <span class="list-title list-title-wrap">{{ p.name }}</span>
+        <span class="list-sub">{{ p.platform }} · <span class="mono">{{ p.slug }}</span></span>
+      </span>
+      <span class="list-trail">
+        {%- if p.enabled_keys == 0 %}<span class="pill status-paused hide-sm">{{ tr("keys.none_enabled") }}</span>{% else %}<span class="badge hide-sm">{{ trn("projects.key_count", p.enabled_keys) }}</span>{% endif -%}
+        {{ m::icon("chevron-right", "list-chevron") }}
+      </span>
+    </a>
+  </li>
+  {%- endfor %}
+</ul>
+{%- endif %}
+{% endblock %}
