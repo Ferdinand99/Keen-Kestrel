@@ -63,7 +63,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown ("at most every … per issue") | nejvýše jednou za … na problém | select label "Pro problém nejvýše jednou za [1 h]" |
 | threshold / alert above | víc než … / upozornit nad | "Víc než [100] událostí za hodinu"; message field "Upozornit nad" |
 | multiplier | … × víc než obvykle | "A víc než [5] ×" |
-| adoption | podíl (m.) | share of the sessions in the last 7 days |
+| adoption | podíl (m.) | share of the sessions in the last 7 days; also share of an app's daily active users |
 | crashed / errored / abnormal (session) | s pádem / s chybami, bez pádu / abnormálně ukončené | session outcomes |
 | finalized (release) | dokončena | lowercase status, agrees with "verze" |
 | attempt (delivery) | pokus (m.; pl. pokusy / pokusů) | |
@@ -81,3 +81,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | current visitors | aktuální návštěvníci | stat card, last 5 minutes |
 | direct / none (no referrer) | přímo / žádný |  |
 | raw events | surové události | filtered numbers: „filtrované počty“ |
+| install / install id | instalace / identifikátor instalace | a random id per app installation; only its keyed hash is kept |
+| signal type | typ signálu |  |
+| payload | data signálu | the key/value data sent with a signal; „Žádná data“ when empty |
+| signal explorer | průzkumník signálů | tab „Průzkumník signálů“ |
+| test signal | testovací signál | from debug builds, TestFlight, the simulator |
+| strict mode | přísný režim | user id changes every day |
+| build (app build) | sestavení (n.) | as `dist` in the event view; debug build: „ladicí sestavení“ |
+| device model | model zařízení |  |
+| locale | jazyk a oblast | card „Jazyky“ |
+| platform | platforma (f.) |  |
+| release identifier (bundle@version+build) | identifikátor verze | dimension label, to tell it apart from „Verze“ |

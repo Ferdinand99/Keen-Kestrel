@@ -61,7 +61,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (“at most every … per issue”) | 每个问题最短间隔 | summary: 每个问题最多每{time}一次 |
 | threshold | 阈值 | spike form reads 每小时超过 [100] 次事件; message field 告警阈值 |
 | multiplier (× the usual) | 倍 | 超过平常的{k}倍 |
-| adoption | 采用率 | share of the sessions in the last 7 days |
+| adoption | 采用率 | share of the sessions in the last 7 days; also share of an app's daily active users |
 | crash-free rate | 无崩溃率 | |
 | errored (session) | 有错误，未崩溃 | |
 | abnormal (session ended abnormally) | 异常结束 | |
@@ -80,3 +80,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | raw events | 原始事件 | 原始网站事件 in retention |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer 已符号化 phrasing in sentences |
+| app analytics / App tab | 应用统计 / 应用 | tab 应用 |
+| install / install id | 安装 / 安装ID | a random id per app installation |
+| signal type | 信号类型 | |
+| payload | 负载 | key/value data sent with a signal |
+| signal explorer | 信号探索 | |
+| test signal | 测试信号 | debug builds, TestFlight, simulator |
+| strict mode | 严格模式 | the user id changes every day |
+| build (app build) | 构建版本 | as in App Store Connect; 调试构建版本 |
+| version (dimension next to release) | 版本号 | where 版本 (release) and the bare version appear side by side |
+| device model | 设备型号 | |
+| locale | 语言和地区 | as in Apple's settings |
+| platform | 平台 | |

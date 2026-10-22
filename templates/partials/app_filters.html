@@ -1,0 +1,77 @@
+{#- The App tab's and the explorer's period chips, filter bar, filter chips
+    and notes. Expects the fields both templates share and `m`. -#}
+<nav class="chips" aria-label="{{ tr("web.period") }}">
+  {%- for c in periods %}
+  <a class="chip" href="{{ c.href }}"{% if c.current %} aria-current="page"{% endif %}>{{ c.label }}</a>
+  {%- endfor %}
+  <button type="button" class="chip" popovertarget="app-custom"{% if custom_current %} aria-pressed="true"{% endif %}>{{ m::icon("calendar") }}<span>{{ custom_label }}</span></button>
+</nav>
+
+<div class="popover" id="app-custom" popover>
+  <form class="stack-sm" method="get" action="{{ form_action }}">
+    <input type="hidden" name="period" value="custom">
+    {%- for (k, v) in bar.filter_hidden %}
+    <input type="hidden" name="{{ k }}" value="{{ v }}">
+    {%- endfor %}
+    <div class="field">
+      <label class="label" for="app-from">{{ tr("web.from") }}</label>
+      <input id="app-from" name="from" type="date" value="{{ custom_from }}" max="{{ max_day }}" required>
+    </div>
+    <div class="field">
+      <label class="label" for="app-to">{{ tr("web.to") }}</label>
+      <input id="app-to" name="to" type="date" value="{{ custom_to }}" max="{{ max_day }}" required>
+    </div>
+    <p class="help">{{ tr("web.custom_help") }}</p>
+    {{ m::button(tr("web.show"), "primary", "", "submit", "sm") }}
+  </form>
+</div>
+
+<form class="card app-filters" method="get" action="{{ form_action }}" aria-label="{{ tr("web.filters") }}">
+  {%- for (k, v) in bar.hidden %}
+  <input type="hidden" name="{{ k }}" value="{{ v }}">
+  {%- endfor %}
+  <div class="field">
+    <label class="label" for="app-version">{{ tr("app.dim_version") }}</label>
+    <select id="app-version" name="version">
+      <option value="">{{ tr("app.all_versions") }}</option>
+      {%- for o in bar.versions %}
+      <option value="{{ o.value }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>
+      {%- endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label class="label" for="app-platform">{{ tr("app.dim_platform") }}</label>
+    <select id="app-platform" name="platform">
+      <option value="">{{ tr("app.all_platforms") }}</option>
+      {%- for o in bar.platforms %}
+      <option value="{{ o.value }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>
+      {%- endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label class="label" for="app-type">{{ tr("app.dim_type") }}</label>
+    <select id="app-type" name="type">
+      <option value="">{% if sub == "explorer" %}{{ tr("app.pick_type") }}{% else %}{{ tr("app.all_types") }}{% endif %}</option>
+      {%- for o in bar.types %}
+      <option value="{{ o.value }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>
+      {%- endfor %}
+    </select>
+  </div>
+  {{ m::checkbox("test", tr("app.include_test"), bar.include_test, tr("app.include_test_help")) }}
+  <div class="app-filters-actions">{{ m::button(tr("app.apply"), "secondary", "", "submit", "sm") }}</div>
+</form>
+
+{%- if !filters.is_empty() %}
+<div class="cluster" role="group" aria-label="{{ tr("web.filters") }}">
+  {%- for f in filters %}
+  <a class="chip" aria-pressed="true" href="{{ f.href }}" aria-label="{{ tr1("web.remove_filter", "filter", f.label) }}"><span class="break">{{ f.label }}</span>{{ m::icon("x", "icon-sm") }}</a>
+  {%- endfor %}
+  <a class="btn btn-plain btn-sm" href="{{ clear_href }}">{{ tr("web.clear_filters") }}</a>
+</div>
+{%- endif %}
+{%- if !raw_note.is_empty() %}
+{{ m::callout("info", raw_note) }}
+{%- endif %}
+{%- if !test_note.is_empty() %}
+<p class="help">{{ test_note }} <a href="{{ test_href }}">{{ tr("app.test_include") }}</a></p>
+{%- endif %}

@@ -63,6 +63,7 @@ function page(code, opts = {}) {
   if (!opts.noFetch) window.fetch = fetchFn;
   const navigator = {
     webdriver: !!opts.webdriver,
+    globalPrivacyControl: opts.gpc,
     sendBeacon: (url, body) => {
       record(url, body, 'beacon');
       return true;
@@ -157,6 +158,13 @@ for (const [form, code] of [['source', source], ['served', minify(source)]]) {
   check(t('127.0.0.1 is ignored'), page(code, { href: 'http://127.0.0.1:8080/' }).sent.length === 0);
   check(t('data-localhost sends'), page(code, { href: 'http://localhost:3000/', attrs: { 'data-localhost': '' } }).sent.length === 1);
   check(t('webdriver is ignored'), page(code, { webdriver: true }).sent.length === 0);
+  // Global Privacy Control: nothing is sent, not even custom events.
+  p = page(code, { gpc: true });
+  p.window.kestrel('event', 'Signup', { plan: 'pro' });
+  p.history.pushState({}, '', '/docs');
+  check(t('Global Privacy Control sends nothing'), p.sent.length === 0, p.sent);
+  check(t('globalPrivacyControl false sends'), page(code, { gpc: false }).sent.length === 1);
+  check(t('globalPrivacyControl unknown sends'), page(code, {}).sent.length === 1);
   check(t('kestrel_ignore opts out'), page(code, { ignore: true }).sent.length === 0);
   check(t('no key, nothing sent'), page(code, { noKey: true }).sent.length === 0);
   const ex = { 'data-exclude': '/admin/*, /preview' };

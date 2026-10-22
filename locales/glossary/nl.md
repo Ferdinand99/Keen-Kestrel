@@ -60,7 +60,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | digest | overzicht (het) | “Als overzicht versturen”; status pill “In overzicht” |
 | cooldown (at most every … per issue) | hoogstens elke … per probleem | label “Per probleem hoogstens elke” |
 | threshold | drempel (de) | in the form: “Meer dan [100] gebeurtenissen per uur”; message field “Melden boven” |
-| adoption | verspreiding | the release's share of sessions |
+| adoption | verspreiding | the release's share of sessions; also its share of an app's daily active users |
 | abnormal (session ended abnormally) | abnormaal beëindigd | |
 | errored (session) | met fouten, geen crash | |
 | finalized (release) | afgerond | lowercase status after a date |
@@ -79,3 +79,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | current visitors | bezoekers nu | live counter, last 5 minutes |
 | direct / none (no referrer) | direct / geen | |
 | raw events | ruwe gebeurtenissen | settings label “Ruwe webgebeurtenissen bewaren” |
+| app analytics | app-analyse | tab “App”; page title “App-analyse voor …” |
+| install / install id | installatie / installatie-ID (de) | a random id per app installation |
+| signal type | signaaltype (het; mv. signaaltypen) | `App.launched` and the like stay as code |
+| payload | payload (de) | the key/value data an app sends with a signal; its keys are “velden” in sentences (avoids a clash with the project “sleutel”) |
+| signal explorer | signaalverkenner (de) | nav item short “Verkenner” |
+| test signal | testsignaal (het) | from debug builds, TestFlight and the simulator; “Testsignalen meenemen” |
+| strict mode | strikte modus | |
+| build (app build) | build (de; mv. builds) | “debugbuild” |
+| device model | apparaatmodel (het) | |
+| locale | taal en regio | as Apple’s “Taal en regio”; card “Talen” |
+| platform | platform (het; mv. platforms) | |
+| OS version | systeemversie (de) | |

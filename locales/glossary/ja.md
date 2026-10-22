@@ -63,7 +63,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (“at most every … per issue”) | 問題ごとの最短間隔 | summary: 「問題ごとに{time}に1回まで」 |
 | threshold | しきい値 | spike form reads 「1時間に [100] 件を超えるイベント」; message field 「アラートのしきい値」 |
 | multiplier (× the usual) | 倍 | 「通常の{k}倍超」; the form shows 「かつ平均の [5] ×」 |
-| adoption | 普及率 | share of the sessions in the last 7 days |
+| adoption | 普及率 | share of the sessions in the last 7 days; also share of an app's daily active users |
 | crash-free rate | クラッシュフリー率 | |
 | errored (session) | エラーあり、クラッシュなし | |
 | abnormal (session ended abnormally) | 異常終了 | |
@@ -81,3 +81,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | raw events | 生イベント | 「生のWebイベント」 in retention |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer 「シンボル化済み」 phrasing in sentences |
+| app analytics / App tab | アプリアナリティクス / アプリ | tab 「アプリ」 |
+| install / install id | インストール / インストールID | a random id per app installation |
+| signal type | シグナルの種類 | |
+| payload | ペイロード | key/value data sent with a signal |
+| signal explorer | シグナルエクスプローラー | nav item 「エクスプローラー」 |
+| test signal | テストシグナル | debug builds, TestFlight, simulator |
+| strict mode | 厳格モード | the user id changes every day |
+| build (app build) | ビルド | 「デバッグビルド」 |
+| device model | デバイスのモデル | |
+| locale | 言語と地域 | as in Apple's settings; 「ロケール」 is too technical |
+| platform | プラットフォーム | |

@@ -64,7 +64,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | digest | resumen (m.) | «Enviar como resumen»; status pill «En resumen» |
 | cooldown (at most every … per issue) | como máximo cada … | «Por problema, como máximo cada [1 h]» |
 | threshold / alert above | umbral (m.) / umbral de alerta | form label «Más de [100] eventos por hora» |
-| adoption | adopción (f.) | share of the last 7 days’ sessions |
+| adoption | adopción (f.) | share of the last 7 days’ sessions; also share of an app’s daily active users |
 | errored (session) | con errores, sin fallo | session row label |
 | abnormal (session ended abnormally) | fin anómalo | session row label |
 | crashed (session) | con fallo | session row label |
@@ -85,3 +85,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | raw events | eventos sin procesar | kept for filters |
 | snippet (k.js) | fragmento (m.) | «el fragmento k.js» |
 | UTM source / medium / campaign | fuente / medio / campaña UTM |  |
+| app analytics | analítica de app | tab «App»; page title «Analítica de app de …» |
+| install / install id | instalación (f.) / ID de instalación (m.) | a random id per app installation |
+| signal type | tipo de señal (m.) | `App.launched` and the like stay as code |
+| payload | carga útil (f.) | the key/value data an app sends with a signal |
+| signal explorer | explorador de señales (m.) | nav item short «Explorador» |
+| test signal | señal de prueba (f.) | from debug builds, TestFlight and the simulator |
+| strict mode | modo estricto (m.) | |
+| build (app build) | compilación (f.) | as in TestFlight; «compilación de depuración» |
+| device model | modelo de dispositivo (m.) | |
+| locale | idioma y región | as Apple’s «Idioma y región»; card «Idiomas» |
+| platform | plataforma (f.) | |
+| OS version | versión del sistema (f.) | |
+| release (as an analytics dimension) | versión completa | dimension label, to tell `bundle@version+build` apart from «Versión» (app version) |

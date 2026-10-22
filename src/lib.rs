@@ -7,8 +7,9 @@
 //! writer), the issue pages with search and triage, retention, debug files
 //! with symbolication of native crashes, alerts through the kit's
 //! notification providers, release health and the releases pages, web
-//! analytics (the k.js snippet, rollups, the Web tab), and the REST API and
-//! MCP tools for all of it (docs/design.md §4–§6).
+//! analytics (the k.js snippet, rollups, the Web tab), app analytics
+//! (KestrelKit's signals, the App tab and the signal explorer), and the REST
+//! API and MCP tools for all of it (docs/design.md §4–§6).
 
 #![forbid(unsafe_code)]
 
@@ -125,6 +126,7 @@ pub fn router(app: Kestrel) -> Router {
         .merge(releases::router())
         .merge(releases::cli::router())
         .merge(analytics::pages::router())
+        .merge(analytics::app::pages::router())
         .merge(alerts::pages::router())
         .merge(alerts::channels::router())
         .merge(difs::pages::router())

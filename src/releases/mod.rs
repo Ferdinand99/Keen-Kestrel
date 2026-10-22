@@ -67,7 +67,10 @@ pub struct ReleaseRow {
     pub events: i64,
     pub crash_free_sessions: Option<f64>,
     pub crash_free_users: Option<f64>,
+    /// Of the app's daily users when app analytics has the release, else of
+    /// the sessions.
     pub adoption: Option<f64>,
+    pub adoption_title: &'static str,
     /// Status class of the crash-free sessions rate.
     pub health_status: &'static str,
 }
@@ -82,6 +85,15 @@ pub fn health_status(rate: Option<f64>) -> &'static str {
     }
 }
 
+/// What a release's adoption is a share of.
+fn adoption_meta(r: &Release) -> &'static str {
+    i18n::t(if r.adoption_users.is_some() {
+        "release.adoption_users_meta"
+    } else {
+        "release.adoption_meta"
+    })
+}
+
 fn row(project_id: i64, r: &Release) -> ReleaseRow {
     let cfs = r.health.crash_free_sessions();
     ReleaseRow {
@@ -94,7 +106,8 @@ fn row(project_id: i64, r: &Release) -> ReleaseRow {
         events: r.events,
         crash_free_sessions: cfs,
         crash_free_users: r.health.crash_free_users(),
-        adoption: r.adoption,
+        adoption: r.adoption_users.or(r.adoption),
+        adoption_title: adoption_meta(r),
         health_status: health_status(cfs),
     }
 }
@@ -212,6 +225,7 @@ pub struct Stats {
     pub users: i64,
     pub crashed_users: i64,
     pub adoption: Option<f64>,
+    pub adoption_meta: &'static str,
 }
 
 #[derive(Template)]
@@ -337,7 +351,8 @@ async fn release_page(
         abnormal: h.abnormal,
         users: h.users,
         crashed_users: h.crashed_users,
-        adoption: release.adoption,
+        adoption: release.adoption_users.or(release.adoption),
+        adoption_meta: adoption_meta(&release),
     };
     let title = release.version.clone();
     let (ctx, jar) = PageCtx::build(&core, Some(&user), &jar, title, "projects", "").await;

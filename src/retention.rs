@@ -115,10 +115,12 @@ pub fn spawn(writer: Writer, difs: Difs) {
                 Ok(_) => {}
                 Err(err) => tracing::warn!(%err, "can't roll up the sessions"),
             }
+            let started = std::time::Instant::now();
             match crate::analytics::rollup::run(&writer).await {
                 Ok(r) if r.events > 0 => tracing::debug!(
                     events = r.events,
                     late_days = r.late_days,
+                    ms = started.elapsed().as_millis() as u64,
                     "analytics rolled up"
                 ),
                 Ok(_) => {}

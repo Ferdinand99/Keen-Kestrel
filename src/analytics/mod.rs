@@ -1,6 +1,6 @@
-//! Web analytics (docs/design.md §5): pageviews and custom events from the
-//! `k.js` snippet, without cookies and without storing IP addresses or user
-//! agents.
+//! Analytics (docs/design.md §5): web pageviews and custom events from the
+//! `k.js` snippet, and app signals from KestrelKit ([`app`]), without
+//! cookies and without storing IP addresses, user agents or install ids.
 //!
 //! * [`kjs`]: `GET /js/k.js`, the snippet;
 //! * `crate::ingest::web`: `POST /ingest/v1/event`, which checks the key,
@@ -19,6 +19,7 @@
 //! browser on another day; unique visitors over a range are the sum of the
 //! days' uniques.
 
+pub mod app;
 pub mod clean;
 pub mod kjs;
 pub mod pages;

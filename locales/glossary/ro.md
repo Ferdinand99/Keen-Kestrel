@@ -64,7 +64,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | digest | rezumat (n.) | „Trimite ca rezumat”; status pill „În rezumat” |
 | cooldown (at most every … per issue) | cel mult o dată la … | „Pentru fiecare problemă, cel mult o dată la [1 h]” |
 | threshold / alert above | prag (n.) / prag de alertă | form label „Peste [100] evenimente pe oră” |
-| adoption | adoptare (f.) | share of the last 7 days’ sessions |
+| adoption | adoptare (f.) | share of the last 7 days’ sessions; also share of an app’s daily active users |
 | errored (session) | cu erori, fără blocare | session row label |
 | abnormal (session ended abnormally) | încheiate anormal | session row label (f. pl.: sesiuni) |
 | crashed (session) | blocate | session row label (f. pl.: sesiuni) |
@@ -86,3 +86,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | raw events | evenimente brute | kept for filters |
 | snippet (k.js) | fragment de cod / script | „scriptul k.js” |
 | UTM source / medium / campaign | sursă / mediu / campanie UTM |  |
+| app analytics | statistici de aplicație | tab „Aplicație” |
+| install / install id | instalare (f.) / ID de instalare | random id per app installation |
+| signal type | tip de semnal |  |
+| payload | date atașate | the key/value data an app sends with a signal |
+| signal explorer | explorator de semnale |  |
+| test signal | semnal de test |  |
+| strict mode | mod strict | the user id changes every day |
+| build (app build) | build (n.; pl. build-uri) | debug build: „build de depanare” |
+| release (signal dimension, bundle@version+build) | versiune completă | only where it stands next to „Versiune” (the app version) |
+| device model | model de dispozitiv |  |
+| locale (language and region setting) | limbă și regiune |  |
+| platform | platformă (f.) |  |

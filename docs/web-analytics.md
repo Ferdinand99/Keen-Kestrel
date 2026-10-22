@@ -3,7 +3,8 @@
 Keen Kestrel counts your website's visitors and pageviews without cookies and without keeping IP addresses: a small
 script, `k.js`, sends a pageview from every page, and the project's **Web** tab shows visitors and pageviews over
 time, top pages, entry pages, referrers, UTM campaigns, browsers, operating systems, device types, screen sizes and
-custom events. Errors and analytics share the same projects and keys, so a website can be one project for both.
+custom events. Errors and analytics share the same projects and keys, so a website can be one project for both. For
+apps, see [App analytics](app-analytics.md).
 
 ## 1. Add the snippet
 
@@ -36,7 +37,7 @@ its `Referer`) against them.
 
 To leave your own visits out, open your site, then the browser's console, and run
 `localStorage.kestrel_ignore = 'true'` (and `localStorage.removeItem('kestrel_ignore')` to count them again). Browsers
-driven by automation (`navigator.webdriver`) never send.
+driven by automation (`navigator.webdriver`) and browsers with Global Privacy Control on never send.
 
 ## 2. Single-page apps
 
@@ -97,8 +98,10 @@ Because visitor ids change every day, unique visitors are counted per day: over 
 counts three times. Kestrel can't follow anyone from one day to the next, and nor can anyone who gets hold of its
 databases.
 
-Kestrel doesn't act on the browser's "Do Not Track" or Global Privacy Control signals yet (nothing personal is kept
-either way); this is an open question in the design.
+**Global Privacy Control** is respected: in a browser where it is on (`navigator.globalPrivacyControl`), `k.js` sends
+nothing, not even custom events, and Kestrel drops any event that arrives with the `Sec-GPC: 1` header (it answers as
+usual, so nothing breaks). The older "Do Not Track" header is ignored, as most browsers have dropped it; nothing
+personal is kept either way.
 
 Bots, crawlers, link previews, monitors, headless and automated browsers and prefetches are recognised by their user
 agent and headers and not counted. They get the same answer as everyone else.

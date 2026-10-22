@@ -35,7 +35,7 @@
             </td>
             <td class="num nowrap" data-label="{{ tr("releases.crash_free_sessions") }}"><span class="dot status-{{ r.health_status }}" aria-hidden="true"></span> {{ pct(r.crash_free_sessions) }}</td>
             <td class="num nowrap" data-label="{{ tr("releases.crash_free_users") }}">{{ pct(r.crash_free_users) }}</td>
-            <td class="num nowrap" data-label="{{ tr("releases.adoption") }}">{{ pct(r.adoption) }}</td>
+            <td class="num nowrap" data-label="{{ tr("releases.adoption") }}" title="{{ r.adoption_title }}">{{ pct(r.adoption) }}</td>
             <td class="num" data-label="{{ tr("releases.new_issues") }}">{{ num(r.new_issues) }}</td>
             <td class="num" data-label="{{ tr("releases.events") }}">{{ num(r.events) }}</td>
             <td class="nowrap" data-label="{{ tr("releases.last_seen") }}">{{ m::time_ago(&r.last_seen) }}</td>

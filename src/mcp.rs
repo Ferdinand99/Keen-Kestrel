@@ -10,7 +10,9 @@
 //! * `release_health`: crash-free sessions and users of a release;
 //! * `analytics_summary` and `analytics_breakdown`: a project's web
 //!   analytics (visitors, pageviews, top pages and referrers; the top
-//!   values of one dimension), never a visitor id;
+//!   values of one dimension) or app analytics (daily, weekly and monthly
+//!   active users, sessions, signals, top signal types, versions and
+//!   devices), never a visitor id or user hash;
 //! * `resolve_issue` and `ignore_issue`, offered only to a read-and-write
 //!   token of an editor or admin.
 //!
@@ -29,6 +31,8 @@ use vole_kit::mcp::{Handler, RpcResult};
 use vole_kit::state::Core;
 
 use crate::analytics::Dim;
+use crate::analytics::app::AppDim;
+use crate::analytics::app::pages::{self as app_pages, AppView};
 use crate::analytics::pages::{self as web, View};
 use crate::analytics::query::Period;
 use crate::api::issues::{issue_json, search_issues, set_status};
@@ -77,6 +81,18 @@ fn filters_arg() -> Value {
     json!({
         "type": "object",
         "description": "Only count events with these values, e.g. {\"page\": \"/pricing\", \"browser\": \"Firefox\"}. Keys: page, referrer, utm_source, utm_medium, utm_campaign, browser, os, device, screen.",
+        "additionalProperties": {"type": "string"}
+    })
+}
+
+fn source_arg() -> Value {
+    json!({"type": "string", "enum": ["web", "app"], "description": "web: pageviews from the k.js snippet; app: signals from KestrelKit. Default: web, or app when the project only has app analytics."})
+}
+
+fn app_filters_arg() -> Value {
+    json!({
+        "type": "object",
+        "description": "App analytics only: count only signals with these values, e.g. {\"version\": \"1.4.0\", \"platform\": \"iOS\", \"type\": \"Paywall.shown\"}. Keys: version, platform, type.",
         "additionalProperties": {"type": "string"}
     })
 }
@@ -270,11 +286,144 @@ impl Kestrel {
         })
     }
 
+    /// Whether a call is about app analytics: `source`, else the
+    /// dimension, else whether the project only has app analytics.
+    async fn is_app(&self, args: &Map<String, Value>, project_id: i64) -> Result<bool, Value> {
+        match str_arg(args, "source") {
+            Some("app") => return Ok(true),
+            Some("web") => return Ok(false),
+            Some(other) => {
+                return Err(tool_error(format!(
+                    "Unknown source {other}: use web or app."
+                )));
+            }
+            None => {}
+        }
+        if let Some(d) = str_arg(args, "dimension") {
+            if Dim::parse(d).is_none() && AppDim::parse(d).is_some() {
+                return Ok(true);
+            }
+            if Dim::parse(d).is_some() {
+                return Ok(false);
+            }
+        }
+        let (web, app) = self
+            .core
+            .with_conn(move |c| {
+                Ok((
+                    crate::analytics::query::has_data(c, project_id)?,
+                    crate::analytics::app::query::has_data(c, project_id)?,
+                ))
+            })
+            .await
+            .map_err(|e| tool_error(format!("Could not read the analytics: {e}")))?;
+        Ok(app && !web)
+    }
+
+    /// The period and filters of an app analytics call.
+    fn app_view(args: &Map<String, Value>) -> Result<AppView, Value> {
+        let mut q = url::form_urlencoded::Serializer::new(String::new());
+        for key in ["period", "from", "to"] {
+            if let Some(v) = str_arg(args, key) {
+                q.append_pair(key, v);
+            }
+        }
+        if let Some(Value::Object(filters)) = args.get("filters") {
+            for (k, v) in filters {
+                if let Some(v) = v.as_str() {
+                    q.append_pair(k, v);
+                }
+            }
+        }
+        if args.get("include_test").and_then(Value::as_bool) == Some(true) {
+            q.append_pair("test", "1");
+        }
+        AppView::try_parse(&q.finish(), web::today()).map_err(|why| {
+            tool_error(format!(
+                "Can't read the period ({why}). Use today, yesterday, 7d, 30d, any 1d–400d, or custom with from and to (YYYY-MM-DD)."
+            ))
+        })
+    }
+
+    async fn app_summary(&self, project: &Project, args: &Map<String, Value>) -> Value {
+        let v = match Self::app_view(args) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let mut data = match crate::api::app::timeseries_json(
+            &self.core,
+            &self.ingest,
+            project.id,
+            &v,
+        )
+        .await
+        {
+            Ok(d) => d,
+            Err(e) => return tool_error(format!("Could not read the analytics: {e}")),
+        };
+        let days = v.period.days();
+        let before = AppView {
+            period: Period {
+                from: v.period.from - days,
+                to: v.period.from - 1,
+            },
+            name: "custom".into(),
+            filters: v.filters.clone(),
+        };
+        let previous = app_pages::load(&self.core, &self.ingest, project.id, &before, false)
+            .await
+            .map(|d| d.totals)
+            .unwrap_or_default();
+        let mut tops = Map::new();
+        for dim in [
+            AppDim::Type,
+            AppDim::Version,
+            AppDim::Platform,
+            AppDim::Os,
+            AppDim::Model,
+            AppDim::Locale,
+        ] {
+            let rows = app_pages::top(&self.core, &self.ingest, project.id, &v, dim, 5)
+                .await
+                .unwrap_or_default();
+            tops.insert(
+                dim.code().to_string(),
+                Value::from(
+                    rows.iter()
+                        .map(crate::api::app::row_json)
+                        .collect::<Vec<_>>(),
+                ),
+            );
+        }
+        data["previous_period"] = json!({
+            "from": before.period.from_date(),
+            "to": before.period.to_date(),
+            "totals": crate::api::app::totals_json(&previous),
+        });
+        data["top"] = Value::Object(tops);
+        if let Some(b) = self.core.base_url().await {
+            data["url"] = Value::from(format!(
+                "{}/projects/{}/app?{}",
+                b.trim_end_matches('/'),
+                project.id,
+                v.qs()
+            ));
+        }
+        data["project"] = json!({"id": project.id, "name": project.name, "slug": project.slug});
+        let text = format_app_summary(project, &data);
+        text_and_data(text, &data)
+    }
+
     async fn analytics_summary(&self, args: Map<String, Value>) -> Value {
         let project = match self.project(&args).await {
             Ok(p) => p,
             Err(e) => return e,
         };
+        match self.is_app(&args, project.id).await {
+            Ok(true) => return self.app_summary(&project, &args).await,
+            Ok(false) => {}
+            Err(e) => return e,
+        }
         let v = match Self::analytics_view(&args) {
             Ok(v) => v,
             Err(e) => return e,
@@ -340,11 +489,40 @@ impl Kestrel {
         text_and_data(text, &data)
     }
 
+    async fn app_breakdown(&self, project: &Project, args: &Map<String, Value>) -> Value {
+        let Some(dim) = str_arg(args, "dimension").and_then(AppDim::parse) else {
+            return tool_error(format!(
+                "Name the dimension of app analytics: {}.",
+                crate::api::app::dimension_help()
+            ));
+        };
+        let v = match Self::app_view(args) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let limit = int_arg(args, "limit").unwrap_or(10).clamp(1, 100);
+        match crate::api::app::breakdown_json(&self.core, &self.ingest, project.id, &v, dim, limit)
+            .await
+        {
+            Ok(mut d) => {
+                d["project"] =
+                    json!({"id": project.id, "name": project.name, "slug": project.slug});
+                text_result(&d)
+            }
+            Err(e) => tool_error(format!("Could not read the analytics: {e}")),
+        }
+    }
+
     async fn analytics_breakdown(&self, args: Map<String, Value>) -> Value {
         let project = match self.project(&args).await {
             Ok(p) => p,
             Err(e) => return e,
         };
+        match self.is_app(&args, project.id).await {
+            Ok(true) => return self.app_breakdown(&project, &args).await,
+            Ok(false) => {}
+            Err(e) => return e,
+        }
         let Some(dim) = str_arg(&args, "dimension").and_then(Dim::parse) else {
             return tool_error(format!(
                 "Name the dimension: {}.",
@@ -706,6 +884,72 @@ fn format_summary(project: &Project, d: &Value) -> String {
     out
 }
 
+/// The app summary as text for a model.
+fn format_app_summary(project: &Project, d: &Value) -> String {
+    let n = |v: &Value| v.as_i64().unwrap_or(0);
+    let t = &d["totals"];
+    let p = &d["previous_period"]["totals"];
+    let mut out = format!(
+        "# App analytics of {} ({} to {}, UTC)\n",
+        project.name,
+        d["from"].as_str().unwrap_or(""),
+        d["to"].as_str().unwrap_or("")
+    );
+    let f = &d["filters"];
+    let mut filters: Vec<String> = ["version", "platform", "type"]
+        .iter()
+        .filter_map(|k| f[*k].as_str().map(|v| format!("{k}={v}")))
+        .collect();
+    if f["include_test"].as_bool() == Some(true) {
+        filters.push("test signals included".into());
+    }
+    if !filters.is_empty() {
+        let _ = writeln!(out, "Filters: {}", filters.join(", "));
+    }
+    let _ = writeln!(
+        out,
+        "Active users on {}: {} today, {} in the last 7 days, {} in the last 30 days\nSessions: {} ({} vs the period before)\nSignals: {} ({})\nUsers in the last 5 minutes: {}",
+        d["to"].as_str().unwrap_or(""),
+        n(&t["dau"]),
+        n(&t["wau"]),
+        n(&t["mau"]),
+        n(&t["sessions"]),
+        change(n(&t["sessions"]), n(&p["sessions"])),
+        n(&t["signals"]),
+        change(n(&t["signals"]), n(&p["signals"])),
+        n(&d["current_users"]),
+    );
+    out.push_str(
+        "Test signals (debug builds, TestFlight, the simulator) are left out unless asked for.\n",
+    );
+    for (key, title) in [
+        ("type", "Top signal types"),
+        ("version", "Versions"),
+        ("platform", "Platforms"),
+        ("os", "OS versions"),
+        ("model", "Device models"),
+        ("locale", "Locales"),
+    ] {
+        let Some(rows) = d["top"][key].as_array().filter(|r| !r.is_empty()) else {
+            continue;
+        };
+        let _ = writeln!(out, "\n## {title} (users per day added up, signals)");
+        for r in rows {
+            let _ = writeln!(
+                out,
+                "  {}: {}, {}",
+                r["label"].as_str().unwrap_or(""),
+                n(&r["users"]),
+                n(&r["count"])
+            );
+        }
+    }
+    if let Some(url) = d["url"].as_str() {
+        let _ = writeln!(out, "\nDashboard: {url}");
+    }
+    out
+}
+
 impl Handler for Kestrel {
     fn can_write(&self) -> bool {
         self.can_write
@@ -721,7 +965,10 @@ impl Handler for Kestrel {
              breadcrumbs), and release_health for crash-free sessions and users of a release. \
              For websites with the k.js snippet, analytics_summary gives visitors, pageviews, current \
              visitors and the top pages, referrers and browsers for a period, and analytics_breakdown \
-             the top values of one dimension; unique visitors are counted per UTC day.",
+             the top values of one dimension; unique visitors are counted per UTC day. For apps with \
+             KestrelKit, pass source: app to get daily, weekly and monthly active users, sessions, signals, \
+             the top signal types, versions and devices, or a breakdown by type, version, build, release, \
+             platform, os, model or locale.",
         );
         if self.can_write {
             s.push_str(
@@ -790,16 +1037,18 @@ impl Handler for Kestrel {
             }),
             json!({
                 "name": "analytics_summary",
-                "title": "Web analytics summary",
-                "description": "A website's analytics for a period (default the last 7 days): unique visitors (counted per UTC day and added up), pageviews, custom events, visitors in the last 5 minutes, the same totals for the period before, the series by day (or hour for one day), and the top 5 pages, referrers, UTM sources, browsers, devices and custom events. Filters narrow everything to events with those values (they read the raw events, kept 30 days).",
+                "title": "Analytics summary",
+                "description": "A project's analytics for a period (default the last 7 days). Web (k.js): unique visitors (counted per UTC day and added up), pageviews, custom events, visitors in the last 5 minutes, the same totals for the period before, the series by day (or hour for one day), and the top 5 pages, referrers, UTM sources, browsers, devices and custom events. App (KestrelKit, source app): daily, weekly and monthly active users on the period's last day, sessions, signals, users in the last 5 minutes, the period before, the series, and the top 5 signal types, versions, platforms, OS versions, device models and locales; test signals only with include_test. Filters narrow everything to events or signals with those values (they read the raw events, kept 30 days).",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "project": project_arg(),
+                        "source": source_arg(),
                         "period": period_arg(),
                         "from": {"type": "string", "description": "With period custom: the first day, YYYY-MM-DD (UTC)."},
                         "to": {"type": "string", "description": "With period custom: the last day, YYYY-MM-DD (UTC; default today)."},
-                        "filters": filters_arg()
+                        "filters": {"anyOf": [filters_arg(), app_filters_arg()]},
+                        "include_test": {"type": "boolean", "description": "App analytics: count test signals (debug builds, TestFlight, the simulator) too. Default false."}
                     },
                     "required": ["project"],
                     "additionalProperties": false
@@ -808,17 +1057,19 @@ impl Handler for Kestrel {
             }),
             json!({
                 "name": "analytics_breakdown",
-                "title": "Web analytics breakdown",
-                "description": "The top values of one dimension of a website's analytics for a period, most visitors first, each with its unique visitors and count (pageviews; entries for entry pages; events for custom events). Dimensions: page, entry (a visitor's first page of the day), referrer (domain; empty is direct), utm_source, utm_medium, utm_campaign, browser, os, device (desktop, mobile, tablet), screen (width bucket), event (custom event names).",
+                "title": "Analytics breakdown",
+                "description": "The top values of one dimension of a project's analytics for a period, most visitors (users) first, each with its unique visitors (users, counted per day and added up) and count. Web dimensions (count: pageviews; entries for entry pages; events for custom events): page, entry (a visitor's first page of the day), referrer (domain; empty is direct), utm_source, utm_medium, utm_campaign, browser, os, device (desktop, mobile, tablet), screen (width bucket), event (custom event names). App dimensions (source app; count: signals): type (signal type), version, build, release (bundle@version+build), platform, os (platform and version), model (hardware model), locale.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "project": project_arg(),
-                        "dimension": {"type": "string", "enum": ["page", "entry", "referrer", "utm_source", "utm_medium", "utm_campaign", "browser", "os", "device", "screen", "event"]},
+                        "source": source_arg(),
+                        "dimension": {"type": "string", "enum": ["page", "entry", "referrer", "utm_source", "utm_medium", "utm_campaign", "browser", "os", "device", "screen", "event", "type", "version", "build", "release", "platform", "model", "locale"]},
                         "period": period_arg(),
                         "from": {"type": "string", "description": "With period custom: the first day, YYYY-MM-DD (UTC)."},
                         "to": {"type": "string", "description": "With period custom: the last day, YYYY-MM-DD (UTC; default today)."},
-                        "filters": filters_arg(),
+                        "filters": {"anyOf": [filters_arg(), app_filters_arg()]},
+                        "include_test": {"type": "boolean", "description": "App analytics: count test signals too. Default false."},
                         "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Values (default 10)."}
                     },
                     "required": ["project", "dimension"],

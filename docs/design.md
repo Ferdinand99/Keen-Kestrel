@@ -1,7 +1,7 @@
 # Keen Kestrel – design
 
-Status: approved design. Phases 1–7 are built and released as v0.1 "errors"; phase 8 (web analytics) is built;
-the phase table in §11 has the state. This document is the reference for everyone building Kestrel, people and
+Status: approved design. Phases 1–7 are built and released as v0.1 "errors"; phase 8 (web analytics) and the
+server side of phase 9 (app analytics) are built; the phase table in §11 has the state. This document is the reference for everyone building Kestrel, people and
 agents alike; change it when a decision changes.
 
 ## 1. What and why
@@ -189,6 +189,10 @@ the rollup. This gives crash-free sessions and crash-free users per release.
 - **App users:** the SDK creates a random install id (never IDFA or IDFV); the server stores
   `HMAC(project_secret, install_id)`, truncated. This is pseudonymous and stable, which makes daily,
   weekly and monthly active users possible. A strict per-project mode rotates it daily.
+  As built (phase 9): `trunc64(HMAC-SHA256(secret, "install" ‖ 0 ‖ install_id))`, the session id likewise with
+  `"session"`; the secret is 32 random bytes per project (`projects.app_secret`, made by a trigger for every new
+  project), never shown or in the API. Strict mode keys with `HMAC(secret, "day" ‖ 0 ‖ UTC day)` of the signal's day.
+  No IP address or user agent is read for app signals beyond the in-memory per-IP rate limit.
 - Payload values that look like an email address, phone number or card number are scrubbed.
 
 ### 5.3 Ingest, rollups, dashboards
@@ -203,8 +207,22 @@ the rollup. This gives crash-free sessions and crash-free users per release.
   entry page, referrer, UTM source/medium/campaign, browser, OS, device class, screen bucket, custom event). Events of
   older days roll their day up again from the raw events. Dashboards read the rollups; filters combine dimensions,
   which one-dimensional rollups can't, so filtered views read the raw events (the raw retention, 30 days). Custom web
-  events are named events with up to 20 properties, stored with the raw event. `DNT` and `Sec-GPC` are not acted on
-  (nothing personal is kept either way); whether to is an open question.
+  events are named events with up to 20 properties, stored with the raw event. Global Privacy Control is respected
+  (decided after phase 8): k.js sends nothing when `navigator.globalPrivacyControl` is true and ingest drops events
+  with `Sec-GPC: 1` (still 202); `DNT` is ignored.
+- App analytics (phase 9, as built): `POST /ingest/v1/signals` follows KestrelKit's `docs/protocol.md` v1 and its
+  proposals (256 KB after decompression; lenient per signal, strict per batch; unknown fields ignored; 202/400/401/403/
+  413/429/503 with `Retry-After` in seconds; clock skew corrected by `sent_at`; scrubbing on both sides). A separate
+  per-project switch (`projects.app_analytics`) turns signals off, apart from web analytics'. Raw signals share
+  `store.analytics_events` (`source = 'app'`, with app columns); one request's batch is one writer job. The minute's
+  rollup adds them to the same `analytics_*` tables with `source = 'app'`: signals (`events`), daily users
+  (`visitors`), sessions, and `wau`/`mau` per day; breakdowns by type, version, build, release
+  (`bundle@version+build`), platform, OS version, model and locale, and payload values per type and key (at most 50
+  per day, the rest as one). Weekly and monthly users are exact distinct counts: `store.app_users` keeps 31 days of
+  daily user sets; a day's row starts from the distinct users of the days before (two counts per project and day),
+  and each user new to the day is looked up once in the days before. Test signals (debug, TestFlight, simulator)
+  stay raw and out of the rollups; the dashboard's "include test signals" toggle reads the raw signals like any other
+  filter.
 - Dashboards: apps (users, sessions, signals over time, top signal types, version adoption, OS, devices,
   locales) and web (visitors, pageviews, top pages, referrers, UTM, browsers, OS, devices), with one
   filter bar (date range, version, platform, signal type).
@@ -219,7 +237,9 @@ the rollup. This gives crash-free sessions and crash-free users per release.
 ### 5.5 Errors and analytics together
 Same project and keys. A Sentry release `bundle@version+build` matches an analytics app version + build,
 so the release page shows adoption next to the crash-free rate and new issues, and the project overview
-shows both modules.
+shows both modules. As built: adoption is the release's share of the app's daily active users over the last 7 days
+(user-days); a release without `+build` matches every build of the version; releases without app signals keep the
+share of the sessions.
 
 ## 6. Interface
 
@@ -297,7 +317,7 @@ on GHCR, a Linux installer, Proxmox and Unraid templates, a GitHub Pages site in
 | 6 | Debug file upload, SymCache, symbolication | Xcode build phase uploads; crashes symbolicated |
 | 7 | Alerts, release health, releases, API and MCP for errors | **v0.1 "errors"** (released) |
 | 8 | Analytics ingest, rollups, dashboards, `k.js`, privacy tests | Web analytics on the owner's sites (built) |
-| 9 | KestrelKit, adoption in the owner's apps, linked release view, analytics API and MCP | **v0.2 "analytics"** |
+| 9 | KestrelKit, adoption in the owner's apps, linked release view, analytics API and MCP | **v0.2 "analytics"** (server side built: ingest, App tab, explorer, adoption, API, MCP; waits for KestrelKit's first release) |
 | 10 | Hardening: load tests, site, installers, templates, translations | **v1.0** |
 
 ## 12. Risks

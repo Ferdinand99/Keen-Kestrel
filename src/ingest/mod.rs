@@ -1,6 +1,7 @@
 //! Sentry-compatible ingest (docs/design.md §4.2): `POST
 //! /api/{project_id}/envelope/` and the legacy `POST /api/{project_id}/store/`;
-//! and web analytics ([`web`]: `POST /ingest/v1/event`, with `GET /js/k.js`).
+//! web analytics ([`web`]: `POST /ingest/v1/event`, with `GET /js/k.js`) and
+//! app signals ([`signals`]: `POST /ingest/v1/signals`).
 //!
 //! A request is checked in this order: the per-IP bucket, the project id,
 //! the body size, the DSN key (`X-Sentry-Auth`, `?sentry_key=` or the
@@ -20,6 +21,7 @@ pub mod body;
 pub mod capture;
 pub mod envelope;
 pub mod limit;
+pub mod signals;
 pub mod web;
 
 use std::net::{IpAddr, SocketAddr};
@@ -101,6 +103,8 @@ struct Inner {
     ip_buckets: Buckets<IpAddr>,
     /// The web visitor ids' salt (memory only, docs/design.md §5.2).
     salt: crate::analytics::DailySalt,
+    /// App signals dropped for breaking the protocol's limits.
+    dropped_signals: std::sync::atomic::AtomicU64,
 }
 
 /// Why a request is refused.
@@ -110,8 +114,16 @@ pub enum Reject {
     Unauthorized(&'static str),
     Forbidden(&'static str),
     TooLarge(&'static str),
-    RateLimited { secs: u64, scope: &'static str },
+    RateLimited {
+        secs: u64,
+        scope: &'static str,
+    },
     Unavailable(&'static str),
+    /// 503 with `Retry-After` (app signals: the queue is full).
+    Busy {
+        secs: u64,
+        detail: &'static str,
+    },
     Unsupported(&'static str),
 }
 
@@ -123,8 +135,16 @@ impl Reject {
             Reject::Forbidden(_) => StatusCode::FORBIDDEN,
             Reject::TooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Reject::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
-            Reject::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Reject::Unavailable(_) | Reject::Busy { .. } => StatusCode::SERVICE_UNAVAILABLE,
             Reject::Unsupported(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        }
+    }
+
+    /// Seconds for `Retry-After`, when the client should wait.
+    fn retry_after(&self) -> Option<u64> {
+        match self {
+            Reject::RateLimited { secs, .. } | Reject::Busy { secs, .. } => Some(*secs),
+            _ => None,
         }
     }
 
@@ -135,7 +155,8 @@ impl Reject {
             | Reject::Forbidden(d)
             | Reject::TooLarge(d)
             | Reject::Unavailable(d)
-            | Reject::Unsupported(d) => (*d).to_string(),
+            | Reject::Unsupported(d)
+            | Reject::Busy { detail: d, .. } => (*d).to_string(),
             Reject::RateLimited { .. } => "rate limited".to_string(),
         }
     }
@@ -149,11 +170,13 @@ impl IntoResponse for Reject {
         if let Ok(v) = HeaderValue::from_str(&detail) {
             h.insert("x-sentry-error", v);
         }
-        if let Reject::RateLimited { secs, scope } = self {
+        if let Some(secs) = self.retry_after() {
             h.insert(header::RETRY_AFTER, HeaderValue::from(secs));
-            if let Ok(v) = HeaderValue::from_str(&format!("{secs}::{scope}")) {
-                h.insert("x-sentry-rate-limits", v);
-            }
+        }
+        if let Reject::RateLimited { secs, scope } = self
+            && let Ok(v) = HeaderValue::from_str(&format!("{secs}::{scope}"))
+        {
+            h.insert("x-sentry-rate-limits", v);
         }
         res
     }
@@ -256,6 +279,7 @@ impl Ingest {
                 key_buckets: Buckets::new(),
                 ip_buckets: Buckets::new(),
                 salt: crate::analytics::DailySalt::new(),
+                dropped_signals: std::sync::atomic::AtomicU64::new(0),
             }),
         })
     }
@@ -282,6 +306,13 @@ impl Ingest {
     pub async fn flush(&self) {
         self.inner.symbolicator.flush().await;
         self.inner.writer.flush().await;
+    }
+
+    /// App signals dropped so far for breaking the protocol's limits.
+    pub fn dropped_signals(&self) -> u64 {
+        self.inner
+            .dropped_signals
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// The key session device ids and user ids are hashed with.
@@ -312,6 +343,7 @@ impl Ingest {
                 "/ingest/v1/event",
                 post(web::event_route).options(web::preflight),
             )
+            .route("/ingest/v1/signals", post(signals::route))
             .route("/js/k.js", axum::routing::get(crate::analytics::kjs::serve))
             .with_state(self.clone())
     }
@@ -801,7 +833,7 @@ async fn preflight() -> Response {
 
 /// Whether `path` is an ingest route (exempt from the CSRF check).
 pub fn is_ingest_path(path: &str) -> bool {
-    if path == "/ingest/v1/event" {
+    if matches!(path, "/ingest/v1/event" | "/ingest/v1/signals") {
         return true;
     }
     let Some(rest) = path.strip_prefix("/api/") else {
@@ -827,6 +859,7 @@ mod tests {
             "/api/7/envelope",
             "/api/7/store",
             "/ingest/v1/event",
+            "/ingest/v1/signals",
         ] {
             assert!(is_ingest_path(p), "{p}");
         }

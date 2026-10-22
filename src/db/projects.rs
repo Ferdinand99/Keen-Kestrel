@@ -260,6 +260,31 @@ pub fn set_web_analytics(conn: &Connection, project_id: i64, on: bool) -> rusqli
     )? > 0)
 }
 
+/// Whether the project takes app signals, and whether in strict mode
+/// (`None`: no such project).
+pub fn app_analytics(conn: &Connection, project_id: i64) -> rusqlite::Result<Option<(bool, bool)>> {
+    conn.query_row(
+        "SELECT app_analytics, app_strict FROM projects WHERE id = ?1",
+        [project_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .optional()
+}
+
+/// Turns app analytics and its strict mode on or off. `false` when there is
+/// no such project.
+pub fn set_app_analytics(
+    conn: &Connection,
+    project_id: i64,
+    on: bool,
+    strict: bool,
+) -> rusqlite::Result<bool> {
+    Ok(conn.execute(
+        "UPDATE projects SET app_analytics = ?2, app_strict = ?3 WHERE id = ?1",
+        params![project_id, on, strict],
+    )? > 0)
+}
+
 /// Deletes one key. `false` when there is no such key.
 pub fn delete_key(conn: &Connection, project_id: i64, key_id: i64) -> rusqlite::Result<bool> {
     Ok(conn.execute(

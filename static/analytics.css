@@ -1,5 +1,6 @@
-/* Keen Kestrel's Web tab: lists with bars (the design system has no bar
-   list yet). Only the design system's tokens; loaded by templates/web.html. */
+/* Keen Kestrel's Web and App tabs: lists with bars (the design system has
+   no bar list yet), the App tab's filter bar. Only the design system's
+   tokens; loaded by templates/web.html, app.html and app_explorer.html. */
 
 .web-live {
   display: inline-flex;
@@ -88,4 +89,35 @@ a.bar-label:focus-visible {
   padding-inline-start: 1.25rem;
   color: var(--muted);
   font-size: 0.875rem;
+}
+
+/* The App tab's filter bar: version, platform, signal type, test signals. */
+.app-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-4);
+  align-items: end;
+}
+.app-filters .field {
+  flex: 1 1 11rem;
+  min-width: 0;
+  margin: 0;
+}
+.app-filters .field select {
+  width: 100%;
+}
+.app-filters .check {
+  flex: 1 1 14rem;
+}
+.app-filters-actions {
+  flex: none;
+}
+.app-swatch {
+  display: inline-block;
+  margin-inline-end: var(--sp-2);
+  vertical-align: baseline;
+}
+.app-steps {
+  margin: 0;
+  padding-inline-start: 1.25rem;
 }

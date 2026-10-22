@@ -63,7 +63,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | digest | resumo (m.) | “Enviar como resumo”; status pill “No resumo” |
 | cooldown (at most every … per issue) | no máximo a cada … | “Por problema, no máximo a cada [1 h]” |
 | threshold / alert above | limite (m.) / limite do alerta | form label “Mais de [100] eventos por hora” |
-| adoption | adoção (f.) | share of the last 7 days’ sessions |
+| adoption | adoção (f.) | share of the last 7 days’ sessions; also share of an app’s daily active users |
 | errored (session) | com erros, sem falha | session row label |
 | abnormal (session ended abnormally) | encerramento anormal | session row label |
 | crashed (session) | com falha | session row label |
@@ -85,3 +85,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | raw events | eventos brutos | kept for filters |
 | snippet (k.js) | script (m.) / código | “o script k.js”, “o código abaixo” |
 | UTM source / medium / campaign | fonte / mídia / campanha UTM |  |
+| app analytics | análises de app | tab “App”; page title “Análises de app de …”; “o app” in sentences |
+| install / install id | instalação (f.) / ID de instalação (m.) | a random id per app installation |
+| signal type | tipo de sinal (m.) | `App.launched` and the like stay as code |
+| payload | payload (m.) | loanword as Brazilian developers use it; the key/value data an app sends with a signal |
+| signal explorer | explorador de sinais (m.) | nav item short “Explorador” |
+| test signal | sinal de teste (m.) | from debug builds, TestFlight and the simulator |
+| strict mode | modo estrito (m.) | |
+| build (app build) | build (m.) | as in App Store Connect; “build de depuração” |
+| device model | modelo de dispositivo (m.) | |
+| locale | idioma e região | as Apple’s “Idioma e Região”; card “Idiomas” |
+| platform | plataforma (f.) | |
+| OS version | versão do sistema (f.) | |
+| release (as an analytics dimension) | versão completa | dimension label, to tell `bundle@version+build` apart from “Versão” (app version) |

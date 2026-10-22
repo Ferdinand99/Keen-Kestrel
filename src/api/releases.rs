@@ -1,5 +1,6 @@
 //! REST API v1: a project's releases with their health (crash-free
-//! sessions and users, adoption) and a release's health per day.
+//! sessions and users, adoption of the sessions and, with app analytics, of
+//! the app's users) and a release's health per day.
 
 use axum::extract::State;
 use axum::http::HeaderMap;
@@ -44,6 +45,7 @@ pub fn release_json(r: &Release) -> Value {
         "new_issues": r.new_issues,
         "health": health_json(&r.health),
         "adoption_7d": pct(r.adoption),
+        "adoption_users_7d": pct(r.adoption_users),
         "path": format!("/projects/{}/releases/{}", r.project_id, r.id),
     })
 }

@@ -62,7 +62,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | digest | kooste | ”Lähetä koosteena”; status pill ”Koosteessa”; ”kooste {time} välein” |
 | cooldown (at most every … per issue) | vähimmäisväli samalle ongelmalle | summary ”samasta ongelmasta enintään {time} välein” |
 | threshold | raja | in the form: ”Yli [100] tapahtumaa tunnissa”; message field ”Hälytysraja” |
-| adoption | käyttöaste | the release's share of sessions |
+| adoption | käyttöaste | the release's share of sessions; also share of an app's daily active users |
 | abnormal (session ended abnormally) | päättyi poikkeuksellisesti | |
 | errored (session) | virheitä, ei kaatumista | |
 | finalized (release) | viimeistelty | lowercase status after a date |
@@ -81,3 +81,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | current visitors | kävijät nyt | live counter, last 5 minutes |
 | direct / none (no referrer) | suora / ei mitään | |
 | raw events | raakatapahtumat | settings label ”Säilytä verkon raakatapahtumat” |
+| install / install id | asennus / asennustunniste | a random id per app installation; only its keyed hash is kept |
+| signal type | signaalityyppi |  |
+| payload | hyötykuorma | the key/value data sent with a signal |
+| signal explorer | signaaliselain | tab ”Signaaliselain” |
+| test signal | testisignaali | from debug builds, TestFlight, the simulator |
+| strict mode | tiukka tila | user id changes every day |
+| build (app build) | koontiversio | as `dist` in the event view; debug build: ”debug-koontiversio” |
+| device model | laitemalli |  |
+| locale | kieli ja alue | card ”Kielet” |
+| platform | alusta |  |
+| OS version | järjestelmäversio | shorter than ”käyttöjärjestelmän versio” |
+| release identifier (bundle@version+build) | versiotunniste | dimension label, to tell it apart from ”Versio” |

@@ -63,7 +63,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown (“at most every … per issue”) | לכל היותר פעם ב-… לכל בעיה | form label “לכל בעיה, לכל היותר פעם ב-” |
 | threshold | סף | message field “סף התראה” |
 | multiplier (× the usual) | פי | “פי {k} מהרגיל” |
-| adoption | אימוץ | share of the sessions in the last 7 days |
+| adoption | אימוץ | share of the sessions in the last 7 days; also share of an app’s daily active users |
 | crash-free rate | שיעור ללא קריסות | |
 | errored (session) | עם שגיאות, בלי קריסה | |
 | abnormal (session ended abnormally) | הסתיימו באופן חריג | plural, agrees with סשנים |
@@ -83,3 +83,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | UTM source / medium / campaign | מקור UTM / אמצעי UTM / קמפיין UTM | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer “עם סמלים” phrasing in sentences |
+| app analytics | אנליטיקת אפליקציה | tab “אפליקציה” |
+| install / install id | התקנה / מזהה התקנה | random id per app installation |
+| signal type | סוג אות (pl. סוגי אותות) |  |
+| payload | נתונים נלווים | the key/value data an app sends with a signal |
+| signal explorer | סייר אותות |  |
+| test signal | אות בדיקה (pl. אותות בדיקה) |  |
+| strict mode | מצב מחמיר | the user id changes every day |
+| build (app build) | Build | in Latin script as in event details; list title “מספרי Build”; debug builds “גרסאות Debug” |
+| release (signal dimension, bundle@version+build) | גרסה מלאה | only where it stands next to “גרסה” (the app version) |
+| device model | דגם מכשיר (pl. דגמי מכשירים) |  |
+| locale (language and region setting) | שפה ואזור |  |
+| platform | פלטפורמה |  |

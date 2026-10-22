@@ -66,7 +66,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | cooldown ("at most every … per issue") | не частіше ніж раз на … для проблеми | label «Для однієї проблеми не частіше ніж раз на [1 год]» |
 | threshold / alert above | понад / поріг (m.) | form «Понад [100] подій за годину»; message field «Поріг» |
 | multiplier ("and more than … ×") | і понад … × | summary «{k}× від звичного» |
-| adoption | охоплення (n.) | share of the sessions in the last 7 days |
+| adoption | охоплення (n.) | share of the sessions in the last 7 days; also share of an app’s daily active users |
 | crashed / errored / abnormal (sessions) | зі збоєм / з помилками, без збою / завершено аномально | session outcome rows |
 | finalized (release) | завершено | lowercase status after a date |
 | attempt (delivery) | спроба (f.) | |
@@ -84,3 +84,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | direct / none (no referrer) | прямий перехід / немає |  |
 | raw events | необроблені події | filtered numbers: «відфільтровані числа» |
 | UTM medium | UTM-канал | UTM source / campaign: «UTM-джерело» / «UTM-кампанія» |
+| app analytics | аналітика застосунку | tab «Застосунок» |
+| install / install id | встановлення / ідентифікатор встановлення | random id per app installation |
+| signal type | тип сигналу |  |
+| payload | параметри | the key/value data an app sends with a signal |
+| signal explorer | аналіз сигналів | nav item and page title; dashboard nav item «Огляд» |
+| test signal | тестовий сигнал |  |
+| strict mode | суворий режим | the user id changes every day |
+| build (app build) | збірка (f.) | debug build: «налагоджувальна збірка» |
+| device model | модель пристрою |  |
+| locale (language and region setting) | мова й регіон |  |
+| platform | платформа |  |

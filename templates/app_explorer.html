@@ -1,0 +1,91 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+{% import "partials/app_macros.html" as am %}
+
+{% block head %}
+  <link rel="stylesheet" href="/static/analytics.css">
+{% endblock %}
+
+{% block content %}
+{% include "partials/project_head.html" %}
+
+{%- if !enabled %}
+{{ m::callout("warning", tr("app.off_text"), tr("app.off_title")) }}
+{%- endif %}
+
+<div class="stack">
+  <nav class="chips" aria-label="{{ tr("app.subnav") }}">
+    <a class="chip" href="{{ dashboard_href }}">{{ m::icon("chart") }}<span>{{ tr("app.nav_dashboard") }}</span></a>
+    <a class="chip" href="{{ explorer_href }}" aria-current="page">{{ m::icon("search") }}<span>{{ tr("app.nav_explorer") }}</span></a>
+  </nav>
+
+  {%- if has_data %}
+  {% include "partials/app_filters.html" %}
+
+  {%- if kind.is_empty() %}
+  <section class="card stack-sm" aria-labelledby="types-title">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title" id="types-title">{{ tr("app.explorer_pick") }}</h2>
+        <p class="card-sub">{{ tr("app.explorer_pick_sub") }}</p>
+      </div>
+    </div>
+    {%- if types.is_empty() %}
+    <p class="muted web-empty">{{ tr("app.types_empty") }}</p>
+    {%- else %}
+    <div class="bars-head" aria-hidden="true"><span>{{ tr("app.dim_type") }}</span><span>{{ tr("app.users") }}</span><span>{{ tr("app.signals") }}</span></div>
+    <ul class="bars" role="list" aria-label="{{ tr("app.top_types") }}">
+      {%- for b in types %}
+      <li class="bar-row" style="--share: {{ b.share }}">
+        <a class="bar-label mono" href="{{ b.href }}" title="{{ b.label }}">{{ b.label }}</a>
+        <span class="bar-num" aria-label="{{ tr("app.users") }}">{{ b.visitors }}</span>
+        <span class="bar-num" aria-label="{{ tr("app.signals") }}">{{ b.count }}</span>
+      </li>
+      {%- endfor %}
+    </ul>
+    {%- endif %}
+  </section>
+  {%- else %}
+  <h2 class="card-title mono break">{{ kind }}</h2>
+  <div class="stats">
+    {{ m::stat(tr("app.signals"), signals, "", period_label) }}
+    {{ m::stat(tr("app.users"), users, "", tr("app.user_days_meta")) }}
+  </div>
+  {%- if let Some(c) = chart %}
+  {{ am::chart(c, "type-chart-title", tr("app.type_chart_title"), period_label) }}
+  {%- endif %}
+
+  <section class="section" aria-labelledby="payload-title">
+    {% call m::section_head(tr("app.payload_title"), tr("app.payload_sub"), "payload-title") %}{% endcall %}
+    {%- if keys.is_empty() %}
+    <div class="card card-flush">
+      {{ m::empty_state("box", tr("app.payload_empty_title"), tr("app.payload_empty_text")) }}
+    </div>
+    {%- else %}
+    <div class="grid-2">
+      {%- for k in keys %}
+      <section class="card stack-sm" aria-labelledby="key-{{ loop.index }}">
+        <h3 class="card-title mono break" id="key-{{ loop.index }}">{{ k.key }}</h3>
+        <div class="bars-head bar-row-2" aria-hidden="true"><span>{{ tr("app.value") }}</span><span>{{ tr("app.signals") }}</span></div>
+        <ul class="bars" role="list" aria-label="{{ k.key }}">
+          {%- for b in k.rows %}
+          <li class="bar-row bar-row-2" style="--share: {{ b.share }}">
+            <span class="bar-label" title="{{ b.label }}">{{ b.label }}</span>
+            <span class="bar-num" aria-label="{{ tr("app.signals") }}">{{ b.count }}</span>
+          </li>
+          {%- endfor %}
+        </ul>
+      </section>
+      {%- endfor %}
+    </div>
+    {%- endif %}
+    <p class="section-foot">{{ tr("app.payload_foot") }}</p>
+  </section>
+  {%- endif %}
+  {%- else %}
+  <div class="empty-card">
+    {{ m::empty_state("search", tr("app.empty_title"), tr("app.explorer_empty")) }}
+  </div>
+  {%- endif %}
+</div>
+{% endblock %}

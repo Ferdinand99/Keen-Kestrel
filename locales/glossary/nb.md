@@ -60,7 +60,7 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | digest | sammendrag (et) | «Send som sammendrag»; status pill «I sammendrag» |
 | cooldown (at most every … per issue) | høyst én gang per … for hvert problem | label «Per problem, høyst én gang per» |
 | threshold | grense (en) | in the form: «Mer enn [100] hendelser i timen» |
-| adoption | utbredelse | the release's share of sessions |
+| adoption | utbredelse | the release's share of sessions; also share of an app's daily active users |
 | abnormal (session ended abnormally) | avsluttet unormalt | |
 | errored (session) | med feil, uten krasj | |
 | finalized (release) | ferdigstilt | lowercase status after a date |
@@ -79,3 +79,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | current visitors | besøkende nå | live counter, last 5 minutes |
 | direct / none (no referrer) | direkte / ingen | |
 | raw events | rå hendelser | settings label «Behold rå webhendelser» |
+| install / install id | installasjon / installasjons-ID | a random id per app installation; only its keyed hash is kept |
+| signal type | signaltype (en) |  |
+| payload | nyttelast (en) | the key/value data sent with a signal |
+| signal explorer | signalutforsker (en) | tab «Signalutforsker» |
+| test signal | testsignal (et; pl. testsignaler) | from debug builds, TestFlight, the simulator |
+| strict mode | streng modus | user id changes every day |
+| build (app build) | bygg (et; pl. bygg) | as `dist` in the event view; debug build: «feilsøkingsbygg» |
+| device model | enhetsmodell (en) |  |
+| locale | språk og region | card «Språk» |
+| platform | plattform (en) |  |
+| release identifier (bundle@version+build) | versjons-ID | dimension label, to tell it apart from «Versjon» |

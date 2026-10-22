@@ -11,8 +11,9 @@
 //! (`key`, `name`, `url`, `referrer`, `screen_width`, `hash` and `props` are
 //! accepted too.) The key may also come in `X-Kestrel-Key` or `?key=`.
 //!
-//! Checked in this order: the per-IP bucket, bots (answered 202 and
-//! dropped), the body (64 KB at most), the key (it must exist and be
+//! Checked in this order: the per-IP bucket, Global Privacy Control
+//! (`Sec-GPC: 1`: answered 202 and dropped; `DNT` isn't acted on), bots
+//! (answered 202 and dropped), the body (64 KB at most), the key (it must exist and be
 //! enabled, and its project must take web analytics), the page's origin
 //! (`Origin`, else `Referer`) against the key's allowed origins, the key's
 //! own bucket. Then one [`WebEvent`] goes to the writer and the answer is
@@ -58,6 +59,15 @@ fn page_origin(headers: &HeaderMap) -> Option<String> {
         let url = url::Url::parse(&referer).ok()?;
         Some(url.origin().ascii_serialization()).filter(|o| o != "null")
     })
+}
+
+/// Whether the browser sends Global Privacy Control (`Sec-GPC: 1`): the
+/// visitor doesn't want to be counted, so nothing is stored.
+pub fn gpc(headers: &HeaderMap) -> bool {
+    headers
+        .get("sec-gpc")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.trim() == "1")
 }
 
 fn str_field<'a>(body: &'a Map<String, Value>, short: &str, long: &str) -> Option<&'a str> {
@@ -150,6 +160,9 @@ impl Ingest {
                     secs: retry_secs(wait),
                     scope: "ip",
                 })?;
+        }
+        if gpc(headers) {
+            return Ok(());
         }
         let user_agent = headers
             .get(header::USER_AGENT)

@@ -1009,8 +1009,8 @@ pub fn prune_issues(
 
 /// Deletes a project with everything it has in both databases: issues,
 /// events, keys and analytics rollups in `kestrel.sqlite` (by cascade),
-/// payloads, attachments, session items, feedback and raw analytics in
-/// `store.sqlite`.
+/// payloads, attachments, session items, feedback, raw analytics and app
+/// users in `store.sqlite`.
 pub fn delete_project(c: &Connection, project_id: i64) -> rusqlite::Result<bool> {
     for table in [
         "payloads",
@@ -1019,6 +1019,7 @@ pub fn delete_project(c: &Connection, project_id: i64) -> rusqlite::Result<bool>
         "feedback",
         "analytics_events",
         "analytics_seen",
+        "app_users",
     ] {
         c.execute(
             &format!("DELETE FROM store.{table} WHERE project_id = ?1"),
@@ -1047,6 +1048,11 @@ pub fn prune_orphans(c: &Connection, batch: i64) -> rusqlite::Result<usize> {
             [batch],
         )?;
     }
+    n += c.execute(
+        "DELETE FROM store.app_users WHERE project_id IN (SELECT DISTINCT project_id
+         FROM store.app_users WHERE project_id NOT IN (SELECT id FROM main.projects) LIMIT ?1)",
+        [batch],
+    )?;
     Ok(n)
 }
 
