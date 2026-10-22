@@ -1,0 +1,67 @@
+{#- The issue list with its count, empty states and paging. Rendered inside
+    partials/issue_results.html and on its own for every live update. Only
+    `data` (issues::ListData) is in scope. -#}
+{% import "kit/macros.html" as m %}
+{%- if !data.any %}
+<div class="empty-card">
+  {{ m::empty_state("check-circle", tr("issues.empty_title"), tr("issues.empty_text")) }}
+</div>
+{%- else %}
+<section class="section" aria-labelledby="results-title">
+  <div class="section-head">
+    <div>
+      <h2 class="section-title" id="results-title">{{ trn("issues.count", data.paging.total) }}</h2>
+      {%- if data.paging.shown() %}
+      <p class="section-sub">{{ tr3("issues.showing", "first", num(data.paging.first), "last", num(data.paging.last), "total", num(data.paging.total)) }}</p>
+      {%- endif %}
+    </div>
+    <div class="toolbar">
+      {%- if data.filtered %}
+      <a class="btn btn-plain btn-sm" href="{{ data.clear_href }}">{{ m::icon("x") }}<span>{{ tr("issues.clear_filters") }}</span></a>
+      {%- endif %}
+    </div>
+  </div>
+  {%- if !data.unknown.is_empty() %}
+  {{ m::callout("warning", tr1("issues.unknown_terms", "terms", data.unknown)) }}
+  {%- endif %}
+  {%- if data.rows.is_empty() %}
+  <div class="card card-flush">
+    <div class="empty">
+      <div class="empty-icon">{% if data.filtered %}{{ m::icon("search") }}{% else %}{{ m::icon("check-circle") }}{% endif %}</div>
+      <p class="empty-title">{{ data.empty_title() }}</p>
+      <p class="empty-text">{% if data.filtered %}{{ tr("issues.no_match_text") }}{% else %}{{ tr("issues.nothing_here_text") }}{% endif %}</p>
+      {%- if data.filtered %}
+      <div class="empty-actions"><a class="btn btn-secondary" href="{{ data.clear_href }}">{{ tr("issues.clear_filters") }}</a></div>
+      {%- endif %}
+    </div>
+  </div>
+  {%- else %}
+  <ul class="list" role="list">
+    {%- for r in data.rows %}
+    {%- if data.select %}
+    <li>
+      <label class="list-row" for="sel-{{ r.id }}">
+        <input type="checkbox" id="sel-{{ r.id }}" name="ids" value="{{ r.id }}" form="bulk-form">
+        <span class="dot status-{{ r.level_status }}" role="img" aria-label="{{ r.level_label }}"></span>
+        <span class="list-main">
+          <span class="list-title list-title-wrap">{{ r.title }}</span>
+          {%- if !r.culprit.is_empty() %}<span class="list-sub break">{{ r.culprit }}</span>{% endif %}
+        </span>
+        <span class="list-value"><strong class="num">{{ num(r.events) }}</strong><small>{{ tr("issues.events") }}</small></span>
+      </label>
+    </li>
+    {%- else %}
+    {% include "partials/issue_row.html" %}
+    {%- endif %}
+    {%- endfor %}
+  </ul>
+  {%- endif %}
+  {%- if data.paging.shown() %}
+  <nav class="cluster cluster-between" aria-label="{{ tr("issues.pages") }}">
+    {%- if data.paging.prev_href.is_empty() %}<span></span>{% else %}<a class="btn btn-secondary btn-sm" href="{{ data.paging.prev_href }}" rel="prev">{{ m::icon("chevron-left") }}<span>{{ tr("issues.previous") }}</span></a>{% endif %}
+    <span class="muted num">{{ tr2("issues.page_of", "page", num(data.paging.page), "pages", num(data.paging.pages)) }}</span>
+    {%- if data.paging.next_href.is_empty() %}<span></span>{% else %}<a class="btn btn-secondary btn-sm" href="{{ data.paging.next_href }}" rel="next"><span>{{ tr("issues.next") }}</span>{{ m::icon("chevron-right") }}</a>{% endif %}
+  </nav>
+  {%- endif %}
+</section>
+{%- endif %}

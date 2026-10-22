@@ -1,9 +1,10 @@
-//! The project pages: list, create, overview (DSN and setup snippets) and
-//! settings (rename, keys, delete). Everyone signed in can read them;
-//! editors and admins change things.
+//! The project pages: list, create, overview (counts, the latest and most
+//! frequent issues, DSN and setup snippets) and settings (rename, keys,
+//! retention, delete). Everyone signed in can read them; editors and admins
+//! change things. The issue pages are in [`crate::issues`].
 
 use askama::Template;
-use axum::extract::{Path, State};
+use axum::extract::{Extension, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
@@ -17,7 +18,9 @@ use vole_kit::page::{PageCtx, flash};
 use vole_kit::state::Core;
 
 use crate::db::projects::{self as db, KeyChanges, Project, ProjectKey};
+use crate::db::triage::{self, Retention};
 use crate::dsn::{self, Snippet};
+use crate::issues::{self as issue_pages, IssueRowView};
 use crate::project::{self, Platform};
 
 pub fn router() -> Router<Core> {
@@ -28,6 +31,7 @@ pub fn router() -> Router<Core> {
         .route("/projects/new", get(new_form))
         .route("/projects/{id}", get(overview))
         .route("/projects/{id}/settings", get(settings).post(save_settings))
+        .route("/projects/{id}/retention", post(save_retention))
         .route("/projects/{id}/delete", post(delete))
         .route("/projects/{id}/keys", post(create_key))
         .route("/projects/{id}/keys/{key_id}", post(update_key))
@@ -60,12 +64,13 @@ struct ProjectRow {
     enabled_keys: i64,
 }
 
-struct ProjectView {
-    id: i64,
-    name: String,
-    slug: String,
-    platform: &'static str,
-    created_at: String,
+/// A project in the page headers.
+pub struct ProjectView {
+    pub id: i64,
+    pub name: String,
+    pub slug: String,
+    pub platform: &'static str,
+    pub created_at: String,
 }
 
 impl From<&Project> for ProjectView {
@@ -157,6 +162,17 @@ struct NewTemplate {
     platforms: Vec<PlatformChoice>,
 }
 
+/// The overview's numbers and chart once the project has issues.
+struct OverviewStats {
+    unresolved: i64,
+    events_24h: i64,
+    events_14d: i64,
+    chart_line: String,
+    chart_area: String,
+    chart_label: String,
+    max_label: String,
+}
+
 #[derive(Template)]
 #[template(path = "project.html")]
 struct OverviewTemplate {
@@ -167,6 +183,17 @@ struct OverviewTemplate {
     snippets: Vec<Snippet>,
     first_tab: &'static str,
     settings_href: String,
+    stats: Option<OverviewStats>,
+    latest: Vec<IssueRowView>,
+    frequent: Vec<IssueRowView>,
+    issues_href: String,
+}
+
+/// The retention form's values.
+struct RetentionView {
+    event_days: i64,
+    issue_days: i64,
+    per_day: i64,
 }
 
 #[derive(Template)]
@@ -181,6 +208,7 @@ struct SettingsTemplate {
     slug_error: String,
     platforms: Vec<PlatformChoice>,
     keys: Vec<KeyView>,
+    retention: RetentionView,
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +376,56 @@ async fn overview(
         .find(|k| k.enabled)
         .map(|k| dsn::dsn(&base, &k.public_key, id));
     let snippets = dsn.as_deref().map(dsn::snippets).unwrap_or_default();
+    let now = issue_pages::now();
+    let now2 = now.clone();
+    let (overview, latest, frequent, daily) = core
+        .with_conn(move |c| {
+            let overview = triage::overview(c, id, &now2)?;
+            if !overview.has_issues {
+                return Ok((overview, Vec::new(), Vec::new(), Default::default()));
+            }
+            let query = crate::issues::search::Query::default();
+            let params = triage::ListParams {
+                project_id: id,
+                status: Some("unresolved"),
+                query: &query,
+                sort: crate::issues::search::Sort::LastSeen,
+                limit: 5,
+                offset: 0,
+            };
+            let (latest, _) = triage::list(c, &params)?;
+            let since: String =
+                c.query_row("SELECT date(?1, '-13 days')", [&now2], |r| r.get(0))?;
+            let frequent = triage::most_frequent(c, id, &since, 5)?;
+            let today: String = c.query_row("SELECT date(?1)", [&now2], |r| r.get(0))?;
+            let ids: Vec<i64> = latest
+                .iter()
+                .map(|r| r.id)
+                .chain(frequent.iter().map(|(r, _)| r.id))
+                .collect();
+            let daily = triage::daily_events(c, &ids, &today, 14)?;
+            Ok((overview, latest, frequent, daily))
+        })
+        .await?;
+    let stats = overview.has_issues.then(|| {
+        let (chart_line, chart_area) = issue_pages::chart_points(&overview.daily, 600.0, 120.0);
+        let max = overview.daily.iter().copied().max().unwrap_or(0);
+        OverviewStats {
+            unresolved: overview.unresolved,
+            events_24h: overview.events_24h,
+            events_14d: overview.events_14d,
+            chart_line,
+            chart_area,
+            chart_label: i18n::tf(
+                "overview.chart_label",
+                &[
+                    ("n", &i18n::fmt_int(overview.events_14d)),
+                    ("max", &i18n::fmt_int(max)),
+                ],
+            ),
+            max_label: i18n::fmt_int(max),
+        }
+    });
     let (ctx, jar) = PageCtx::build(
         &core,
         Some(&user),
@@ -365,6 +443,20 @@ async fn overview(
         dsn,
         snippets,
         settings_href: keys_url(id),
+        stats,
+        latest: latest
+            .iter()
+            .map(|r| issue_pages::row_view(id, r, daily.get(&r.id), &now))
+            .collect(),
+        frequent: frequent
+            .iter()
+            .map(|(r, n)| {
+                let mut v = issue_pages::row_view(id, r, daily.get(&r.id), &now);
+                v.recent = *n;
+                v
+            })
+            .collect(),
+        issues_href: format!("/projects/{id}/issues"),
     };
     Ok((jar, HtmlTemplate(page)).into_response())
 }
@@ -392,7 +484,14 @@ async fn render_settings(
     attempt: Option<Attempt>,
 ) -> ApiResult<Response> {
     let id = project.id;
-    let keys = core.with_conn(move |c| db::keys(c, id)).await?;
+    let (keys, retention) = core
+        .with_conn(move |c| {
+            Ok((
+                db::keys(c, id)?,
+                triage::retention(c, id)?.unwrap_or_default(),
+            ))
+        })
+        .await?;
     let base = dsn::public_base(core.base_url().await, headers);
     let invalid = attempt.is_some();
     let attempt = attempt.unwrap_or_else(|| Attempt {
@@ -412,6 +511,11 @@ async fn render_settings(
         platforms: platform_choices(attempt.platform.unwrap_or(project.platform)),
         keys: keys.into_iter().map(|k| KeyView::new(k, &base)).collect(),
         project: ProjectView::from(&project),
+        retention: RetentionView {
+            event_days: retention.event_days,
+            issue_days: retention.issue_days,
+            per_day: retention.payloads_per_day,
+        },
     };
     let status = if invalid {
         StatusCode::UNPROCESSABLE_ENTITY
@@ -488,15 +592,82 @@ async fn save_settings(
     ))
 }
 
+#[derive(Deserialize)]
+struct RetentionForm {
+    #[serde(default)]
+    event_days: String,
+    #[serde(default)]
+    issue_days: String,
+    #[serde(default)]
+    per_day: String,
+}
+
+/// A whole number in `min..=max` from a form field, or `err`.
+fn whole(text: &str, min: i64, max: i64, err: &'static str) -> Result<i64, &'static str> {
+    text.replace([',', '.', ' ', '\u{a0}', '\u{202f}'], "")
+        .parse::<i64>()
+        .ok()
+        .filter(|n| (min..=max).contains(n))
+        .ok_or(err)
+}
+
+/// The retention a form asks for, or the translation key of the problem.
+fn retention_from(form: &RetentionForm) -> Result<Retention, &'static str> {
+    Ok(Retention {
+        event_days: whole(&form.event_days, 1, 3650, "retention.err_days")?,
+        issue_days: whole(&form.issue_days, 1, 3650, "retention.err_days")?,
+        payloads_per_day: whole(&form.per_day, 1, 100_000, "retention.err_per_day")?,
+    })
+}
+
+fn retention_url(id: i64) -> String {
+    format!("/projects/{id}/settings#retention")
+}
+
+async fn save_retention(
+    State(core): State<Core>,
+    user: CurrentUser,
+    jar: SignedCookieJar,
+    Path(id): Path<i64>,
+    Form(form): Form<RetentionForm>,
+) -> ApiResult<Response> {
+    user.require_editor()?;
+    load(&core, id).await?;
+    let retention = match retention_from(&form) {
+        Ok(r) => r,
+        Err(key) => return Ok(back_to(jar, "error", i18n::t(key), retention_url(id))),
+    };
+    core.with_conn(move |c| triage::set_retention(c, id, retention))
+        .await?;
+    tracing::info!(user = %user.username, project = id, ?retention, "retention changed");
+    Ok(back_to(
+        jar,
+        "success",
+        i18n::t("retention.saved"),
+        retention_url(id),
+    ))
+}
+
 async fn delete(
     State(core): State<Core>,
+    Extension(ingest): Extension<crate::ingest::Ingest>,
     user: CurrentUser,
     jar: SignedCookieJar,
     Path(id): Path<i64>,
 ) -> ApiResult<Response> {
     user.require_editor()?;
     let project = load(&core, id).await?;
-    core.with_conn(move |c| db::delete(c, id)).await?;
+    // On the writer's connection: the store's rows go too.
+    ingest
+        .writer()
+        .run(move |c| {
+            let tx = c.transaction()?;
+            let found = triage::delete_project(&tx, id)?;
+            tx.commit()?;
+            Ok(found)
+        })
+        .await
+        .map_err(ApiError::internal)?;
     tracing::info!(user = %user.username, project = %project.name, id, "project deleted");
     Ok(back_to(
         jar,

@@ -788,11 +788,13 @@ async fn every_page_is_branded_kestrel() {
     let id = app.project_ids().await[0];
     let project = format!("/projects/{id}");
     let project_settings = format!("/projects/{id}/settings");
+    let issues = format!("/projects/{id}/issues");
     for path in [
         "/projects",
         "/projects/new",
         project.as_str(),
         project_settings.as_str(),
+        issues.as_str(),
         "/settings/security",
         "/settings/users",
         "/settings/tokens",
@@ -803,7 +805,16 @@ async fn every_page_is_branded_kestrel() {
         assert_kestrel_branded(path, &res.body);
         assert!(res.body.contains("/static/apple-touch-icon.png"), "{path}");
         assert!(res.body.contains("/static/site.webmanifest"), "{path}");
+        // The texts the kit's pages take from Kestrel are Kestrel's own.
+        assert!(!res.body.to_lowercase().contains("monitor"), "{path}");
     }
+    let login = App::fresh().await.get("/login").await;
+    let login = if login.status.is_redirection() {
+        String::new()
+    } else {
+        login.body
+    };
+    assert!(!login.contains("monitors"));
     assert_eq!(app.get("/settings").await.location(), "/settings/users");
 
     let docs = app.get("/api-docs").await.body;
@@ -1006,8 +1017,11 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "api_tokens",
             "environments",
             "events",
+            "issue_activity",
             "issue_hashes",
+            "issue_hours",
             "issue_tag_values",
+            "issue_users",
             "issues",
             "issues_fts",
             "issues_fts_config",
@@ -1024,7 +1038,12 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
     );
     assert_eq!(
         applied,
-        ["kit/0001_core.sql", "0001_projects.sql", "0002_errors.sql"]
+        [
+            "kit/0001_core.sql",
+            "0001_projects.sql",
+            "0002_errors.sql",
+            "0003_triage.sql"
+        ]
     );
     assert!(app.dir.join("store.sqlite").exists());
 

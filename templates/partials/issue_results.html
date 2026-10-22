@@ -1,0 +1,17 @@
+{#- Content of #issue-results: rendered inside issues.html and on its own for
+    filter changes. Only `data` (issues::ListData) is in scope. The live
+    stream carries the same query string, so updates keep the filters. With
+    `oob`, the chips come along out of band. -#}
+{% import "kit/macros.html" as m %}
+{%- if data.select || !data.any %}
+<div class="stack">
+  {% include "partials/issue_list.html" %}
+</div>
+{%- else %}
+<div class="stack" hx-ext="sse" sse-connect="{{ data.base }}/live{% if !data.qs.is_empty() %}?{{ data.qs }}{% endif %}" sse-swap="issues-updated" hx-swap="innerHTML">
+  {% include "partials/issue_list.html" %}
+</div>
+{%- endif %}
+{%- if oob %}
+{% include "partials/issue_chips.html" %}
+{%- endif %}

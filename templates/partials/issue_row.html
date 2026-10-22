@@ -1,0 +1,24 @@
+{#- One issue as a list row (link). Expects `r` (issues::IssueRowView) and `m`. -#}
+<li class="list-row" id="issue-row-{{ r.id }}">
+  <span class="dot status-{{ r.level_status }}" role="img" aria-label="{{ r.level_label }}"></span>
+  <div class="list-main">
+    <a class="list-title list-title-wrap stretched" href="{{ r.href }}">{{ r.title }}</a>
+    {%- if !r.culprit.is_empty() %}<span class="list-sub break">{{ r.culprit }}</span>{% endif %}
+    <span class="list-sub">{{ tr("issues.last_seen") }} {{ m::time_ago(&r.last_seen) }} · {{ tr("issues.first_seen") }} {{ m::time_ago(&r.first_seen) }}</span>
+    {%- if !r.badges.is_empty() %}
+    <span class="tags">{% for b in r.badges %}<span class="badge {{ b.class }}"{% if !b.tip.is_empty() %} data-tip="{{ b.tip }}"{% endif %}>{{ b.label }}</span>{% endfor %}</span>
+    {%- endif %}
+  </div>
+  {%- if !r.spark.is_empty() %}
+  <svg class="sparkline hide-sm" viewBox="0 0 80 24" preserveAspectRatio="none" role="img" aria-label="{{ r.spark_label }}"><polyline class="chart-line" points="{{ r.spark }}"></polyline></svg>
+  {%- endif %}
+  <div class="list-value">
+    <strong class="num">{{ num(r.events) }}</strong>
+    <small>{{ tr("issues.events") }}</small>
+  </div>
+  <div class="list-value hide-sm">
+    <strong class="num">{{ num(r.users) }}</strong>
+    <small>{{ tr("issues.users") }}</small>
+  </div>
+  {{ m::icon("chevron-right", "list-chevron") }}
+</li>

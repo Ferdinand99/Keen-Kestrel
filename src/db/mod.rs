@@ -1,8 +1,12 @@
 //! Kestrel's tables and its migration set. The pool, the runner and the core
 //! tables (users, API tokens, settings) are vole-kit's.
+//!
+//! [`issues`] is the writer's side (one event at a time); [`triage`] holds
+//! what the pages read and the lifecycle actions they take.
 
 pub mod issues;
 pub mod projects;
+pub mod triage;
 
 use rusqlite::Connection;
 use vole_kit::db::migrate::{self, MigrationError, MigrationSet};
@@ -16,6 +20,10 @@ const MIGRATION_FILES: &[(&str, &str)] = &[
     (
         "0002_errors.sql",
         include_str!("../../migrations/0002_errors.sql"),
+    ),
+    (
+        "0003_triage.sql",
+        include_str!("../../migrations/0003_triage.sql"),
     ),
 ];
 

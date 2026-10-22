@@ -1,13 +1,15 @@
 //! Issues and what hangs off them: the writer's upsert of one event
-//! (release, environment, issue, grouping hash, tag values, event row and
-//! payload) and the reads tests and, later, the pages use.
+//! (release, environment, issue, grouping hash, tag values, users, hourly
+//! counts, activity, event row and payload). The pages' reads and the
+//! lifecycle actions are in [`super::triage`].
 //!
 //! The functions run inside the writer's transaction on a connection that
 //! has `store.sqlite` attached as `store`.
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-/// Stored payloads per issue and UTC day; later events only count.
+/// Stored payloads per issue and UTC day unless the project says otherwise
+/// (`projects.payloads_per_day`); later events only count.
 pub const MAX_PAYLOADS_PER_DAY: i64 = 1000;
 /// Custom tag keys per issue (on top of the whitelisted ones).
 pub const MAX_CUSTOM_TAG_KEYS: i64 = 20;
@@ -163,10 +165,44 @@ fn newer_release(
     Ok(resolved_id.is_none_or(|resolved| release_id > resolved))
 }
 
+/// The project's daily cap on stored payloads per issue.
+fn payload_cap(c: &Connection, project_id: i64) -> rusqlite::Result<i64> {
+    Ok(
+        c.prepare_cached("SELECT payloads_per_day FROM projects WHERE id = ?1")?
+            .query_row([project_id], |r| r.get(0))
+            .optional()?
+            .unwrap_or(MAX_PAYLOADS_PER_DAY),
+    )
+}
+
+/// Notes something that happened to an issue (`actor` `None`: Kestrel).
+pub fn log_activity(
+    c: &Connection,
+    issue_id: i64,
+    kind: &str,
+    actor: Option<&str>,
+    data: &serde_json::Value,
+) -> rusqlite::Result<()> {
+    c.prepare_cached(
+        "INSERT INTO issue_activity (issue_id, kind, actor, data) VALUES (?1, ?2, ?3, ?4)",
+    )?
+    .execute(params![issue_id, kind, actor, data.to_string()])?;
+    Ok(())
+}
+
+/// `YYYY-MM-DD HH:00:00` of a `YYYY-MM-DD HH:MM:SS` time.
+pub fn hour_of(time: &str) -> String {
+    match time.get(..13) {
+        Some(h) => format!("{h}:00:00"),
+        None => time.to_string(),
+    }
+}
+
 /// Writes one event: release, environment, issue (new or updated, with
-/// regression and ignore conditions), tag values, and, while the issue has
-/// stored fewer than [`MAX_PAYLOADS_PER_DAY`] today, the event row and its
-/// payload.
+/// regression and ignore conditions, both logged), tag values, the user and
+/// the hourly count, and, while the issue has stored fewer than the
+/// project's daily cap ([`MAX_PAYLOADS_PER_DAY`] by default) today, the
+/// event row and its payload.
 pub fn write_event(c: &Connection, e: &EventRecord) -> rusqlite::Result<Outcome> {
     let duplicate: bool = c
         .prepare_cached(
@@ -182,6 +218,7 @@ pub fn write_event(c: &Connection, e: &EventRecord) -> rusqlite::Result<Outcome>
     };
     let environment_id = upsert_environment(c, e.project_id, &e.environment, &e.timestamp)?;
     let today = day(&e.received_at);
+    let cap = payload_cap(c, e.project_id)?;
 
     let (issue_id, outcome, store_payload) = match find_issue(c, e.project_id, &e.hash)? {
         None => {
@@ -238,8 +275,8 @@ pub fn write_event(c: &Connection, e: &EventRecord) -> rusqlite::Result<Outcome>
             } else {
                 (None, None)
             };
-            let store_payload = issue.payload_day.as_deref() != Some(today)
-                || issue.payloads_today < MAX_PAYLOADS_PER_DAY;
+            let store_payload =
+                issue.payload_day.as_deref() != Some(today) || issue.payloads_today < cap;
             c.prepare_cached(
                 "UPDATE issues SET
                      times_seen = times_seen + 1,
@@ -270,6 +307,17 @@ pub fn write_event(c: &Connection, e: &EventRecord) -> rusqlite::Result<Outcome>
                 )?
                 .execute(params![issue.id, today])?;
             }
+            if regressed {
+                log_activity(
+                    c,
+                    issue.id,
+                    "regressed",
+                    None,
+                    &serde_json::json!({ "release": e.release }),
+                )?;
+            } else if unignored {
+                log_activity(c, issue.id, "unignored", None, &serde_json::json!({}))?;
+            }
             (
                 issue.id,
                 Outcome::Existing(issue.id, regressed),
@@ -279,6 +327,22 @@ pub fn write_event(c: &Connection, e: &EventRecord) -> rusqlite::Result<Outcome>
     };
 
     write_tags(c, issue_id, &e.tags, &e.timestamp)?;
+    c.prepare_cached(
+        "INSERT INTO issue_hours (issue_id, hour, project_id, events) VALUES (?1, ?2, ?3, 1)
+         ON CONFLICT (issue_id, hour) DO UPDATE SET events = events + 1",
+    )?
+    .execute(params![issue_id, hour_of(&e.received_at), e.project_id])?;
+    if let Some(user) = &e.user_hash {
+        let added = c
+            .prepare_cached(
+                "INSERT OR IGNORE INTO issue_users (issue_id, user_hash) VALUES (?1, ?2)",
+            )?
+            .execute(params![issue_id, user])?;
+        if added > 0 {
+            c.prepare_cached("UPDATE issues SET users_seen = users_seen + 1 WHERE id = ?1")?
+                .execute([issue_id])?;
+        }
+    }
 
     if store_payload {
         c.prepare_cached(

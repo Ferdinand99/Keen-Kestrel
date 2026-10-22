@@ -124,6 +124,8 @@ pub static KIT: KitConfig = KitConfig {
         ],
         home_url: "https://hedgerow.tools/Keen-Kestrel/",
     },
+    // The public URL comes from the environment, not from a settings page.
+    public_url_setting: Some("KK_PUBLIC_URL"),
 };
 
 /// Installs [`KIT`]. Call it first thing at start-up, and in test set-up.

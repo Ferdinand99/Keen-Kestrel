@@ -1,0 +1,245 @@
+{#- One event in full. Expects `ev` (issues::EventDetail), `m` and `im`. -#}
+<section class="card" aria-label="{{ tr("event.facts") }}">
+  {% call m::card_head(tr("event.facts"), "") %}{% endcall %}
+  <dl class="dl">
+    <div class="dl-row"><dt>{{ tr("event.id") }}</dt><dd class="mono break">{{ ev.event_id }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("event.time") }}</dt><dd>{{ m::time_ago(&ev.timestamp) }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("event.received") }}</dt><dd>{{ m::time_ago(&ev.received_at) }}</dd></div>
+    <div class="dl-row"><dt>{{ tr("issues.level") }}</dt><dd><span class="pill status-{{ ev.level_status }}"><span class="dot"></span>{{ ev.level_label }}</span></dd></div>
+    {%- if !ev.release.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("issues.release") }}</dt><dd class="break">{{ ev.release }}</dd></div>
+    {%- endif %}
+    {%- if !ev.environment.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("issues.environment") }}</dt><dd>{{ ev.environment }}</dd></div>
+    {%- endif %}
+    {%- if !ev.user.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("event.user") }}</dt><dd class="mono break">{{ ev.user }}</dd></div>
+    {%- endif %}
+    {%- if let Some(v) = ev.view %}
+    {%- if !v.sdk.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("event.sdk") }}</dt><dd class="break">{{ v.sdk }}</dd></div>
+    {%- endif %}
+    {%- if !v.platform.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("event.platform") }}</dt><dd>{{ v.platform }}</dd></div>
+    {%- endif %}
+    {%- if !v.transaction.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("event.transaction") }}</dt><dd class="break">{{ v.transaction }}</dd></div>
+    {%- endif %}
+    {%- if !v.server_name.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("event.server") }}</dt><dd class="break">{{ v.server_name }}</dd></div>
+    {%- endif %}
+    {%- if !v.dist.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("event.dist") }}</dt><dd>{{ v.dist }}</dd></div>
+    {%- endif %}
+    {%- if !v.fingerprint.is_empty() %}
+    <div class="dl-row"><dt>{{ tr("event.fingerprint") }}</dt><dd class="mono break">{{ v.fingerprint }}</dd></div>
+    {%- endif %}
+    {%- endif %}
+  </dl>
+</section>
+
+{%- match ev.view %}
+{%- when None %}
+{{ m::callout("info", tr("event.details_gone_text"), tr("event.details_gone_title")) }}
+{%- when Some(v) %}
+
+{%- if !v.message.is_empty() %}
+<section class="section" aria-labelledby="message-title">
+  {% call m::section_head(tr("event.message"), "", "message-title") %}{% endcall %}
+  <pre class="code"><code>{{ v.message }}</code></pre>
+</section>
+{%- endif %}
+
+{%- if !v.exceptions.is_empty() || v.thread.is_some() %}
+<section class="section" id="stack" aria-labelledby="stack-title">
+  {% call m::section_head(tr("event.stack"), tr("event.stack_sub"), "stack-title") %}
+    {%- if v.has_in_app %}
+    <nav class="segmented" aria-label="{{ tr("event.frames_label") }}">
+      <a href="{{ ev.frames_app_href }}"{% if !ev.all_frames %} aria-current="page"{% endif %}>{{ tr("event.frames_app") }}</a>
+      <a href="{{ ev.frames_all_href }}"{% if ev.all_frames %} aria-current="page"{% endif %}>{{ tr("event.frames_all") }}</a>
+    </nav>
+    {%- endif %}
+  {% endcall %}
+  {%- for e in v.exceptions %}
+  <article class="card card-flush" aria-label="{{ e.ty }}">
+    <div class="card-body stack-xs">
+      {%- if !loop.first %}<p class="muted">{{ tr("event.caused") }}</p>{% endif %}
+      <h3 class="card-title break">{% if e.ty.is_empty() %}{{ tr("event.exception") }}{% else %}{{ e.ty }}{% endif %}</h3>
+      {%- if !e.value.is_empty() %}<p class="break">{{ e.value }}</p>{% endif %}
+      {%- if !e.mechanism.is_empty() || e.handled.is_some() || !e.module.is_empty() %}
+      <div class="tags">
+        {%- if !e.mechanism.is_empty() %}{{ m::tag(tr("event.mechanism"), "gray", &e.mechanism) }}{% endif %}
+        {%- match e.handled %}{% when Some(true) %}<span class="badge status-success">{{ tr("event.handled") }}</span>{% when Some(false) %}<span class="badge status-error">{{ tr("event.unhandled") }}</span>{% when None %}{% endmatch %}
+        {%- if !e.module.is_empty() %}{{ m::tag(tr("event.module"), "gray", &e.module) }}{% endif %}
+      </div>
+      {%- endif %}
+    </div>
+    {%- if !e.frames.is_empty() %}
+    <ol class="list" role="list" aria-label="{{ tr("event.frames") }}">
+      {%- for g in e.frames %}
+      {%- match g %}
+      {%- when FrameGroup::Frame(f) %}
+      {{ im::frame(f) }}
+      {%- when FrameGroup::System(run) %}
+      <li class="list-row list-row-wrap">
+        <details class="disclosure list-full">
+          <summary>{{ trn("event.system_frames", run.len()) }}{{ m::icon("chevron-down") }}</summary>
+          <div class="disclosure-body">
+            <ol class="list" role="list">
+              {%- for f in run %}
+              {{ im::frame(f) }}
+              {%- endfor %}
+            </ol>
+          </div>
+        </details>
+      </li>
+      {%- endmatch %}
+      {%- endfor %}
+    </ol>
+    {%- endif %}
+  </article>
+  {%- endfor %}
+  {%- if let Some(t) = v.thread %}
+  <article class="card card-flush" aria-label="{{ tr("event.thread") }}">
+    <div class="card-body stack-xs">
+      <h3 class="card-title">{% if t.crashed %}{{ tr1("event.crashed_thread", "name", t.name) }}{% else %}{{ tr1("event.thread_named", "name", t.name) }}{% endif %}</h3>
+    </div>
+    <ol class="list" role="list" aria-label="{{ tr("event.frames") }}">
+      {%- for g in t.frames %}
+      {%- match g %}
+      {%- when FrameGroup::Frame(f) %}
+      {{ im::frame(f) }}
+      {%- when FrameGroup::System(run) %}
+      <li class="list-row list-row-wrap">
+        <details class="disclosure list-full">
+          <summary>{{ trn("event.system_frames", run.len()) }}{{ m::icon("chevron-down") }}</summary>
+          <div class="disclosure-body">
+            <ol class="list" role="list">
+              {%- for f in run %}
+              {{ im::frame(f) }}
+              {%- endfor %}
+            </ol>
+          </div>
+        </details>
+      </li>
+      {%- endmatch %}
+      {%- endfor %}
+    </ol>
+  </article>
+  {%- endif %}
+</section>
+{%- endif %}
+
+{%- if !v.breadcrumbs.is_empty() %}
+<section class="section" aria-labelledby="crumbs-title">
+  {% call m::section_head(tr("event.breadcrumbs"), tr("event.breadcrumbs_sub"), "crumbs-title") %}{% endcall %}
+  <div class="card card-flush">
+    <div class="table-wrap">
+      <table class="table table-stack">
+        <thead><tr><th>{{ tr("event.time") }}</th><th>{{ tr("event.category") }}</th><th>{{ tr("event.message") }}</th><th>{{ tr("issues.level") }}</th></tr></thead>
+        <tbody>
+          {%- for b in v.breadcrumbs %}
+          <tr>
+            <td class="num nowrap" data-label="{{ tr("event.time") }}">{% if b.datetime.is_empty() %}—{% else %}<time datetime="{{ b.datetime }}" title="{{ b.datetime }} UTC">{{ b.time }}</time>{% endif %}</td>
+            <td data-label="{{ tr("event.category") }}">{{ b.category }}</td>
+            <td class="td-block break" data-label="{{ tr("event.message") }}">{{ b.message }}{% if !b.data.is_empty() %}{% if !b.message.is_empty() %}<br>{% endif %}<span class="mono muted">{{ b.data }}</span>{% endif %}</td>
+            <td data-label="{{ tr("issues.level") }}">{{ b.level }}</td>
+          </tr>
+          {%- endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{%- endif %}
+
+{%- if let Some(r) = v.request %}
+<section class="section" aria-labelledby="request-title">
+  {% call m::section_head(tr("event.request"), tr("event.request_sub"), "request-title") %}{% endcall %}
+  <div class="card stack-sm">
+    <p class="break"><strong>{{ r.method }}</strong> <span class="mono">{{ r.url }}</span></p>
+    <dl class="dl dl-stack">
+      {%- if !r.query.is_empty() %}
+      <div class="dl-row"><dt>{{ tr("event.query") }}</dt><dd class="mono break">{{ r.query }}</dd></div>
+      {%- endif %}
+      {%- for (k, val) in r.headers %}
+      <div class="dl-row"><dt class="mono">{{ k }}</dt><dd class="mono break">{{ val }}</dd></div>
+      {%- endfor %}
+      {%- for (k, val) in r.env %}
+      <div class="dl-row"><dt class="mono">{{ k }}</dt><dd class="mono break">{{ val }}</dd></div>
+      {%- endfor %}
+    </dl>
+    {%- if !r.data.is_empty() %}
+    <p class="label">{{ tr("event.body") }}</p>
+    <pre class="code"><code>{{ r.data }}</code></pre>
+    {%- endif %}
+  </div>
+</section>
+{%- endif %}
+
+{%- if !v.contexts.is_empty() || !v.user.is_empty() %}
+<section class="section" aria-labelledby="contexts-title">
+  {% call m::section_head(tr("event.contexts"), "", "contexts-title") %}{% endcall %}
+  <div class="grid-2">
+    {%- if !v.user.is_empty() %}
+    <div class="card">
+      {% call m::card_head(tr("event.user"), tr("event.user_sub")) %}{% endcall %}
+      <dl class="dl">
+        {%- for (k, val) in v.user %}
+        <div class="dl-row"><dt class="mono">{{ k }}</dt><dd class="mono break">{{ val }}</dd></div>
+        {%- endfor %}
+      </dl>
+    </div>
+    {%- endif %}
+    {%- for c in v.contexts %}
+    <div class="card">
+      {%- if c.title_key.is_empty() %}
+      {% call m::card_head(&c.key, "") %}{% endcall %}
+      {%- else %}
+      {% call m::card_head(tr(c.title_key), "") %}{% endcall %}
+      {%- endif %}
+      <dl class="dl">
+        {%- for (k, val) in c.rows %}
+        <div class="dl-row"><dt class="mono">{{ k }}</dt><dd class="break">{{ val }}</dd></div>
+        {%- endfor %}
+      </dl>
+    </div>
+    {%- endfor %}
+  </div>
+</section>
+{%- endif %}
+
+{%- if !v.tags.is_empty() %}
+<section class="section" aria-labelledby="event-tags-title">
+  {% call m::section_head(tr("event.tags"), "", "event-tags-title") %}{% endcall %}
+  <div class="card">
+    <div class="tags">{% for (k, val) in v.tags %}{{ m::tag(k, "gray", val) }}{% endfor %}</div>
+  </div>
+</section>
+{%- endif %}
+
+{%- if !v.extra.is_empty() %}
+<section class="section" aria-labelledby="extra-title">
+  {% call m::section_head(tr("event.extra"), "", "extra-title") %}{% endcall %}
+  <div class="card">
+    <dl class="dl dl-stack">
+      {%- for (k, val) in v.extra %}
+      <div class="dl-row"><dt class="mono">{{ k }}</dt><dd class="mono break">{{ val }}</dd></div>
+      {%- endfor %}
+    </dl>
+  </div>
+</section>
+{%- endif %}
+
+{%- if !v.sdk_integrations.is_empty() %}
+<p class="section-foot">{{ tr1("event.integrations", "list", v.sdk_integrations) }}</p>
+{%- endif %}
+
+<details class="disclosure card">
+  <summary>{{ tr("event.raw") }}<span class="disclosure-sub">{{ tr("event.raw_sub") }}</span>{{ m::icon("chevron-down") }}</summary>
+  <div class="disclosure-body stack-sm">
+    <div class="toolbar"><button type="button" class="btn btn-secondary btn-sm" data-copy="#raw-{{ ev.event_id }}">{{ m::icon("copy") }}<span>{{ tr("event.copy_json") }}</span></button></div>
+    <pre class="code"><code id="raw-{{ ev.event_id }}">{{ v.raw }}</code></pre>
+  </div>
+</details>
+{%- endmatch %}

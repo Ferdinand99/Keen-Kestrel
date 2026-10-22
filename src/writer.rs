@@ -7,6 +7,12 @@
 //! attached as `store`, so an event's index row and its payload are written
 //! in the same transaction. Each job runs in a savepoint: one bad job (a
 //! project deleted meanwhile, say) doesn't take the batch with it.
+//!
+//! The issue pages' actions (resolve, merge, delete …) and the retention job
+//! run on the same connection through [`Writer::run`], after the jobs queued
+//! before them, so they never race ingest. After a batch with events, and
+//! after an action, the writer tells the live issue lists which project
+//! changed ([`Writer::subscribe`]).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -14,7 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use rusqlite::{Connection, TransactionBehavior, params};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 
 use crate::db::issues::{self, EventRecord, Outcome};
 
@@ -60,10 +66,33 @@ pub enum Job {
     Attachment(Box<AttachmentItem>),
 }
 
+/// Work for the writer's connection besides ingest jobs.
+type Exec = Box<dyn FnOnce(&mut Connection) + Send>;
+
 enum Msg {
     Job(Job),
     Flush(oneshot::Sender<()>),
+    Exec(Exec),
 }
+
+/// Why [`Writer::run`] failed.
+#[derive(Debug)]
+pub enum WriterError {
+    /// The writer has stopped (or the work panicked).
+    Stopped,
+    Db(rusqlite::Error),
+}
+
+impl std::fmt::Display for WriterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WriterError::Stopped => f.write_str("the writer has stopped"),
+            WriterError::Db(e) => write!(f, "database: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for WriterError {}
 
 /// How the writer batches.
 #[derive(Debug, Clone, Copy)]
@@ -104,6 +133,7 @@ pub struct QueueFull;
 pub struct Writer {
     tx: mpsc::Sender<Msg>,
     stats: Arc<Stats>,
+    changes: broadcast::Sender<i64>,
 }
 
 impl Writer {
@@ -116,9 +146,17 @@ impl Writer {
         let conn = open(main, store)?;
         let (tx, rx) = mpsc::channel(settings.queue_capacity.max(1));
         let stats = Arc::new(Stats::default());
+        let (changes, _) = broadcast::channel(64);
         let paths = (main.to_path_buf(), store.to_path_buf());
-        tokio::spawn(run(rx, conn, paths, settings, stats.clone()));
-        Ok(Writer { tx, stats })
+        tokio::spawn(run(
+            rx,
+            conn,
+            paths,
+            settings,
+            stats.clone(),
+            changes.clone(),
+        ));
+        Ok(Writer { tx, stats, changes })
     }
 
     /// Queues `jobs`, all or none.
@@ -147,6 +185,37 @@ impl Writer {
     pub fn stats(&self) -> &Stats {
         &self.stats
     }
+
+    /// Runs `f` on the writer's connection (with `store.sqlite` attached as
+    /// `store`) after the jobs queued before it, and returns its result.
+    /// `f` makes its own transaction.
+    pub async fn run<T, F>(&self, f: F) -> Result<T, WriterError>
+    where
+        F: FnOnce(&mut Connection) -> rusqlite::Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+        let exec: Exec = Box::new(move |c| {
+            let _ = tx.send(f(c));
+        });
+        self.tx
+            .send(Msg::Exec(exec))
+            .await
+            .map_err(|_| WriterError::Stopped)?;
+        rx.await
+            .map_err(|_| WriterError::Stopped)?
+            .map_err(WriterError::Db)
+    }
+
+    /// Project ids whose issues changed (events written, an action taken).
+    pub fn subscribe(&self) -> broadcast::Receiver<i64> {
+        self.changes.subscribe()
+    }
+
+    /// Tells the live lists that `project_id`'s issues changed.
+    pub fn notify(&self, project_id: i64) {
+        let _ = self.changes.send(project_id);
+    }
 }
 
 fn open(main: &Path, store: &Path) -> rusqlite::Result<Connection> {
@@ -166,12 +235,15 @@ async fn run(
     paths: (PathBuf, PathBuf),
     settings: WriterSettings,
     stats: Arc<Stats>,
+    changes: broadcast::Sender<i64>,
 ) {
     let mut conn = Some(conn);
     while let Some(first) = rx.recv().await {
         let mut batch = vec![first];
         let deadline = tokio::time::Instant::now() + settings.batch_interval;
-        while batch.len() < settings.batch_size && !matches!(batch.last(), Some(Msg::Flush(_))) {
+        while batch.len() < settings.batch_size
+            && !matches!(batch.last(), Some(Msg::Flush(_) | Msg::Exec(_)))
+        {
             match tokio::time::timeout_at(deadline, rx.recv()).await {
                 Ok(Some(msg)) => batch.push(msg),
                 Ok(None) | Err(_) => break,
@@ -194,13 +266,16 @@ async fn run(
         let stats2 = stats.clone();
         match tokio::task::spawn_blocking(move || {
             let mut c = c;
-            let acks = write_batch(&mut c, batch, &stats2);
-            (c, acks)
+            let (acks, projects) = write_batch(&mut c, batch, &stats2);
+            (c, acks, projects)
         })
         .await
         {
-            Ok((c, acks)) => {
+            Ok((c, acks, projects)) => {
                 conn = Some(c);
+                for project in projects {
+                    let _ = changes.send(project);
+                }
                 for ack in acks {
                     let _ = ack.send(());
                 }
@@ -210,28 +285,51 @@ async fn run(
     }
 }
 
-fn write_batch(c: &mut Connection, batch: Vec<Msg>, stats: &Stats) -> Vec<oneshot::Sender<()>> {
+/// Writes a batch's jobs, then runs its other work. Returns the flush acks
+/// and the projects that got events.
+fn write_batch(
+    c: &mut Connection,
+    batch: Vec<Msg>,
+    stats: &Stats,
+) -> (Vec<oneshot::Sender<()>>, Vec<i64>) {
     let mut acks = Vec::new();
+    let mut execs = Vec::new();
     let mut jobs = Vec::with_capacity(batch.len());
     for msg in batch {
         match msg {
             Msg::Job(job) => jobs.push(job),
             Msg::Flush(ack) => acks.push(ack),
+            Msg::Exec(f) => execs.push(f),
         }
     }
-    if jobs.is_empty() {
-        return acks;
+    let mut projects: Vec<i64> = Vec::new();
+    for job in &jobs {
+        if let Job::Event(e) = job
+            && !projects.contains(&e.project_id)
+        {
+            projects.push(e.project_id);
+        }
     }
+    if !jobs.is_empty() {
+        write_all(c, &mut jobs, stats);
+    }
+    for f in execs {
+        f(c);
+    }
+    (acks, projects)
+}
+
+fn write_all(c: &mut Connection, jobs: &mut [Job], stats: &Stats) {
     // Events first: attachments need their event's row.
     jobs.sort_by_key(|j| match j {
         Job::Event(_) => 0,
         Job::Attachment(_) => 2,
         _ => 1,
     });
-    let mut result = write_jobs(c, &jobs, stats);
+    let mut result = write_jobs(c, jobs, stats);
     if let Err(err) = &result {
         tracing::warn!(%err, jobs = jobs.len(), "a batch failed; trying once more");
-        result = write_jobs(c, &jobs, stats);
+        result = write_jobs(c, jobs, stats);
     }
     match result {
         Ok(()) => {
@@ -242,7 +340,6 @@ fn write_batch(c: &mut Connection, batch: Vec<Msg>, stats: &Stats) -> Vec<onesho
             stats.failed.fetch_add(jobs.len() as u64, Ordering::Relaxed);
         }
     }
-    acks
 }
 
 /// Counts of one transaction, added to [`Stats`] once it committed.

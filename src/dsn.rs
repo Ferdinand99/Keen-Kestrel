@@ -82,8 +82,10 @@ pub fn snippets(dsn: &str) -> Vec<Snippet> {
             label: "Rust",
             sdk: "sentry",
             install: "cargo add sentry".into(),
+            // `ClientOptions` is `#[non_exhaustive]`: a struct literal with
+            // `..Default::default()` doesn't compile outside the crate (E0639).
             code: format!(
-                "let _guard = sentry::init((\n    \"{dsn}\",\n    sentry::ClientOptions {{\n        release: sentry::release_name!(),\n        ..Default::default()\n    }},\n));"
+                "let mut options = sentry::ClientOptions::default();\noptions.release = sentry::release_name!();\noptions.attach_stacktrace = true;\nlet _guard = sentry::init((\"{dsn}\", options));"
             ),
         },
         Snippet {
@@ -148,5 +150,9 @@ mod tests {
         let ids: Vec<&str> = all.iter().map(|s| s.id).collect();
         assert_eq!(ids, ["swift", "javascript", "rust", "python"]);
         assert!(all.iter().all(|s| s.code.contains("\"https://k@h/1\"")));
+        // No struct literal for the non-exhaustive `ClientOptions`.
+        let rust = &all[2].code;
+        assert!(rust.contains("sentry::ClientOptions::default()"), "{rust}");
+        assert!(!rust.contains("..Default::default()"), "{rust}");
     }
 }

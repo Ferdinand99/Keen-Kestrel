@@ -1,0 +1,97 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{% include "partials/project_head.html" %}
+
+{%- if data.any %}
+<form id="issue-filters" class="stack-sm" method="get" action="{{ data.base }}" role="search" aria-label="{{ tr("issues.filter_aria") }}"
+  hx-get="{{ data.base }}" hx-target="#issue-results" hx-swap="innerHTML" hx-trigger="change, submit" data-no-progress>
+  {%- if data.select %}<input type="hidden" name="select" value="1">{% endif %}
+  <label class="search">{{ m::icon("search") }}<input id="issues-q" type="search" name="q" value="{{ state.q }}"
+    placeholder="{{ tr("issues.search_placeholder") }}" aria-label="{{ tr("issues.search_aria") }}" aria-describedby="issues-search-help" autocomplete="off" spellcheck="false"
+    hx-get="{{ data.base }}" hx-trigger="input changed delay:300ms, search" hx-target="#issue-results" hx-swap="innerHTML" hx-include="#issue-filters"></label>
+  <p class="help vh" id="issues-search-help">{{ tr("issues.search_help") }}</p>
+  <div class="popover" id="issue-filter-menu" popover>
+    <div class="stack-sm">
+      <div class="field">
+        <label class="label" for="issues-level">{{ tr("issues.level") }}</label>
+        <select id="issues-level" name="level">
+          <option value="">{{ tr("issues.any_level") }}</option>
+          {%- for l in levels %}
+          <option value="{{ l.value }}"{% if state.level == l.value %} selected{% endif %}>{{ l.label }}</option>
+          {%- endfor %}
+        </select>
+      </div>
+      {%- if !releases.is_empty() %}
+      <div class="field">
+        <label class="label" for="issues-release">{{ tr("issues.release") }}</label>
+        <select id="issues-release" name="release">
+          <option value="">{{ tr("issues.any_release") }}</option>
+          {%- for r in releases %}
+          <option value="{{ r }}"{% if state.release == **r %} selected{% endif %}>{{ r }}</option>
+          {%- endfor %}
+        </select>
+      </div>
+      {%- endif %}
+      {%- if environments.len() > 1 %}
+      <div class="field">
+        <label class="label" for="issues-env">{{ tr("issues.environment") }}</label>
+        <select id="issues-env" name="env">
+          <option value="">{{ tr("issues.any_environment") }}</option>
+          {%- for e in environments %}
+          <option value="{{ e }}"{% if state.env == **e %} selected{% endif %}>{{ e }}</option>
+          {%- endfor %}
+        </select>
+      </div>
+      {%- endif %}
+      <div class="field">
+        <label class="label" for="issues-sort">{{ tr("issues.sort_by") }}</label>
+        <select id="issues-sort" name="sort">
+          {%- for s in sorts %}
+          <option value="{{ s.value }}"{% if s.selected %} selected{% endif %}>{{ s.label }}</option>
+          {%- endfor %}
+        </select>
+      </div>
+      <p class="help">{{ tr("issues.search_help") }}</p>
+    </div>
+  </div>
+  {% include "partials/issue_chips.html" %}
+  <noscript><div class="cluster">{{ m::button(tr("issues.apply_filters"), "secondary", "filter", "submit", "sm") }}</div></noscript>
+</form>
+
+<div class="cluster cluster-between">
+  {%- if data.select %}
+  <p class="muted">{{ tr("issues.select_sub") }}</p>
+  <div class="toolbar"><a class="btn btn-secondary btn-sm" href="{{ data.exit_select_href() }}">{{ tr("common.done") }}</a></div>
+  {%- else %}
+  <p class="page-sub">{{ m::live() }}</p>
+  {%- if data.can_edit %}
+  <div class="toolbar"><a class="btn btn-secondary btn-sm" href="{{ data.select_href() }}">{{ m::icon("check-circle") }}<span>{{ tr("issues.select") }}</span></a></div>
+  {%- endif %}
+  {%- endif %}
+</div>
+
+{%- if data.select %}
+<form id="bulk-form" method="post" action="{{ data.base }}/bulk">
+  <input type="hidden" name="return_to" value="{{ data.exit_select_href() }}">
+  <div class="card">
+    <div class="cluster cluster-between">
+      <p class="muted">{{ tr("issues.tick_hint") }}</p>
+      <div class="toolbar">
+        <button type="submit" name="action" value="resolve" class="btn btn-secondary btn-sm" data-requires-checked="input[form=bulk-form][name=ids]">{{ m::icon("check") }}<span>{{ tr("issue.resolve") }}</span></button>
+        <button type="submit" name="action" value="ignore" class="btn btn-secondary btn-sm" data-requires-checked="input[form=bulk-form][name=ids]">{{ m::icon("eye-off") }}<span>{{ tr("issue.ignore") }}</span></button>
+        <button type="submit" name="action" value="unresolve" class="btn btn-secondary btn-sm" data-requires-checked="input[form=bulk-form][name=ids]">{{ m::icon("refresh") }}<span>{{ tr("issue.unresolve") }}</span></button>
+        <button type="submit" name="action" value="merge" class="btn btn-secondary btn-sm" data-requires-checked="input[form=bulk-form][name=ids]"
+          data-confirm="{{ tr("issues.merge_q") }}" data-confirm-message="{{ tr("issues.merge_msg") }}" data-confirm-label="{{ tr("issues.merge") }}" data-confirm-destructive="false">{{ m::icon("link") }}<span>{{ tr("issues.merge") }}</span></button>
+      </div>
+    </div>
+  </div>
+</form>
+{%- endif %}
+{%- endif %}
+
+<div id="issue-results" class="stack">
+  {% include "partials/issue_results.html" %}
+</div>
+{% endblock %}
