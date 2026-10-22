@@ -1,0 +1,29 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+{% import "issue_macros.html" as im %}
+
+{% block content %}
+<header class="page-head">
+  <a class="page-back" href="{{ back_href }}">{{ m::icon("chevron-left") }}<span class="truncate">{{ issue.title }}</span></a>
+  <div class="page-head-row">
+    <div class="page-head-text">
+      <h1 class="page-title">{{ tr1("event.title", "id", ev.short_id) }}</h1>
+      <p class="page-sub">{{ m::time_ago(&ev.timestamp) }}{% if !ev.release.is_empty() %} · {{ ev.release }}{% endif %}{% if !ev.environment.is_empty() %} · {{ ev.environment }}{% endif %}</p>
+    </div>
+    <nav class="page-actions" aria-label="{{ tr("event.nav") }}">
+      {%- if newer_href.is_empty() %}
+      <span class="btn btn-secondary" aria-disabled="true">{{ m::icon("chevron-left") }}<span>{{ tr("event.newer") }}</span></span>
+      {%- else %}
+      <a class="btn btn-secondary" href="{{ newer_href }}" rel="prev">{{ m::icon("chevron-left") }}<span>{{ tr("event.newer") }}</span></a>
+      {%- endif %}
+      {%- if older_href.is_empty() %}
+      <span class="btn btn-secondary" aria-disabled="true"><span>{{ tr("event.older") }}</span>{{ m::icon("chevron-right") }}</span>
+      {%- else %}
+      <a class="btn btn-secondary" href="{{ older_href }}" rel="next"><span>{{ tr("event.older") }}</span>{{ m::icon("chevron-right") }}</a>
+      {%- endif %}
+    </nav>
+  </div>
+</header>
+
+{% include "partials/event_detail.html" %}
+{% endblock %}

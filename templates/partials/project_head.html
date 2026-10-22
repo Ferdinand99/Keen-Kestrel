@@ -1,4 +1,4 @@
-{#- Project page header with the Overview / Settings tabs. Expects `project: ProjectView`, `tab` and `m`. -#}
+{#- Project page header with the Overview / Issues / Settings tabs. Expects `project: ProjectView`, `tab` and `m`. -#}
 <header class="page-head">
   <a class="page-back" href="/projects">{{ m::icon("chevron-left") }}{{ tr("projects.title") }}</a>
   <div class="page-head-row">
@@ -10,5 +10,6 @@
 </header>
 <nav class="tabs" aria-label="{{ project.name }}">
   <a class="tab" href="/projects/{{ project.id }}"{% if tab == "overview" %} aria-current="page"{% endif %}>{{ tr("project.overview") }}</a>
+  <a class="tab" href="/projects/{{ project.id }}/issues"{% if tab == "issues" %} aria-current="page"{% endif %}>{{ tr("issues.title") }}</a>
   <a class="tab" href="/projects/{{ project.id }}/settings"{% if tab == "settings" %} aria-current="page"{% endif %}>{{ tr("project.settings") }}</a>
 </nav>

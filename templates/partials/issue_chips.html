@@ -1,0 +1,15 @@
+{#- The status chips and the filter menu's button. Expects `state`, `chips`,
+    `oob` and `m`. Filter responses send it again out of band, so the chips
+    show the status an `is:` in the search picked. `shown_status` tells the
+    server which chip was checked when the page last changed. -#}
+<div class="chips chips-scroll" id="issue-chips"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <input type="hidden" name="shown_status" value="{{ state.status.as_str() }}">
+  <button type="button" class="chip" popovertarget="issue-filter-menu">
+    {{- m::icon("sliders", "icon-sm") }}{{ tr("issues.filter_and_sort") }}
+    {%- if state.extra_filters() > 0 %}<span class="badge">{{ state.extra_filters() }}</span>{% endif -%}
+  </button>
+  <span class="vh" id="status-filter-label">{{ tr("issues.status") }}</span>
+  {%- for c in chips %}
+  <label class="chip"><input type="radio" name="status" aria-describedby="status-filter-label" value="{{ c.value }}"{% if c.checked %} checked{% endif %}>{{ c.label }}</label>
+  {%- endfor %}
+</div>

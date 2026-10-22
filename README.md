@@ -13,10 +13,12 @@
 </p>
 
 > **Status: early development.** Setup and sign-in with two-factor authentication, users, API tokens,
-> projects and their DSN keys (web pages, REST API and one MCP tool) run in 26 languages. Ingest works: the
-> official Sentry SDKs can send events, which are scrubbed of personal data, grouped into issues and stored.
-> The pages that show issues and events come next. The design is in [`docs/design.md`](docs/design.md); to
-> build and run it, see [`docs/development.md`](docs/development.md).
+> projects and their DSN keys (web pages, REST API and one MCP tool) run in 26 languages. The official Sentry
+> SDKs can send events, which are scrubbed of personal data, grouped into issues and stored. Errors can be
+> browsed and triaged: a project overview, an issue list with search, filters and live updates, issue and event
+> pages with stack traces, breadcrumbs and the reasons for the grouping, and resolve, ignore, merge and delete,
+> with retention per project. Symbolication, alerts and the API for issues come next. The design is in
+> [`docs/design.md`](docs/design.md); to build and run it, see [`docs/development.md`](docs/development.md).
 
 Keen Kestrel answers two questions about the apps and sites you run:
 

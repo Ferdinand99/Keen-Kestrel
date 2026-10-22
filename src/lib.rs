@@ -3,9 +3,9 @@
 //!
 //! Sign-in, users, API tokens, Security and the API reference come from the
 //! kit; Kestrel adds projects and their DSN keys (pages, REST API, one MCP
-//! tool) and Sentry-compatible ingest: normalisation, privacy scrubbing,
-//! grouping into issues and the single batch writer (docs/design.md §4).
-//! The issue pages come next (§11).
+//! tool), Sentry-compatible ingest (normalisation, privacy scrubbing,
+//! grouping into issues, the single batch writer), the issue pages with
+//! search and triage, and retention (docs/design.md §4).
 
 #![forbid(unsafe_code)]
 
@@ -15,19 +15,21 @@ pub mod db;
 pub mod dsn;
 pub mod event;
 pub mod ingest;
+pub mod issues;
 pub mod mcp;
 pub mod pages;
 pub mod product;
 pub mod project;
+pub mod retention;
 pub mod server;
 pub mod store;
 pub mod writer;
 
 use std::path::Path;
 
-use axum::Router;
 use axum::middleware::{from_fn, from_fn_with_state};
 use axum::routing::{get, post};
+use axum::{Extension, Router};
 use vole_kit::auth::{guard, pages as kit_pages};
 use vole_kit::db::settings;
 use vole_kit::state::Core;
@@ -88,14 +90,18 @@ pub async fn start_with(
 }
 
 /// The whole app: Kestrel's pages and API, ingest, the kit's pages, static
-/// files, MCP and the health probe, behind the kit's middleware.
+/// files, MCP and the health probe, behind the kit's middleware. The issue
+/// pages reach the writer and the store through an [`Extension`] with
+/// ingest's state.
 pub fn router(app: Kestrel) -> Router {
     let core = app.core;
     let protected = Router::new()
         .merge(pages::router())
+        .merge(issues::router())
         .merge(api::router())
         .merge(kit_pages::router())
-        .route_layer(from_fn_with_state(core.clone(), guard::require_auth));
+        .route_layer(from_fn_with_state(core.clone(), guard::require_auth))
+        .layer(Extension(app.ingest.clone()));
     let public = Router::new()
         .route("/healthz", get(vole_kit::http::healthz))
         .route("/static/{*path}", get(vole_kit::http::assets::static_asset))

@@ -1471,6 +1471,7 @@ dependencies = [
  "clap",
  "deadpool-sqlite",
  "flate2",
+ "futures-util",
  "hex",
  "insta",
  "jiff",
@@ -2929,8 +2930,8 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vole-kit"
-version = "0.1.0"
-source = "git+https://github.com/Ferdinand99/Vigilant-Vole?tag=vole-kit-v0.1.0#45d9834b10afcfda20bf1eb7736166017d5611be"
+version = "0.1.1"
+source = "git+https://github.com/Ferdinand99/Vigilant-Vole?tag=vole-kit-v0.1.1#01c01458af9e4a565822452ebfa10978b400801d"
 dependencies = [
  "argon2",
  "askama",
@@ -2964,8 +2965,8 @@ dependencies = [
 
 [[package]]
 name = "vole-kit-build"
-version = "0.1.0"
-source = "git+https://github.com/Ferdinand99/Vigilant-Vole?tag=vole-kit-v0.1.0#45d9834b10afcfda20bf1eb7736166017d5611be"
+version = "0.1.1"
+source = "git+https://github.com/Ferdinand99/Vigilant-Vole?tag=vole-kit-v0.1.1#01c01458af9e4a565822452ebfa10978b400801d"
 
 [[package]]
 name = "walkdir"

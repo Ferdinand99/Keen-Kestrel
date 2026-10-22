@@ -17,7 +17,7 @@ path = "src/main.rs"
 # The shared product kit (auth, i18n, db, HTTP, API docs, MCP, notifications,
 # design system). Locally, a .cargo/config.toml [patch] can point it at a
 # checkout of the Vigilant Vole repository (docs/development.md).
-vole-kit = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.1.0" }
+vole-kit = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.1.1" }
 # The versions below match vole-kit's, so both use one copy of each crate.
 askama = "0.16.1"
 axum = "0.8.9"
@@ -35,6 +35,8 @@ tokio = { version = "1.53.1", features = ["full"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 url = "2.5.8"
+# The live issue list streams server-sent events.
+futures-util = "0.3.34"
 # Ingest: request bodies arrive gzip-, deflate-, br- or zstd-compressed;
 # event payloads are kept zstd-compressed in store.sqlite.
 brotli = { version = "8.0.2", default-features = false, features = ["std"] }
@@ -51,7 +53,7 @@ symbolic-demangle = { version = "13.9.0", default-features = false, features = [
 
 [build-dependencies]
 # Copies the kit's templates into templates/kit/ for askama (build.rs).
-vole-kit-build = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.1.0" }
+vole-kit-build = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.1.1" }
 
 [dev-dependencies]
 # Grouping snapshots (tests/snapshots); review changes with `cargo insta review`.

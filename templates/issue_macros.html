@@ -1,0 +1,37 @@
+{#-
+  Stack frames for the issue and event pages. Import with
+      {% import "issue_macros.html" as im %}
+  next to the kit's macros (`m`).
+-#}
+{% import "kit/macros.html" as m %}
+
+{#- One frame (view::FrameView) as a list row; source and variables fold out. -#}
+{% macro frame(f) -%}
+<li class="list-row list-row-wrap">
+  <span class="list-main">
+    <span class="list-title list-title-wrap mono">{{ f.function }}</span>
+    {%- if !f.location.is_empty() || !f.package.is_empty() || !f.address.is_empty() %}
+    <span class="list-sub break">{{ f.location }}{% if !f.package.is_empty() %}{% if !f.location.is_empty() %} · {% endif %}{{ f.package }}{% endif %}{% if !f.address.is_empty() %}{% if !f.location.is_empty() || !f.package.is_empty() %} · {% endif %}<span class="mono">{{ f.address }}</span>{% endif %}</span>
+    {%- endif %}
+  </span>
+  {%- if f.in_app %}<span class="list-trail"><span class="badge badge-brand">{{ tr("event.in_app") }}</span></span>{% endif %}
+  {%- if f.has_details() %}
+  <details class="disclosure list-full"{% if f.open %} open{% endif %}>
+    <summary>{% if f.context.is_empty() %}{{ tr("event.variables") }}{% else %}{{ tr("event.source") }}{% endif %}{{ m::icon("chevron-down") }}</summary>
+    <div class="disclosure-body stack-sm">
+      {%- if !f.context.is_empty() %}
+      <pre class="code"><code>{% for l in f.context %}{% if l.current %}<strong>{{ l.no }}  {{ l.code }}</strong>{% else %}{{ l.no }}  {{ l.code }}{% endif %}
+{% endfor %}</code></pre>
+      {%- endif %}
+      {%- if !f.vars.is_empty() %}
+      <dl class="dl dl-stack">
+        {%- for (k, v) in f.vars %}
+        <div class="dl-row"><dt class="mono">{{ k }}</dt><dd class="mono break">{{ v }}</dd></div>
+        {%- endfor %}
+      </dl>
+      {%- endif %}
+    </div>
+  </details>
+  {%- endif %}
+</li>
+{%- endmacro %}

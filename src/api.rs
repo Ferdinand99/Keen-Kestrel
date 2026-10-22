@@ -10,7 +10,7 @@
 use std::fmt::Write as _;
 
 use axum::Router;
-use axum::extract::State;
+use axum::extract::{Extension, State};
 use axum::http::HeaderMap;
 use axum::middleware;
 use axum::response::{IntoResponse, Response};
@@ -18,7 +18,7 @@ use axum::routing::get;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use vole_kit::auth::CurrentUser;
-use vole_kit::docs::{DocsSpec, RouteDoc, r};
+use vole_kit::docs::{DocsSpec, ErrorCode, RouteDoc, r};
 use vole_kit::http::rest::{
     Body, Id, Params, V1Error, V1Result, created, json_ok, limit, no_content, paginate,
     parse_cursor,
@@ -162,10 +162,11 @@ pub static DOCS: DocsSpec = DocsSpec {
     openapi_title: "Keen Kestrel API",
     openapi_description: "REST API for Keen Kestrel. Authenticate with `Authorization: Bearer kk_…` (create tokens under Settings → API tokens). Read-only tokens act as viewers. Errors use `{\"error\": {\"code\", \"message\", \"fields\"}}`; lists use `?limit=&cursor=` and return `next_cursor`.",
     bearer_description: "API token (kk_…)",
-    agent_token_description: "Not used by Keen Kestrel.",
+    // Only API tokens and sessions: DSN keys can't call the API.
+    credentials: &[],
     error_example: ERROR_EXAMPLE,
-    config_file: "kestrel.json",
-    agent_token_access: "not used",
+    error_codes: ERROR_CODES,
+    config_document: None,
     curl_path_param,
     markdown_intro,
     markdown_middle,
@@ -175,7 +176,16 @@ pub static DOCS: DocsSpec = DocsSpec {
     api_base: "/api/v1",
     example_path: "/api/v1/projects",
     metrics_path: None,
+    fallback_host: Some("localhost:3002"),
 };
+
+/// Kestrel's wording of the kit's `conflict` row: what clashes here.
+const ERROR_CODES: &[ErrorCode] = &[ErrorCode {
+    code: "conflict",
+    status: 409,
+    when: "another project already uses the slug, or the project already has 20 keys",
+    on_page: true,
+}];
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -379,12 +389,24 @@ async fn update_project(
 }
 
 async fn delete_project(
-    State(core): State<Core>,
+    State(_core): State<Core>,
+    Extension(ingest): Extension<crate::ingest::Ingest>,
     user: CurrentUser,
     Id(id): Id<i64>,
 ) -> V1Result<Response> {
     require_editor(&user)?;
-    if !core.with_conn(move |c| db::delete(c, id)).await? {
+    // On the writer's connection, so the store's rows go too.
+    let found = ingest
+        .writer()
+        .run(move |c| {
+            let tx = c.transaction()?;
+            let found = crate::db::triage::delete_project(&tx, id)?;
+            tx.commit()?;
+            Ok(found)
+        })
+        .await
+        .map_err(vole_kit::http::ApiError::internal)?;
+    if !found {
         return Err(V1Error::not_found());
     }
     tracing::info!(user = %user.username, id, "project deleted (API)");

@@ -1,0 +1,54 @@
+{#- An issue's page header with its actions. Expects `issue` (issues::IssueView), `back_href`, `has_release`, `ctx` and `m`. -#}
+<header class="page-head">
+  <a class="page-back" href="{{ back_href }}">{{ m::icon("chevron-left") }}{{ tr("issues.title") }}</a>
+  <div class="page-head-row">
+    <div class="page-head-text">
+      <div class="page-title-group">
+        <h1 class="page-title break">{{ issue.title }}</h1>
+      </div>
+      {%- if !issue.culprit.is_empty() %}
+      <p class="page-sub break">{{ issue.culprit }}</p>
+      {%- endif %}
+      <div class="tags">
+        <span class="pill status-{{ issue.level_status }}"><span class="dot"></span>{{ issue.level_label }}</span>
+        {%- for b in issue.badges %}<span class="badge {{ b.class }}"{% if !b.tip.is_empty() %} data-tip="{{ b.tip }}"{% endif %}>{{ b.label }}</span>{% endfor %}
+      </div>
+    </div>
+    {%- if ctx.can_edit() %}
+    <div class="page-actions">
+      <form id="issue-action" method="post" action="{{ issue.href }}/action"></form>
+      {%- if issue.resolved || issue.ignored %}
+      <button type="submit" form="issue-action" name="action" value="unresolve" class="btn btn-secondary">{{ m::icon("refresh") }}<span>{{ tr("issue.unresolve") }}</span></button>
+      {%- else %}
+      <button type="submit" form="issue-action" name="action" value="resolve" class="btn btn-primary">{{ m::icon("check") }}<span>{{ tr("issue.resolve") }}</span></button>
+      {%- if has_release %}
+      <button type="button" class="btn btn-icon btn-secondary" popovertarget="resolve-menu" aria-label="{{ tr("issue.more_resolve") }}" data-tip="{{ tr("issue.more_resolve") }}">{{ m::icon("chevron-down") }}</button>
+      <div class="menu" id="resolve-menu" popover>
+        <button class="menu-item" type="submit" form="issue-action" name="action" value="resolve_next_release">{{ m::icon("check-circle") }}{{ tr("issue.resolve_next") }}</button>
+        <p class="menu-label">{{ tr("issue.resolve_next_help") }}</p>
+      </div>
+      {%- endif %}
+      <button type="button" class="btn btn-secondary" popovertarget="ignore-menu">{{ m::icon("eye-off") }}<span>{{ tr("issue.ignore") }}</span></button>
+      <div class="menu" id="ignore-menu" popover>
+        <button class="menu-item" type="submit" form="issue-action" name="action" value="ignore">{{ m::icon("eye-off") }}{{ tr("issue.ignore_forever") }}</button>
+        <hr class="menu-sep">
+        <p class="menu-label">{{ tr("issue.ignore_until_events") }}</p>
+        <button class="menu-item" type="submit" form="issue-action" name="action" value="ignore_events_10">{{ trn("issue.more_events", 10) }}</button>
+        <button class="menu-item" type="submit" form="issue-action" name="action" value="ignore_events_100">{{ trn("issue.more_events", 100) }}</button>
+        <button class="menu-item" type="submit" form="issue-action" name="action" value="ignore_events_1000">{{ trn("issue.more_events", 1000) }}</button>
+        <hr class="menu-sep">
+        <p class="menu-label">{{ tr("issue.ignore_for") }}</p>
+        <button class="menu-item" type="submit" form="issue-action" name="action" value="ignore_hours_1">{{ trn("issue.hours", 1) }}</button>
+        <button class="menu-item" type="submit" form="issue-action" name="action" value="ignore_hours_24">{{ trn("issue.hours", 24) }}</button>
+        <button class="menu-item" type="submit" form="issue-action" name="action" value="ignore_hours_168">{{ trn("count.days", 7) }}</button>
+      </div>
+      {%- endif %}
+      <button type="submit" form="issue-action" name="action" value="delete" class="btn btn-danger btn-collapse" aria-label="{{ tr("common.delete") }}"
+        data-confirm="{{ tr("issue.delete_q") }}" data-confirm-message="{{ tr("issue.delete_msg") }}" data-confirm-label="{{ tr("common.delete") }}">{{ m::icon("trash") }}<span>{{ tr("common.delete") }}</span></button>
+    </div>
+    {%- endif %}
+  </div>
+</header>
+{%- if !issue.status_note.is_empty() %}
+{{ m::callout("info", &issue.status_note) }}
+{%- endif %}

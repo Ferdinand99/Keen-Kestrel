@@ -61,6 +61,29 @@
   {%- endfor %}
 </section>
 
+<section class="section" aria-labelledby="retention-title" id="retention">
+  {% call m::section_head(tr("retention.title"), tr("retention.sub"), "retention-title") %}{% endcall %}
+  {%- if ctx.can_edit() %}
+  <form class="card form" method="post" action="/projects/{{ project.id }}/retention" data-warn-unsaved>
+    {{ m::field_number("event_days", tr("retention.event_days"), retention.event_days, tr("common.days"), "1", "3650", "1", tr("retention.event_days_help")) }}
+    {{ m::field_number("issue_days", tr("retention.issue_days"), retention.issue_days, tr("common.days"), "1", "3650", "1", tr("retention.issue_days_help")) }}
+    {{ m::field_number("per_day", tr("retention.per_day"), retention.per_day, tr("retention.per_day_unit"), "1", "100000", "1", tr("retention.per_day_help")) }}
+    <div class="form-actions">
+      {{ m::button(tr("retention.save")) }}
+    </div>
+  </form>
+  {%- else %}
+  <div class="card">
+    <dl class="dl">
+      <div class="dl-row"><dt>{{ tr("retention.event_days") }}</dt><dd class="num">{{ trn("count.days", retention.event_days) }}</dd></div>
+      <div class="dl-row"><dt>{{ tr("retention.issue_days") }}</dt><dd class="num">{{ trn("count.days", retention.issue_days) }}</dd></div>
+      <div class="dl-row"><dt>{{ tr("retention.per_day") }}</dt><dd class="num">{{ num(retention.per_day) }}</dd></div>
+    </dl>
+  </div>
+  {%- endif %}
+  <p class="section-foot">{{ tr("retention.foot") }}</p>
+</section>
+
 {%- if ctx.can_edit() %}
 <section class="section" aria-labelledby="danger-title">
   {% call m::section_head(tr("project.delete"), tr("project.delete_sub"), "danger-title") %}{% endcall %}

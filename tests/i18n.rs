@@ -1,103 +1,28 @@
 //! Every language translates every one of Kestrel's own strings, with the
-//! same placeholders and the plural forms its CLDR rule needs.
+//! same placeholders and the plural forms its CLDR rule needs; every key the
+//! code and templates use exists.
 
 use std::collections::BTreeSet;
 
-use vole_kit::i18n::{Lang, Plural, catalog};
+use vole_kit::i18n::{Lang, catalog};
 
-const CATEGORIES: [&str; 6] = ["zero", "one", "two", "few", "many", "other"];
-
-fn product_text(code: &str) -> &'static str {
-    keen_kestrel::product::KIT
-        .locales
-        .iter()
-        .find(|(c, _)| *c == code)
-        .map_or("", |(_, text)| text)
-}
-
-/// `(plain keys, plural bases)` of a catalog.
-fn split(keys: impl Iterator<Item = String>) -> (BTreeSet<String>, BTreeSet<String>) {
-    let (mut plain, mut plural) = (BTreeSet::new(), BTreeSet::new());
-    for key in keys {
-        match key.rsplit_once('.') {
-            Some((base, cat)) if CATEGORIES.contains(&cat) => {
-                plural.insert(base.to_string());
-            }
-            _ => {
-                plain.insert(key);
-            }
-        }
-    }
-    (plain, plural)
-}
-
-fn placeholders(text: &str) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    let mut rest = text;
-    while let Some(start) = rest.find('{') {
-        rest = &rest[start + 1..];
-        if let Some(end) = rest.find('}') {
-            out.insert(rest[..end].to_string());
-            rest = &rest[end + 1..];
-        }
-    }
-    out
-}
-
+/// Every language Kestrel ships is complete over the joined catalog (the
+/// kit's strings and Kestrel's, the texts the kit takes from Kestrel
+/// included): no missing or extra keys, no empty values, the same
+/// placeholders as English and the plural forms the language needs.
 #[test]
-fn every_language_has_every_string() {
+fn every_language_is_complete() {
     keen_kestrel::install();
-    let en = catalog::parse(product_text("en")).unwrap();
-    let (plain, plural) = split(en.keys().cloned());
-    assert!(plain.len() > 50 && !plural.is_empty());
-
-    let mut problems = Vec::new();
-    let mut languages = 0;
-    for lang in Lang::all() {
-        let code = lang.code();
-        let text = product_text(code);
-        if text.is_empty() {
-            problems.push(format!("{code}: no catalog"));
-            continue;
-        }
-        languages += 1;
-        let cat = catalog::parse(text).unwrap_or_else(|e| panic!("{code}: {e}"));
-        let required: Vec<&str> = lang
-            .plural_rule()
-            .categories()
+    let en = catalog::parse(
+        keen_kestrel::product::KIT
+            .locales
             .iter()
-            .map(|p: &Plural| p.as_str())
-            .collect();
-        let mut expected: BTreeSet<String> = plain.clone();
-        for base in &plural {
-            for cat in &required {
-                expected.insert(format!("{base}.{cat}"));
-            }
-        }
-        let got: BTreeSet<String> = cat.keys().cloned().collect();
-        for missing in expected.difference(&got) {
-            problems.push(format!("{code}: missing {missing}"));
-        }
-        for extra in got.difference(&expected) {
-            problems.push(format!("{code}: unexpected {extra}"));
-        }
-        for (key, value) in &cat {
-            if value.trim().is_empty() {
-                problems.push(format!("{code}: {key} is empty"));
-            }
-            let english = en.get(key).or_else(|| {
-                key.rsplit_once('.')
-                    .and_then(|(base, _)| en.get(&format!("{base}.other")))
-            });
-            if let Some(english) = english
-                && placeholders(english) != placeholders(value)
-            {
-                problems.push(format!("{code}: {key} has other placeholders than English"));
-            }
-        }
-    }
-    assert_eq!(languages, 26, "{problems:#?}");
-    assert!(problems.is_empty(), "{}", problems.join("\n"));
+            .find(|(c, _)| *c == "en")
+            .map_or("", |(_, text)| text),
+    )
+    .unwrap();
+    assert!(en.len() > 100, "only {} English strings", en.len());
+    catalog::assert_full_coverage();
 }
 
 /// The language picker's languages are exactly the ones Kestrel ships.

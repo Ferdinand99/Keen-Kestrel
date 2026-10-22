@@ -19,20 +19,24 @@ src/
   config.rs           # flags and KK_* environment variables
   server.rs           # listener and graceful shutdown
   project.rs          # project and key rules (names, slugs, origins, rate limits)
-  db/                 # migration set, projects and project_keys, issues (the writer's upsert)
+  db/                 # migration set, projects and project_keys, issues (the writer's upsert),
+                      # triage (the issue pages' reads, lifecycle actions, retention deletes)
   dsn.rs              # public address, DSNs, SDK snippets
   ingest/             # Sentry endpoints: keys, body decoding and limits, envelopes, rate limits, capture mode
   event/              # normalisation and privacy (scrub.rs), grouping (kestrel:v1), title, culprit, tags
   writer.rs           # the single batch writer
   store.rs            # store.sqlite: event payloads, attachments, sessions, feedback
-  pages.rs            # project pages
+  pages.rs            # project pages: list, overview, settings (keys, retention)
+  issues/             # issue pages: list (search.rs: the search syntax), issue, event (view.rs: the
+                      # payload as the pages show it), actions, the live list (live.rs, SSE)
+  retention.rs        # the daily retention job and the end of time-limited ignoring
   api.rs              # REST API v1 and its route table (API reference)
   mcp.rs              # MCP tools
 templates/            # Kestrel's pages (extend kit/layout.html)
 static/               # favicon, home-screen icons, web manifest
 migrations/           # Kestrel's migrations (after the kit's core set); store/ has store.sqlite's own
 locales/              # Kestrel's strings, 26 languages; glossaries in locales/glossary/
-tests/                # in-process app tests, translation coverage, ingest and grouping
+tests/                # in-process app tests, translation coverage, ingest, grouping, issue pages
   fixtures/sentry/    # requests recorded from real SDKs, per SDK and version
   snapshots/          # grouping snapshots (insta)
 ```
@@ -104,8 +108,11 @@ What happens to a request (docs/design.md §4):
 6. **The writer** (`src/writer.rs`): ingest puts the jobs on a bounded queue (2000 jobs; full means 429). One task
    writes them every 100 ms or 500 jobs in one IMMEDIATE transaction, on its own connection with `store.sqlite`
    attached: issues (new or updated, counts, first and last seen), releases and environments on first sight, tag
-   values (the standard keys plus at most 20 custom ones per issue), the search index. A resolved issue that gets
-   an event becomes `regressed`. At most 1000 payloads per issue and day are stored; the counts go on.
+   values (the standard keys plus at most 20 custom ones per issue), distinct users per issue (`issue_users`),
+   events per issue and hour (`issue_hours`), the search index. A resolved issue that gets an event becomes
+   `regressed`, an ignored one whose condition is met `unresolved` again; both are noted in `issue_activity`. At
+   most `payloads_per_day` (1000 unless the project says otherwise) payloads per issue and day are stored; the
+   counts go on.
 
 `kestrel.sqlite` holds the index; `store.sqlite` (own migrations in `migrations/store/`, incremental auto-vacuum,
 no backup before migrating) holds payloads, attachments, sessions and feedback, and can be deleted without
@@ -159,6 +166,61 @@ Every accepted event was written. The container used 5 MB at rest and about 40�
 database files. The targets (500 events/s, p99 under 30 ms, docs/design.md §8) hold with room to spare; tmpfs
 leaves out the cost of `fsync` on a real disk.
 
+## Issues
+
+The pages are in `src/issues/` and `templates/` (`issues.html`, `issue.html`, `event.html` and their partials).
+Everyone signed in reads them; editors and admins act.
+
+- **Project overview** (`/projects/{id}`): until the first event, the empty state and the DSN with setup snippets;
+  then unresolved issues, events in the last 24 hours and 14 days (from `issue_hours`), a 14-day chart, the
+  latest and the most frequent unresolved issues, and the setup folded into a disclosure.
+- **Issue list** (`/projects/{id}/issues`): status chips (unresolved, resolved, ignored, all), level, release and
+  environment filters, sort by last seen, first seen, events or users, 25 per page, 14-day sparklines, badges
+  for new (first seen in the last 7 days), regressed and unsymbolicated issues. Filter changes swap the results
+  with htmx and push the URL; the status chips come back out of band. While the list is open it listens on
+  `/projects/{id}/issues/live` (server-sent events with the same query string): the writer says which project
+  changed after each batch and each action, and the list is rendered again at most about once a second. Select
+  mode (`?select=1`, editors) resolves, ignores, unresolves or merges the ticked issues.
+- **Search** (`src/issues/search.rs`): `is:unresolved|resolved|ignored|all|new|regressed|ongoing|unsymbolicated`,
+  `level:`, `release:` (as sent, or only the version: `release:1.4` matches `shop@1.4` and `shop@1.4+12`; `*` is
+  a wildcard), `env:`, `os:`/`browser:`/`device:`/`runtime:` (name, or name and version), any other `key:value`
+  tag, `!` to negate, double quotes for values and phrases with spaces. Other words search titles and culprits
+  through FTS5 as prefixes; an event id finds its issue. Terms that can't be understood are listed above the
+  results. An `is:` status in the search wins over the chips until a chip is picked.
+- **Issue page** (`/projects/{id}/issues/{issue}`): title, culprit, level, status and badges, counts, first and last
+  seen with their releases; the tabs Details (the latest event in full, the issue's facts, the top releases,
+  environments, systems, browsers, devices and runtimes, the activity log), Events (50 per page), Tags (top values
+  per key) and Grouping (each stored hash with its components and grouping configuration). The event page
+  (`…/events/{event_id}`) shows one event with newer and older links.
+- **An event** (`src/issues/view.rs`): the exception chain from the main exception to its causes, stack traces
+  innermost frame first with the in-app frames shown and runs of other frames folded (`?frames=all` shows
+  them all), source lines and variables of a frame, the crashed thread's stack when the exceptions have none,
+  breadcrumbs (newest first), the request, contexts, user, tags, extra data, SDK and the raw JSON as stored
+  (already scrubbed at ingest).
+- **Actions** (`POST …/issues/{issue}/action`, `POST …/issues/bulk`, `src/db/triage.rs`): resolve; resolve in the
+  next release (the project's newest release is stored, and only events from a release first seen after it
+  regress the issue; without any release it resolves now); unresolve; ignore forever, until 10, 100 or 1000 more
+  events, or for 1 hour, 24 hours or 7 days; merge (into the ticked issue with the most events: hashes, events,
+  tag values, users and hourly counts move over, the counts add up, the others are deleted); delete (with its
+  events and their payloads, attachments and feedback; new events like it start a new issue). They run on the
+  writer's connection (`Writer::run`), so they never race ingest, and each is noted in `issue_activity` with the
+  user's name. Deleting a project goes through the writer too, so its rows in `store.sqlite` go with it.
+
+### Retention
+
+`src/retention.rs` runs a minute after start and then once a day, in batches through the writer, per project
+(Settings → Retention: `retention_event_days` 30, `retention_issue_days` 90, `payloads_per_day` 1000):
+
+1. event details (payloads, attachments, feedback) older than the event retention go; the events keep their index
+   rows, so counts, users and the event list stay, and the event page says the details are gone;
+2. issues last seen longer ago than the issue retention go, with their events and details;
+3. hourly counts older than 30 days go;
+
+then rows in `store.sqlite` of projects that no longer exist go, new issues first seen (and regressed ones last
+regressed) more than 7 days ago become `ongoing`, and `store.sqlite` gives up to 10,000 freed pages back
+(`incremental_vacuum`). Every minute the same task ends ignoring that ran out by time, so an issue ignored for
+an hour comes back without a new event. Session items are left for the release-health rollups (phase 7).
+
 ## Working on vole-kit at the same time
 
 Cargo.toml uses the kit's release tag. To try a kit change, point Cargo at a checkout of the Vigilant Vole
@@ -196,6 +258,9 @@ user (uid 1000, or `PUID`/`PGID`), then runs as that user. `HEALTHCHECK` calls `
 ## Translations
 
 `locales/en.toml` holds Kestrel's own English strings; the other 25 files translate every key, with the words from
-`locales/glossary/<code>.md`. `tests/i18n.rs` fails when a language misses a key, has an extra one, changes a
-placeholder or lacks a plural form its language needs. Core strings (sign-in, users, tokens, Security, the layout)
-come from vole-kit; a key may not be in both catalogs.
+`locales/glossary/<code>.md`. `tests/i18n.rs` calls vole-kit's `assert_full_coverage()`, which fails when a language
+misses a key, has an extra one, changes a placeholder or lacks a plural form its language needs. Core strings
+(sign-in, users, tokens, Security, the layout) come from vole-kit; a key may not be in both catalogs. The few
+texts the kit's pages take from the product (`vole_kit::i18n::catalog::PRODUCT_KEYS`: the sign-in subtitle, the
+setup page's placeholders, what roles and tokens may do, the setup-token hint naming `KK_SETUP_TOKEN`, the error
+page's link) are at the end of each of Kestrel's files.
