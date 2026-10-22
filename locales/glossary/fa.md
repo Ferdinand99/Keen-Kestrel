@@ -69,5 +69,16 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | abnormal (session ended abnormally) | پایان غیرعادی | |
 | finalized (release) | نهایی‌شده | lowercase status after a date in English |
 | header (webhook) | هدر | vole-kit: «هدرهای سفارشی» |
+| web analytics / Web tab | تحلیل وب / وب | tab «وب» |
+| entry page | صفحهٔ ورود | count column «ورودها» |
+| screen size | اندازهٔ نمایشگر | not «صفحه», which is a web page here |
+| device type (desktop / mobile / tablet) | نوع دستگاه (رایانه / موبایل / تبلت) | VV: «رایانه یا موبایل» |
+| operating system | سیستم‌عامل | |
+| browser | مرورگر | |
+| custom event | رویداد سفارشی | sent with `kestrel('event', …)` |
+| current visitors | بازدیدکنندگان فعلی | the last 5 minutes |
+| direct / none (no referrer) | مستقیم / بدون ارجاع | |
+| raw events | رویدادهای خام | «رویدادهای خام وب» in retention |
+| referrers (list tab) | ارجاع‌دهنده‌ها | short form of «سایت‌های ارجاع‌دهنده» for the narrow tab |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged, in Latin script; prefer «با نماد» phrasing in sentences |

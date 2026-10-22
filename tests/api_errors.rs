@@ -563,7 +563,9 @@ async fn mcp_tools_read_and_triage_errors() {
             "list_projects",
             "list_issues",
             "get_issue",
-            "release_health"
+            "release_health",
+            "analytics_summary",
+            "analytics_breakdown"
         ]
     );
     assert_eq!(
@@ -573,6 +575,8 @@ async fn mcp_tools_read_and_triage_errors() {
             "list_issues",
             "get_issue",
             "release_health",
+            "analytics_summary",
+            "analytics_breakdown",
             "resolve_issue",
             "ignore_issue"
         ]

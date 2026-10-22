@@ -73,3 +73,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | attempt (delivery) | deneme | “{n} deneme” |
 | header (webhook) | başlık | VV kit: “Özel başlıklar” |
 | instance | örnek | as in VV; “bu örneğin dili” = the instance's language |
+| web analytics | web analizi | tab “Web”; follows “analiz” for analytics |
+| entry page | giriş sayfası | column “Girişler” |
+| screen size | ekran boyutu |  |
+| device type (desktop / mobile / tablet) | cihaz türü (masaüstü / mobil / tablet) | card “Cihazlar” |
+| operating system | işletim sistemi |  |
+| browser | tarayıcı |  |
+| custom event | özel etkinlik |  |
+| current visitors | anlık ziyaretçiler | stat card, last 5 minutes |
+| direct / none (no referrer) | doğrudan / yok |  |
+| raw events | ham etkinlikler | filtered numbers: “filtrelenmiş sayılar” |
+| UTM medium | UTM aracı | as in Google Analytics (kaynak / araç) |

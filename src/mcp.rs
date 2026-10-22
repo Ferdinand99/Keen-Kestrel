@@ -8,6 +8,9 @@
 //!   for a language model (in-app frames with file:line, the exception
 //!   chain, the last breadcrumbs);
 //! * `release_health`: crash-free sessions and users of a release;
+//! * `analytics_summary` and `analytics_breakdown`: a project's web
+//!   analytics (visitors, pageviews, top pages and referrers; the top
+//!   values of one dimension), never a visitor id;
 //! * `resolve_issue` and `ignore_issue`, offered only to a read-and-write
 //!   token of an editor or admin.
 //!
@@ -25,6 +28,9 @@ use vole_kit::auth::CurrentUser;
 use vole_kit::mcp::{Handler, RpcResult};
 use vole_kit::state::Core;
 
+use crate::analytics::Dim;
+use crate::analytics::pages::{self as web, View};
+use crate::analytics::query::Period;
 use crate::api::issues::{issue_json, search_issues, set_status};
 use crate::db::projects::{self as db, Project};
 use crate::db::triage::{self, IssueRow};
@@ -61,6 +67,18 @@ fn tool_error(message: impl Into<String>) -> Value {
 
 fn project_arg() -> Value {
     json!({"type": ["integer", "string"], "description": "The project's id (the number in its DSN) or slug."})
+}
+
+fn period_arg() -> Value {
+    json!({"type": "string", "description": "today, yesterday, 7d (default), 30d, any 1d–400d, or custom (with from and to). Days are UTC."})
+}
+
+fn filters_arg() -> Value {
+    json!({
+        "type": "object",
+        "description": "Only count events with these values, e.g. {\"page\": \"/pricing\", \"browser\": \"Firefox\"}. Keys: page, referrer, utm_source, utm_medium, utm_campaign, browser, os, device, screen.",
+        "additionalProperties": {"type": "string"}
+    })
 }
 
 fn issue_arg() -> Value {
@@ -227,6 +245,133 @@ impl Kestrel {
         {
             Ok(after) => text_result(&json!({ "issue": issue_json(&after) })),
             Err(e) => tool_error(format!("Could not change the issue: {e}")),
+        }
+    }
+
+    /// The period and filters a tool call asks for.
+    fn analytics_view(args: &Map<String, Value>) -> Result<View, Value> {
+        let mut q = url::form_urlencoded::Serializer::new(String::new());
+        for key in ["period", "from", "to"] {
+            if let Some(v) = str_arg(args, key) {
+                q.append_pair(key, v);
+            }
+        }
+        if let Some(Value::Object(filters)) = args.get("filters") {
+            for (k, v) in filters {
+                if let Some(v) = v.as_str() {
+                    q.append_pair(k, v);
+                }
+            }
+        }
+        View::try_parse(&q.finish(), web::today()).map_err(|why| {
+            tool_error(format!(
+                "Can't read the period ({why}). Use today, yesterday, 7d, 30d, any 1d–400d, or custom with from and to (YYYY-MM-DD)."
+            ))
+        })
+    }
+
+    async fn analytics_summary(&self, args: Map<String, Value>) -> Value {
+        let project = match self.project(&args).await {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
+        let v = match Self::analytics_view(&args) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let mut data =
+            match crate::api::analytics::timeseries_json(&self.core, &self.ingest, project.id, &v)
+                .await
+            {
+                Ok(d) => d,
+                Err(e) => return tool_error(format!("Could not read the analytics: {e}")),
+            };
+        // The period before, as long, for a comparison.
+        let days = v.period.days();
+        let before = View {
+            period: Period {
+                from: v.period.from - days,
+                to: v.period.from - 1,
+            },
+            name: "custom".into(),
+            filters: v.filters.clone(),
+        };
+        let previous = web::load(&self.core, &self.ingest, project.id, &before, false)
+            .await
+            .map(|d| d.totals)
+            .unwrap_or_default();
+        let mut tops = Map::new();
+        for dim in [
+            Dim::Page,
+            Dim::Referrer,
+            Dim::UtmSource,
+            Dim::Browser,
+            Dim::Device,
+            Dim::Event,
+        ] {
+            let rows = web::top(&self.core, &self.ingest, project.id, &v, dim, 5)
+                .await
+                .unwrap_or_default();
+            tops.insert(
+                dim.code().to_string(),
+                Value::from(
+                    rows.iter()
+                        .map(|r| crate::api::analytics::row_json(dim, r))
+                        .collect::<Vec<_>>(),
+                ),
+            );
+        }
+        data["previous_period"] = json!({
+            "from": before.period.from_date(),
+            "to": before.period.to_date(),
+            "totals": crate::api::analytics::totals_json(&previous),
+        });
+        data["top"] = Value::Object(tops);
+        if let Some(b) = self.core.base_url().await {
+            data["url"] = Value::from(format!(
+                "{}/projects/{}/web?{}",
+                b.trim_end_matches('/'),
+                project.id,
+                v.qs()
+            ));
+        }
+        data["project"] = json!({"id": project.id, "name": project.name, "slug": project.slug});
+        let text = format_summary(&project, &data);
+        text_and_data(text, &data)
+    }
+
+    async fn analytics_breakdown(&self, args: Map<String, Value>) -> Value {
+        let project = match self.project(&args).await {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
+        let Some(dim) = str_arg(&args, "dimension").and_then(Dim::parse) else {
+            return tool_error(format!(
+                "Name the dimension: {}.",
+                crate::api::analytics::dimension_help()
+            ));
+        };
+        let v = match Self::analytics_view(&args) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let limit = int_arg(&args, "limit").unwrap_or(10).clamp(1, 100);
+        match crate::api::analytics::breakdown_json(
+            &self.core,
+            &self.ingest,
+            project.id,
+            &v,
+            dim,
+            limit,
+        )
+        .await
+        {
+            Ok(mut d) => {
+                d["project"] =
+                    json!({"id": project.id, "name": project.name, "slug": project.slug});
+                text_result(&d)
+            }
+            Err(e) => tool_error(format!("Could not read the analytics: {e}")),
         }
     }
 
@@ -495,6 +640,72 @@ fn format_issue(
     out
 }
 
+/// A change in percent, or "new" / "same".
+fn change(now: i64, before: i64) -> String {
+    match (now, before) {
+        (0, 0) => "no change".into(),
+        (_, 0) => "new".into(),
+        _ => format!("{:+.0}%", 100.0 * (now - before) as f64 / before as f64),
+    }
+}
+
+/// The summary as text for a model.
+fn format_summary(project: &Project, d: &Value) -> String {
+    let n = |v: &Value| v.as_i64().unwrap_or(0);
+    let t = &d["totals"];
+    let p = &d["previous_period"]["totals"];
+    let mut out = format!(
+        "# Web analytics of {} ({} to {}, UTC)\n",
+        project.name,
+        d["from"].as_str().unwrap_or(""),
+        d["to"].as_str().unwrap_or("")
+    );
+    if let Some(f) = d["filters"].as_object().filter(|f| !f.is_empty()) {
+        let list: Vec<String> = f
+            .iter()
+            .map(|(k, v)| format!("{k}={}", v.as_str().unwrap_or("")))
+            .collect();
+        let _ = writeln!(out, "Filters: {}", list.join(", "));
+    }
+    let _ = writeln!(
+        out,
+        "Visitors: {} ({} vs the period before)\nPageviews: {} ({})\nCustom events: {}\nVisitors in the last 5 minutes: {}",
+        n(&t["visitors"]),
+        change(n(&t["visitors"]), n(&p["visitors"])),
+        n(&t["pageviews"]),
+        change(n(&t["pageviews"]), n(&p["pageviews"])),
+        n(&t["events"]),
+        n(&d["current_visitors"]),
+    );
+    out.push_str("Unique visitors are counted per UTC day and added up over the period.\n");
+    for (key, title) in [
+        ("page", "Top pages"),
+        ("referrer", "Top referrers"),
+        ("utm_source", "UTM sources"),
+        ("browser", "Browsers"),
+        ("device", "Devices"),
+        ("event", "Custom events"),
+    ] {
+        let Some(rows) = d["top"][key].as_array().filter(|r| !r.is_empty()) else {
+            continue;
+        };
+        let _ = writeln!(out, "\n## {title} (visitors, count)");
+        for r in rows {
+            let _ = writeln!(
+                out,
+                "  {}: {}, {}",
+                r["label"].as_str().unwrap_or(""),
+                n(&r["visitors"]),
+                n(&r["count"])
+            );
+        }
+    }
+    if let Some(url) = d["url"].as_str() {
+        let _ = writeln!(out, "\nDashboard: {url}");
+    }
+    out
+}
+
 impl Handler for Kestrel {
     fn can_write(&self) -> bool {
         self.can_write
@@ -507,7 +718,10 @@ impl Handler for Kestrel {
              issues (search syntax: is:unresolved|resolved|ignored|all|new|regressed, level:error, \
              release:1.4, env:production, os:iOS, any tag key:value, free text), get_issue for an \
              issue's latest event with its stack trace (in-app frames, file:line, the exception chain, \
-             breadcrumbs), and release_health for crash-free sessions and users of a release.",
+             breadcrumbs), and release_health for crash-free sessions and users of a release. \
+             For websites with the k.js snippet, analytics_summary gives visitors, pageviews, current \
+             visitors and the top pages, referrers and browsers for a period, and analytics_breakdown \
+             the top values of one dimension; unique visitors are counted per UTC day.",
         );
         if self.can_write {
             s.push_str(
@@ -574,6 +788,44 @@ impl Handler for Kestrel {
                 },
                 "annotations": { "readOnlyHint": true, "openWorldHint": false },
             }),
+            json!({
+                "name": "analytics_summary",
+                "title": "Web analytics summary",
+                "description": "A website's analytics for a period (default the last 7 days): unique visitors (counted per UTC day and added up), pageviews, custom events, visitors in the last 5 minutes, the same totals for the period before, the series by day (or hour for one day), and the top 5 pages, referrers, UTM sources, browsers, devices and custom events. Filters narrow everything to events with those values (they read the raw events, kept 30 days).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "project": project_arg(),
+                        "period": period_arg(),
+                        "from": {"type": "string", "description": "With period custom: the first day, YYYY-MM-DD (UTC)."},
+                        "to": {"type": "string", "description": "With period custom: the last day, YYYY-MM-DD (UTC; default today)."},
+                        "filters": filters_arg()
+                    },
+                    "required": ["project"],
+                    "additionalProperties": false
+                },
+                "annotations": { "readOnlyHint": true, "openWorldHint": false },
+            }),
+            json!({
+                "name": "analytics_breakdown",
+                "title": "Web analytics breakdown",
+                "description": "The top values of one dimension of a website's analytics for a period, most visitors first, each with its unique visitors and count (pageviews; entries for entry pages; events for custom events). Dimensions: page, entry (a visitor's first page of the day), referrer (domain; empty is direct), utm_source, utm_medium, utm_campaign, browser, os, device (desktop, mobile, tablet), screen (width bucket), event (custom event names).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "project": project_arg(),
+                        "dimension": {"type": "string", "enum": ["page", "entry", "referrer", "utm_source", "utm_medium", "utm_campaign", "browser", "os", "device", "screen", "event"]},
+                        "period": period_arg(),
+                        "from": {"type": "string", "description": "With period custom: the first day, YYYY-MM-DD (UTC)."},
+                        "to": {"type": "string", "description": "With period custom: the last day, YYYY-MM-DD (UTC; default today)."},
+                        "filters": filters_arg(),
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Values (default 10)."}
+                    },
+                    "required": ["project", "dimension"],
+                    "additionalProperties": false
+                },
+                "annotations": { "readOnlyHint": true, "openWorldHint": false },
+            }),
         ];
         if self.can_write {
             tools.push(json!({
@@ -627,6 +879,8 @@ impl Handler for Kestrel {
             "list_issues" => Ok(self.list_issues(args).await),
             "get_issue" => Ok(self.get_issue(args).await),
             "release_health" => Ok(self.release_health(args).await),
+            "analytics_summary" => Ok(self.analytics_summary(args).await),
+            "analytics_breakdown" => Ok(self.analytics_breakdown(args).await),
             "resolve_issue" => {
                 let action = if args.get("in_next_release").and_then(Value::as_bool) == Some(true) {
                     Action::ResolveNextRelease

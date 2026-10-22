@@ -1,0 +1,26 @@
+{#- How to add k.js to a site. Expects `setup` (analytics::pages::Setup) and `m`. -#}
+{%- match setup.snippet %}
+{%- when Some(snippet) %}
+<div class="stack-sm">
+  <p class="help">{{ tr("web.setup_paste") }}</p>
+  <pre class="code"><code id="web-snippet">{{ snippet }}</code></pre>
+  <div class="toolbar"><button type="button" class="btn btn-secondary btn-sm" data-copy="#web-snippet">{{ m::icon("copy") }}<span>{{ tr("project.copy_code") }}</span></button></div>
+</div>
+<ul class="stack-sm web-tips">
+  <li>{{ tr("web.tip_spa") }}</li>
+  <li>{{ tr("web.tip_hash") }}</li>
+  <li>{{ tr("web.tip_localhost") }}</li>
+  <li>{{ tr("web.tip_exclude") }}</li>
+  <li>{{ tr("web.tip_origins") }}</li>
+  <li>{{ tr("web.tip_ignore") }}</li>
+</ul>
+<div class="stack-sm">
+  <p class="help">{{ tr("web.setup_events") }}</p>
+  <pre class="code"><code id="web-event">{{ setup.event_example }}</code></pre>
+  <p class="help">{{ tr("web.setup_stub") }}</p>
+  <pre class="code"><code id="web-stub">{{ setup.stub }}</code></pre>
+</div>
+<p class="help">{{ tr("web.setup_privacy") }}</p>
+{%- when None %}
+{{ m::empty_state("key", tr("project.no_key_title"), tr("project.no_key_text"), &self.setup.settings_href, tr("project.open_settings")) }}
+{%- endmatch %}

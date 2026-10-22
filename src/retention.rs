@@ -10,6 +10,10 @@
 //!    their events and details;
 //! 3. hourly counts older than 30 days go (the pages show at most 14 days);
 //!
+//! 4. raw analytics events older than `retention_analytics_raw_days` (30)
+//!    and analytics rollups older than `retention_analytics_days` (400) go
+//!    (docs/design.md §5.3);
+//!
 //! then the store's rows of deleted projects go, release-health rollups
 //! older than 400 days go (docs/design.md §4.6), the alert history older
 //! than 90 days, new and regressed issues that have been so for a week
@@ -23,9 +27,10 @@
 //! and the files of deleted projects.
 //!
 //! Every minute the job also ends ignoring that ran out by time (an issue
-//! ignored for an hour comes back even if no event arrives) and rolls the
+//! ignored for an hour comes back even if no event arrives), rolls the
 //! session items up into release health ([`crate::releases::health`]),
-//! which deletes them from the store.
+//! which deletes them from the store, and rolls new analytics events up
+//! ([`crate::analytics::rollup`]).
 //!
 //! Everything runs on the writer's connection ([`Writer::run`]).
 
@@ -34,6 +39,7 @@ use std::time::Duration;
 
 use rusqlite::{Connection, params};
 
+use crate::analytics::rollup as analytics_rollup;
 use crate::db::triage;
 use crate::difs::Difs;
 use crate::writer::{Writer, WriterError};
@@ -65,7 +71,14 @@ pub struct Report {
     pub settled: usize,
     pub rollups_deleted: usize,
     pub alerts_deleted: usize,
+    /// Raw analytics events removed.
+    pub analytics_events_deleted: usize,
+    /// Analytics rollup rows (hours, days, breakdowns) removed.
+    pub analytics_rollups_deleted: usize,
 }
+
+/// Raw analytics events removed per write.
+const ANALYTICS_BATCH: i64 = 10_000;
 
 /// Chunks of uploads that never assembled are kept this long.
 const CHUNKS_KEPT: Duration = Duration::from_secs(24 * 3600);
@@ -101,6 +114,15 @@ pub fn spawn(writer: Writer, difs: Difs) {
                 Ok(r) if r.items > 0 => tracing::debug!(items = r.items, "sessions rolled up"),
                 Ok(_) => {}
                 Err(err) => tracing::warn!(%err, "can't roll up the sessions"),
+            }
+            match crate::analytics::rollup::run(&writer).await {
+                Ok(r) if r.events > 0 => tracing::debug!(
+                    events = r.events,
+                    late_days = r.late_days,
+                    "analytics rolled up"
+                ),
+                Ok(_) => {}
+                Err(err) => tracing::warn!(%err, "can't roll up the analytics"),
             }
             if tokio::time::Instant::now() >= next_run {
                 next_run = tokio::time::Instant::now() + RUN_EVERY;
@@ -205,6 +227,25 @@ pub async fn run_once(writer: &Writer, now: &str) -> Result<Report, WriterError>
             writer.notify(project_id);
         }
     }
+    let projects = writer.run(|c| analytics_rollup::all_retention(c)).await?;
+    for (project_id, raw_days, days) in projects {
+        let (raw_cutoff, rollup_cutoff) = analytics_cutoffs(now, raw_days, days);
+        loop {
+            let deleted = writer
+                .run(move |c| {
+                    analytics_rollup::prune_raw(c, project_id, raw_cutoff, ANALYTICS_BATCH)
+                })
+                .await?;
+            report.analytics_events_deleted += deleted;
+            if (deleted as i64) < ANALYTICS_BATCH {
+                break;
+            }
+            tokio::time::sleep(BATCH_PAUSE).await;
+        }
+        report.analytics_rollups_deleted += writer
+            .run(move |c| analytics_rollup::prune_rollups(c, project_id, &rollup_cutoff))
+            .await?;
+    }
     loop {
         let removed = writer
             .run(|c| triage::prune_orphans(c, DETAIL_BATCH))
@@ -225,6 +266,8 @@ pub async fn run_once(writer: &Writer, now: &str) -> Result<Report, WriterError>
         details = report.details_deleted,
         issues = report.issues_deleted,
         hours = report.hours_deleted,
+        analytics_events = report.analytics_events_deleted,
+        analytics_rollups = report.analytics_rollups_deleted,
         rollups = report.rollups_deleted,
         alerts = report.alerts_deleted,
         settled = report.settled,
@@ -232,6 +275,19 @@ pub async fn run_once(writer: &Writer, now: &str) -> Result<Report, WriterError>
         "retention run finished"
     );
     Ok(report)
+}
+
+/// The analytics cutoffs at `now` (`YYYY-MM-DD HH:MM:SS` UTC): raw events
+/// from before the start of the day `raw_days` days ago (Unix seconds) and
+/// rollups of the days before the one `days` days ago (`YYYY-MM-DD`).
+pub fn analytics_cutoffs(now: &str, raw_days: i64, days: i64) -> (i64, String) {
+    let today = jiff::civil::DateTime::strptime("%Y-%m-%d %H:%M:%S", now)
+        .map(|d| crate::analytics::day_of(d.date()))
+        .unwrap_or_else(|_| crate::analytics::day_number(jiff::Timestamp::now().as_second()));
+    (
+        (today - raw_days.max(1)) * 86_400,
+        crate::analytics::day_string(today - days.max(1)),
+    )
 }
 
 /// Removes release-health rollups older than [`ROLLUPS_KEPT_DAYS`], the
@@ -323,6 +379,13 @@ pub fn run_blocking(c: &mut Connection, now: &str) -> rusqlite::Result<Report> {
         let cutoff = hours_cutoff(&tx, now)?;
         report.hours_deleted += triage::prune_hours(&tx, project_id, &cutoff)?;
         tx.commit()?;
+    }
+    for (project_id, raw_days, days) in analytics_rollup::all_retention(c)? {
+        let (raw_cutoff, rollup_cutoff) = analytics_cutoffs(now, raw_days, days);
+        report.analytics_events_deleted +=
+            analytics_rollup::prune_raw(c, project_id, raw_cutoff, i64::MAX)?;
+        report.analytics_rollups_deleted +=
+            analytics_rollup::prune_rollups(c, project_id, &rollup_cutoff)?;
     }
     report.details_deleted += triage::prune_orphans(c, i64::MAX)?;
     (report.rollups_deleted, report.alerts_deleted) = prune_rollups_and_alerts(c, now)?;

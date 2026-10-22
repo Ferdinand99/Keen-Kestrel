@@ -71,3 +71,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | instance | экземпляр (m.) | the Kestrel server; as in the existing strings |
 | header (HTTP) | заголовок (m.) | webhook headers |
 | sessions_meta and similar captions | из {n} сеанса / сеансов | after «из» the number takes the genitive: one/other «сеанса», few/many «сеансов» |
+| web analytics | веб-аналитика | tab «Веб» |
+| entry page | страница входа | column «Входы» |
+| screen size | размер экрана |  |
+| device type (desktop / mobile / tablet) | тип устройства (компьютер / телефон / планшет) | card «Устройства» |
+| operating system | операционная система |  |
+| browser | браузер (m.) |  |
+| custom event | свое событие | «Свои события»; avoids «пользовательские», which clashes with «пользователь» |
+| current visitors | сейчас на сайте | stat card, last 5 minutes |
+| direct / none (no referrer) | прямой заход / нет |  |
+| raw events | необработанные события | filtered numbers: «отфильтрованные числа» |
+| referrer (web analytics list) | сайт-источник | list tab «Сайты-источники», so it differs from the card «Источники» |
+| UTM medium | UTM-канал | UTM source / campaign: «UTM-источник» / «UTM-кампания» |

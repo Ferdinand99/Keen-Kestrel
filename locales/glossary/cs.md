@@ -71,3 +71,13 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | instance | instance (f.) | kit: "pojmenujte svou instanci" |
 | header (webhook) | hlavička (f.) | |
 | secrets | tajné údaje | channel form footer |
+| web analytics | webová analytika | tab „Web“ |
+| entry page | vstupní stránka | column „Vstupy“ |
+| screen size | velikost obrazovky |  |
+| device type (desktop / mobile / tablet) | typ zařízení (počítač / mobil / tablet) | card „Zařízení“ |
+| operating system | operační systém |  |
+| browser | prohlížeč (m.) |  |
+| custom event | vlastní událost |  |
+| current visitors | aktuální návštěvníci | stat card, last 5 minutes |
+| direct / none (no referrer) | přímo / žádný |  |
+| raw events | surové události | filtered numbers: „filtrované počty“ |

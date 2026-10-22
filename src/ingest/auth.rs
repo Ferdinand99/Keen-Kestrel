@@ -15,6 +15,8 @@ pub struct KeyInfo {
     /// Empty: any origin.
     pub allowed_origins: Vec<String>,
     pub keep_user_details: bool,
+    /// Whether the key's project takes web analytics (`projects.web_analytics`).
+    pub web_analytics: bool,
 }
 
 impl KeyInfo {
@@ -94,7 +96,7 @@ pub fn checked(key: &str) -> Option<String> {
 pub fn lookup(c: &Connection, public_key: &str) -> rusqlite::Result<Option<KeyInfo>> {
     c.prepare_cached(
         "SELECT k.id, k.project_id, k.enabled, k.rate_limit_per_minute, k.allowed_origins,
-                p.keep_user_details
+                p.keep_user_details, p.web_analytics
          FROM project_keys k JOIN projects p ON p.id = k.project_id
          WHERE k.public_key = ?1",
     )?
@@ -112,6 +114,7 @@ pub fn lookup(c: &Connection, public_key: &str) -> rusqlite::Result<Option<KeyIn
                 .map(str::to_string)
                 .collect(),
             keep_user_details: r.get(5)?,
+            web_analytics: r.get(6)?,
         })
     })
     .optional()
@@ -169,6 +172,7 @@ mod tests {
             rate_limit_per_minute: None,
             allowed_origins: vec![],
             keep_user_details: false,
+            web_analytics: true,
         };
         assert!(k.allows_origin("https://evil.example") && k.any_origin());
         k.allowed_origins = vec!["https://shop.example".into()];

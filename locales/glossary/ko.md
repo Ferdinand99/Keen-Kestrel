@@ -66,5 +66,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | abnormal (session ended abnormally) | 비정상 종료 | |
 | finalized (release) | 확정됨 | lowercase status after a date in English |
 | header (webhook) | 헤더 | vole-kit: 사용자 지정 헤더 |
+| web analytics / Web tab | 웹 분석 / 웹 | tab 웹 |
+| entry page | 진입 페이지 | count column 진입 수 |
+| screen size | 화면 크기 | |
+| device type (desktop / mobile / tablet) | 기기 유형(데스크톱 / 모바일 / 태블릿) | |
+| operating system | 운영체제 | |
+| browser | 브라우저 | |
+| custom event | 맞춤 이벤트 | sent with `kestrel('event', …)` |
+| current visitors | 현재 방문자 | the last 5 minutes |
+| direct / none (no referrer) | 직접 / 없음 | |
+| raw events | 원시 이벤트 | 원시 웹 이벤트 in retention |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer 기호화됨 phrasing in sentences |

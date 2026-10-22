@@ -869,6 +869,10 @@ pub struct Retention {
     pub dif_days: i64,
     /// … unless one of this many newest releases used them.
     pub dif_releases: i64,
+    /// Raw analytics events are kept this long …
+    pub analytics_raw_days: i64,
+    /// … and the analytics rollups this long.
+    pub analytics_days: i64,
 }
 
 impl Default for Retention {
@@ -879,6 +883,8 @@ impl Default for Retention {
             payloads_per_day: super::issues::MAX_PAYLOADS_PER_DAY,
             dif_days: 180,
             dif_releases: 5,
+            analytics_raw_days: 30,
+            analytics_days: 400,
         }
     }
 }
@@ -886,7 +892,7 @@ impl Default for Retention {
 pub fn retention(c: &Connection, project_id: i64) -> rusqlite::Result<Option<Retention>> {
     c.query_row(
         "SELECT retention_event_days, retention_issue_days, payloads_per_day, retention_dif_days,
-             retention_dif_releases
+             retention_dif_releases, retention_analytics_raw_days, retention_analytics_days
          FROM projects WHERE id = ?1",
         [project_id],
         |r| {
@@ -896,6 +902,8 @@ pub fn retention(c: &Connection, project_id: i64) -> rusqlite::Result<Option<Ret
                 payloads_per_day: r.get(2)?,
                 dif_days: r.get(3)?,
                 dif_releases: r.get(4)?,
+                analytics_raw_days: r.get(5)?,
+                analytics_days: r.get(6)?,
             })
         },
     )
@@ -905,7 +913,8 @@ pub fn retention(c: &Connection, project_id: i64) -> rusqlite::Result<Option<Ret
 pub fn set_retention(c: &Connection, project_id: i64, r: Retention) -> rusqlite::Result<bool> {
     Ok(c.execute(
         "UPDATE projects SET retention_event_days = ?2, retention_issue_days = ?3,
-             payloads_per_day = ?4, retention_dif_days = ?5, retention_dif_releases = ?6
+             payloads_per_day = ?4, retention_dif_days = ?5, retention_dif_releases = ?6,
+             retention_analytics_raw_days = ?7, retention_analytics_days = ?8
          WHERE id = ?1",
         params![
             project_id,
@@ -913,7 +922,9 @@ pub fn set_retention(c: &Connection, project_id: i64, r: Retention) -> rusqlite:
             r.issue_days,
             r.payloads_per_day,
             r.dif_days,
-            r.dif_releases
+            r.dif_releases,
+            r.analytics_raw_days,
+            r.analytics_days
         ],
     )? > 0)
 }
@@ -922,7 +933,7 @@ pub fn set_retention(c: &Connection, project_id: i64, r: Retention) -> rusqlite:
 pub fn all_retention(c: &Connection) -> rusqlite::Result<Vec<(i64, Retention)>> {
     c.prepare(
         "SELECT id, retention_event_days, retention_issue_days, payloads_per_day, retention_dif_days,
-             retention_dif_releases
+             retention_dif_releases, retention_analytics_raw_days, retention_analytics_days
          FROM projects ORDER BY id",
     )?
     .query_map([], |r| {
@@ -934,6 +945,8 @@ pub fn all_retention(c: &Connection) -> rusqlite::Result<Vec<(i64, Retention)>> 
                 payloads_per_day: r.get(3)?,
                 dif_days: r.get(4)?,
                 dif_releases: r.get(5)?,
+                analytics_raw_days: r.get(6)?,
+                analytics_days: r.get(7)?,
             },
         ))
     })?
@@ -995,10 +1008,18 @@ pub fn prune_issues(
 }
 
 /// Deletes a project with everything it has in both databases: issues,
-/// events and keys in `kestrel.sqlite` (by cascade), payloads, attachments,
-/// session items and feedback in `store.sqlite`.
+/// events, keys and analytics rollups in `kestrel.sqlite` (by cascade),
+/// payloads, attachments, session items, feedback and raw analytics in
+/// `store.sqlite`.
 pub fn delete_project(c: &Connection, project_id: i64) -> rusqlite::Result<bool> {
-    for table in ["payloads", "attachments", "session_items", "feedback"] {
+    for table in [
+        "payloads",
+        "attachments",
+        "session_items",
+        "feedback",
+        "analytics_events",
+        "analytics_seen",
+    ] {
         c.execute(
             &format!("DELETE FROM store.{table} WHERE project_id = ?1"),
             [project_id],
@@ -1011,7 +1032,13 @@ pub fn delete_project(c: &Connection, project_id: i64) -> rusqlite::Result<bool>
 /// longer exists (left by deletions before the store went with them).
 pub fn prune_orphans(c: &Connection, batch: i64) -> rusqlite::Result<usize> {
     let mut n = 0;
-    for table in ["payloads", "attachments", "session_items", "feedback"] {
+    for table in [
+        "payloads",
+        "attachments",
+        "session_items",
+        "feedback",
+        "analytics_events",
+    ] {
         n += c.execute(
             &format!(
                 "DELETE FROM store.{table} WHERE id IN (SELECT id FROM store.{table}

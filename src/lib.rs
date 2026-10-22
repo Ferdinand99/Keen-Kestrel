@@ -6,12 +6,14 @@
 //! (normalisation, privacy scrubbing, grouping into issues, the single batch
 //! writer), the issue pages with search and triage, retention, debug files
 //! with symbolication of native crashes, alerts through the kit's
-//! notification providers, release health and the releases pages, and the
-//! REST API and MCP tools for all of it (docs/design.md §4, §6).
+//! notification providers, release health and the releases pages, web
+//! analytics (the k.js snippet, rollups, the Web tab), and the REST API and
+//! MCP tools for all of it (docs/design.md §4–§6).
 
 #![forbid(unsafe_code)]
 
 pub mod alerts;
+pub mod analytics;
 pub mod api;
 pub mod config;
 pub mod db;
@@ -122,6 +124,7 @@ pub fn router(app: Kestrel) -> Router {
         .merge(issues::router())
         .merge(releases::router())
         .merge(releases::cli::router())
+        .merge(analytics::pages::router())
         .merge(alerts::pages::router())
         .merge(alerts::channels::router())
         .merge(difs::pages::router())

@@ -75,3 +75,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | header (HTTP) | antet (n.; pl. anteturi) | VV |
 | AI assistant | asistent AI | |
 | numbers before nouns | „{n} de …” | where a count can be 20+ and isn’t a plural key, put the number after a colon („evenimente în ultima oră: {n}”) |
+| entry page | pagină de intrare (f.) | tab „Pagini de intrare”; count column „Intrări” |
+| screen size | dimensiune de ecran (f.) | tab „Dimensiuni de ecran” |
+| device type (desktop / mobile / tablet) | tip de dispozitiv (desktop / mobil / tabletă) | card „Dispozitive” |
+| operating system | sistem de operare (n.) | tab short form „Sisteme” |
+| browser | browser (n.; pl. browsere) |  |
+| custom event | eveniment personalizat (n.) |  |
+| current visitors | vizitatori acum | stat label; meta „În ultimele 5 minute” |
+| direct / none (no referrer) | Direct / fără sursă | list row for visits without a traffic source |
+| raw events | evenimente brute | kept for filters |
+| snippet (k.js) | fragment de cod / script | „scriptul k.js” |
+| UTM source / medium / campaign | sursă / mediu / campanie UTM |  |

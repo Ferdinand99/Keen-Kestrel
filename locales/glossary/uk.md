@@ -73,3 +73,14 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | instance | екземпляр (m.) | the Kestrel server; as in the existing strings |
 | header (HTTP) | заголовок (m.) | webhook headers |
 | sessions_meta and similar captions | з {n} сеансу / сеансів | after «з» the number takes the genitive: one/other «сеансу», few/many «сеансів» |
+| web analytics | вебаналітика | tab «Веб»; 2019 spelling, written together |
+| entry page | сторінка входу | column «Входи» |
+| screen size | розмір екрана |  |
+| device type (desktop / mobile / tablet) | тип пристрою (комп’ютер / телефон / планшет) | card «Пристрої» |
+| operating system | операційна система |  |
+| browser | браузер (m.) |  |
+| custom event | власна подія | «Власні події» |
+| current visitors | зараз на сайті | stat card, last 5 minutes |
+| direct / none (no referrer) | прямий перехід / немає |  |
+| raw events | необроблені події | filtered numbers: «відфільтровані числа» |
+| UTM medium | UTM-канал | UTM source / campaign: «UTM-джерело» / «UTM-кампанія» |

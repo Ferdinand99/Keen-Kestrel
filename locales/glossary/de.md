@@ -69,3 +69,13 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | AI assistant | KI-Assistent | |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README; „der DSN“, „das dSYM“, „das SDK“ |
 | symbolication | Symbolication (die) | unchanged noun; prefer „symbolisiert“ phrasing in sentences |
+| web analytics | Webanalyse (die) | tab „Web“; page title „Webanalyse für …“ |
+| entry page | Einstiegsseite (die) | count column „Einstiege“ |
+| screen size | Bildschirmgröße (die) | |
+| device type (desktop / mobile / tablet) | Gerätetyp (Desktop / Mobil / Tablet) | card „Geräte“ |
+| operating system | Betriebssystem (das) | |
+| browser | Browser (der) | |
+| custom event | eigenes Ereignis (Pl. eigene Ereignisse) | shorter than „benutzerdefiniertes Ereignis“ |
+| current visitors | aktuelle Besucher | live counter, last 5 minutes |
+| direct / none (no referrer) | direkt / keiner | |
+| raw events | Rohereignisse | settings label „Web-Rohereignisse aufbewahren“ |

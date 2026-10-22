@@ -68,5 +68,15 @@ vole-kit and follow [Vigilant Vole's glossary](https://github.com/Ferdinand99/Vi
 | finalized (release) | 已定版 | lowercase status after a date in English |
 | header (webhook) | 请求头 | vole-kit: 自定义请求头 |
 | alert (counter) | 条 | {n}条告警; rules also take 条 |
+| web analytics / Web tab | 网站统计 / 网站 | tab 网站 |
+| entry page | 入口页面 | count column 入口次数 |
+| screen size | 屏幕尺寸 | |
+| device type (desktop / mobile / tablet) | 设备类型（桌面端 / 移动端 / 平板） | |
+| operating system | 操作系统 | |
+| browser | 浏览器 | |
+| custom event | 自定义事件 | sent with `kestrel('event', …)` |
+| current visitors | 当前访客 | the last 5 minutes |
+| direct / none (no referrer) | 直接访问 / 无 | |
+| raw events | 原始事件 | 原始网站事件 in retention |
 | DSN, dSYM, SDK, `sentry-cli` | unchanged | see README |
 | symbolication | symbolication | unchanged noun; prefer 已符号化 phrasing in sentences |
