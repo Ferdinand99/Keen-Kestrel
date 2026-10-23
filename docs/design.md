@@ -281,6 +281,9 @@ with Vigilant Vole come from vole-kit and follow Vigilant Vole's glossaries. DSN
   body size caps and decompression limits.
 - Ingest can listen on a separate port, so the admin interface can stay on a LAN or VPN.
 - Admin and API authentication, 2FA, token scopes, CSP and security headers come from vole-kit.
+- Passkeys (WebAuthn, from vole-kit 0.4) sign in without a password or code; each user adds them under
+  **Settings → Security**. They need an HTTPS public URL (`KK_PUBLIC_URL`, or `http://localhost`), which
+  sets their relying party; the password (with 2FA) remains the fallback.
 
 ## 8. Performance targets (2 vCPU / 2 GB)
 
