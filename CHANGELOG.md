@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.2.0...v0.3.0) (2026-10-23)
+
+
+### Features
+
+* move to vole-kit 0.2 with a General settings page ([#13](https://github.com/Ferdinand99/Keen-Kestrel/issues/13)) ([f4c4582](https://github.com/Ferdinand99/Keen-Kestrel/commit/f4c4582a3278c205546abc7fc84d3ccc93be638c))
+
 ## [0.2.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.1.0...v0.2.0) (2026-10-23)
 
 
