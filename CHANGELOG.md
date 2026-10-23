@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.3.0...v0.3.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* point alerts without a link to Settings → General ([#16](https://github.com/Ferdinand99/Keen-Kestrel/issues/16)) ([c3d476a](https://github.com/Ferdinand99/Keen-Kestrel/commit/c3d476a5514047a694d8f58f827890c6cd78a935))
+
 ## [0.3.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.2.0...v0.3.0) (2026-10-23)
 
 
