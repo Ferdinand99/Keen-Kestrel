@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.1.0...v0.2.0) (2026-10-23)
+
+
+### Features
+
+* add privacy-friendly web analytics with the k.js snippet ([#9](https://github.com/Ferdinand99/Keen-Kestrel/issues/9)) ([c50bed7](https://github.com/Ferdinand99/Keen-Kestrel/commit/c50bed7b2159f9c4b298cb16bdf73d4fa5486259))
+* **analytics:** app signals from KestrelKit, the App tab, signal explorer and release adoption ([#11](https://github.com/Ferdinand99/Keen-Kestrel/issues/11)) ([6f19420](https://github.com/Ferdinand99/Keen-Kestrel/commit/6f194205805519d2ad6d1af075ac388a797654be))
+
 ## 0.1.0 (2026-10-22)
 
 
