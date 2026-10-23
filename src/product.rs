@@ -159,6 +159,8 @@ pub static KIT: KitConfig = KitConfig {
     // Site name, public URL, time zone and language; Kestrel's own settings
     // (retention, analytics) are per project.
     general: Some(&GeneralSettings::CORE_ONLY),
+    // The signed-in footer links the running version to its release notes.
+    releases_url: Some("https://github.com/Ferdinand99/Keen-Kestrel/releases/tag/v{version}"),
 };
 
 /// Every exempt path is a prefix above.

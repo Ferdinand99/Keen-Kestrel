@@ -2,7 +2,7 @@
 
 Keen Kestrel is one Rust crate (`keen-kestrel`, binary `kestrel`) on top of
 [vole-kit](https://github.com/Ferdinand99/Vigilant-Vole/blob/main/docs/vole-kit.md), the shared kit that lives in the
-Vigilant Vole repository (tag `vole-kit-v0.2.0`). The kit brings sign-in, users, API tokens (with Kestrel's
+Vigilant Vole repository (tag `vole-kit-v0.3.0`). The kit brings sign-in, users, API tokens (with Kestrel's
 `difs:write` scope), Security, General settings, the API reference, i18n, the database plumbing, request budgets,
 live updates, the notification channels' forms and the design system; Kestrel adds its own pages, API, migrations
 and strings, the
