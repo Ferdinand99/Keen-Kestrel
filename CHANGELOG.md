@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.4.0...v0.5.0) (2026-10-23)
+
+
+### Features
+
+* sign in with passkeys (vole-kit 0.4) ([#20](https://github.com/Ferdinand99/Keen-Kestrel/issues/20)) ([61974f4](https://github.com/Ferdinand99/Keen-Kestrel/commit/61974f4a7dd125fdfbf67280314a7afb7c137ba5))
+
 ## [0.4.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.3.1...v0.4.0) (2026-10-23)
 
 
