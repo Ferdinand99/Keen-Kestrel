@@ -294,6 +294,11 @@ async fn setup_sign_in_project_key_and_dsn() {
     assert!(!app.cookies.contains_key("kk_session"));
     let login = app.get("/login").await;
     assert_kestrel_branded("/login", &login.body);
+    // The version footer is for signed-in pages only.
+    let version = env!("CARGO_PKG_VERSION");
+    for needle in ["app-foot", "/releases/tag/", version] {
+        assert!(!login.body.contains(needle), "/login shows {needle:?}");
+    }
     app.sign_in(ADMIN).await;
 
     // An empty list invites you to create the first project.
@@ -302,6 +307,14 @@ async fn setup_sign_in_project_key_and_dsn() {
     assert!(empty.body.contains("No projects yet"), "{}", empty.body);
     assert!(empty.body.contains(r#"href="/projects/new""#));
     assert_kestrel_branded("/projects", &empty.body);
+    let footer = format!(
+        "<footer class=\"app-foot container\">\n    Keen Kestrel <a href=\"https://github.com/Ferdinand99/Keen-Kestrel/releases/tag/v{version}\">{version}</a>\n  </footer>"
+    );
+    assert!(
+        empty.body.replace("\r\n", "\n").contains(&footer),
+        "no version footer\n{}",
+        empty.body
+    );
 
     let form = app.get("/projects/new").await;
     assert_eq!(form.status, StatusCode::OK);
