@@ -6,20 +6,19 @@
 //! current users, live. Before the first signal the tab shows how to add
 //! KestrelKit. The overview's app summary and the settings are here too.
 
-use std::convert::Infallible;
 use std::time::Duration;
 
 use askama::Template;
 use axum::extract::{Extension, Path, RawQuery, State};
 use axum::http::HeaderMap;
-use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Form, Router};
 use axum_extra::extract::cookie::SignedCookieJar;
 use serde::Deserialize;
-use tokio::sync::broadcast::{self, error::RecvError, error::TryRecvError};
 use vole_kit::auth::CurrentUser;
+use vole_kit::components::{ChartLine, LineChart, chart_points};
+use vole_kit::http::live;
 use vole_kit::http::{ApiError, ApiResult, HtmlTemplate};
 use vole_kit::i18n::{self, Tr as _};
 use vole_kit::page::{PageCtx, flash};
@@ -29,12 +28,12 @@ use super::AppDim;
 use super::query::{self, Adoption, AppFilters, AppPoint, AppTotals, Payload};
 use super::rollup::OTHER;
 use crate::analytics::day_string;
+use crate::analytics::live::{Change, LiveChanges};
 use crate::analytics::pages::{Bar, Card, Choice, FilterChip, Panel, today};
 use crate::analytics::query::{Period, Row};
 use crate::db::projects::{self as db, Project};
 use crate::ingest::Ingest;
 use crate::pages::ProjectView;
-use crate::writer::WebChange;
 
 /// Values per list.
 const TOP: i64 = 10;
@@ -56,13 +55,8 @@ pub const KESTRELKIT_README: &str = "https://github.com/Ferdinand99/KestrelKit#r
 pub const KESTRELKIT_URL: &str = "https://github.com/Ferdinand99/KestrelKit";
 
 /// Line colours of the adoption chart (design-system tokens).
-const COLORS: [&str; 5] = [
-    "var(--brand)",
-    "var(--pal-blue)",
-    "var(--pal-green)",
-    "var(--pal-orange)",
-    "var(--pal-pink)",
-];
+/// The design system's chart colours (`series-1` …) of the top versions.
+const SERIES: [usize; 5] = [1, 2, 3, 4, 5];
 
 pub fn router() -> Router<Core> {
     Router::new()
@@ -183,10 +177,7 @@ fn period_label(v: &AppView) -> String {
         "today" | "day" => i18n::t("web.period_today").to_string(),
         "yesterday" => i18n::t("web.period_yesterday").to_string(),
         "custom" => date_range(v.period),
-        _ => i18n::tf(
-            "web.period_last_days",
-            &[("n", &v.period.days().to_string())],
-        ),
+        _ => i18n::fmt_last_days(v.period.days()),
     }
 }
 
@@ -215,29 +206,8 @@ pub fn value_label(value: &str) -> String {
     }
 }
 
-fn points(values: &[i64], max: i64) -> String {
-    let v: Vec<f64> = values.iter().map(|n| *n as f64).collect();
-    crate::releases::scaled_points(&v, 0.0, max.max(1) as f64, 600.0, 120.0)
-}
-
-/// One line of a chart.
-pub struct Line {
-    pub points: String,
-    pub color: &'static str,
-    pub label: String,
-    /// Shown next to the legend (adoption: the latest share).
-    pub value: String,
-}
-
-/// A chart of one or more lines on one scale; the first may have an area.
-pub struct Chart {
-    pub lines: Vec<Line>,
-    pub area: String,
-    pub label: String,
-    pub max_label: String,
-    pub min_label: String,
-    pub start_label: String,
-    pub end_label: String,
+fn floats(values: impl Iterator<Item = i64>) -> Vec<f64> {
+    values.map(|n| n as f64).collect()
 }
 
 fn axis(p: Period) -> (String, String) {
@@ -249,118 +219,114 @@ fn axis(p: Period) -> (String, String) {
 }
 
 /// Users: daily (with an area), and weekly and monthly on days.
-fn users_chart(p: Period, series: &[AppPoint]) -> Chart {
-    let users: Vec<i64> = series.iter().map(|s| s.users).collect();
-    let wau: Vec<i64> = series.iter().map(|s| s.wau.unwrap_or(0)).collect();
-    let mau: Vec<i64> = series.iter().map(|s| s.mau.unwrap_or(0)).collect();
+fn users_chart(p: Period, series: &[AppPoint]) -> LineChart {
     let windows = !p.hourly();
-    let max = users
-        .iter()
-        .chain(if windows { mau.iter() } else { [].iter() })
-        .chain(if windows { wau.iter() } else { [].iter() })
-        .copied()
-        .max()
-        .unwrap_or(0);
-    let first = points(&users, max);
-    let mut lines = vec![Line {
-        points: first.clone(),
-        color: "var(--brand)",
-        label: i18n::t(if windows {
+    let users = floats(series.iter().map(|s| s.users));
+    let mut lines = vec![(
+        i18n::t(if windows {
             "app.dau"
         } else {
             "app.users_per_hour"
         })
         .to_string(),
-        value: String::new(),
-    }];
+        users,
+        String::new(),
+    )];
     if windows {
-        lines.push(Line {
-            points: points(&wau, max),
-            color: "var(--pal-blue)",
-            label: i18n::t("app.wau").to_string(),
-            value: String::new(),
-        });
-        lines.push(Line {
-            points: points(&mau, max),
-            color: "var(--muted)",
-            label: i18n::t("app.mau").to_string(),
-            value: String::new(),
-        });
+        lines.push((
+            i18n::t("app.wau").to_string(),
+            floats(series.iter().map(|s| s.wau.unwrap_or(0))),
+            String::new(),
+        ));
+        lines.push((
+            i18n::t("app.mau").to_string(),
+            floats(series.iter().map(|s| s.mau.unwrap_or(0))),
+            String::new(),
+        ));
     }
+    let max = largest(&lines);
     let (start_label, end_label) = axis(p);
-    Chart {
-        area: format!("{first} 600.0,120.0 0.0,120.0"),
-        lines,
-        label: i18n::tf(
+    LineChart::new(
+        i18n::tf(
             "app.users_chart_label",
             &[("max", &i18n::fmt_int(max)), ("period", &date_range(p))],
         ),
-        max_label: i18n::fmt_int(max),
-        min_label: i18n::fmt_int(0),
-        start_label,
-        end_label,
-    }
+        lines,
+        true,
+    )
+    .scale(i18n::fmt_int(max), i18n::fmt_int(0))
+    .axis(start_label, end_label)
+}
+
+/// The largest value of a chart's lines.
+fn largest(lines: &[(String, Vec<f64>, String)]) -> i64 {
+    lines
+        .iter()
+        .flat_map(|(_, values, _)| values.iter().copied())
+        .fold(0.0_f64, f64::max) as i64
+}
+
+/// Two lines on one scale, the first with an area: `first` and `second`
+/// (name, values).
+fn pair_chart(
+    p: Period,
+    label: String,
+    first: (&'static str, Vec<f64>),
+    second: (&'static str, Vec<f64>),
+) -> LineChart {
+    let lines = vec![
+        (i18n::t(first.0).to_string(), first.1, String::new()),
+        (i18n::t(second.0).to_string(), second.1, String::new()),
+    ];
+    let max = largest(&lines);
+    let (start_label, end_label) = axis(p);
+    LineChart::new(label, lines, true)
+        .scale(i18n::fmt_int(max), i18n::fmt_int(0))
+        .axis(start_label, end_label)
 }
 
 /// Sessions (with an area) and signals.
-fn activity_chart(p: Period, series: &[AppPoint]) -> Chart {
-    let sessions: Vec<i64> = series.iter().map(|s| s.sessions).collect();
-    let signals: Vec<i64> = series.iter().map(|s| s.signals).collect();
-    let max = sessions.iter().chain(&signals).copied().max().unwrap_or(0);
-    let first = points(&sessions, max);
-    let (start_label, end_label) = axis(p);
-    Chart {
-        area: format!("{first} 600.0,120.0 0.0,120.0"),
-        lines: vec![
-            Line {
-                points: first,
-                color: "var(--brand)",
-                label: i18n::t("app.sessions").to_string(),
-                value: String::new(),
-            },
-            Line {
-                points: points(&signals, max),
-                color: "var(--muted)",
-                label: i18n::t("app.signals").to_string(),
-                value: String::new(),
-            },
+fn activity_chart(p: Period, series: &[AppPoint]) -> LineChart {
+    let sessions = floats(series.iter().map(|s| s.sessions));
+    let signals = floats(series.iter().map(|s| s.signals));
+    let total = |values: &[f64]| i18n::fmt_int(values.iter().sum::<f64>() as i64);
+    let label = i18n::tf(
+        "app.activity_chart_label",
+        &[
+            ("sessions", &total(&sessions)),
+            ("signals", &total(&signals)),
+            ("period", &date_range(p)),
         ],
-        label: i18n::tf(
-            "app.activity_chart_label",
-            &[
-                ("sessions", &i18n::fmt_int(sessions.iter().sum())),
-                ("signals", &i18n::fmt_int(signals.iter().sum())),
-                ("period", &date_range(p)),
-            ],
-        ),
-        max_label: i18n::fmt_int(max),
-        min_label: i18n::fmt_int(0),
-        start_label,
-        end_label,
-    }
+    );
+    pair_chart(
+        p,
+        label,
+        ("app.sessions", sessions),
+        ("app.signals", signals),
+    )
 }
 
 /// Each top version's share of the daily users, 0–100 %.
-fn adoption_chart(p: Period, a: &Adoption) -> Option<Chart> {
+fn adoption_chart(p: Period, a: &Adoption) -> Option<LineChart> {
     if p.hourly() || a.versions.is_empty() {
         return None;
     }
     let lines = a
         .versions
         .iter()
-        .zip(COLORS)
-        .map(|((version, shares, _), color)| Line {
-            points: crate::releases::scaled_points(shares, 0.0, 100.0, 600.0, 120.0),
-            color,
+        .zip(SERIES)
+        .map(|((version, shares, _), series)| ChartLine {
             label: value_label(version),
             value: i18n::fmt_pct2(shares.last().copied().unwrap_or(0.0)),
+            points: chart_points(shares, 100.0),
+            series,
         })
         .collect();
     let (start_label, end_label) = axis(p);
-    Some(Chart {
-        area: String::new(),
-        lines,
+    Some(LineChart {
         label: i18n::tf("app.adoption_chart_label", &[("period", &date_range(p))]),
+        lines,
+        area: String::new(),
         max_label: i18n::fmt_pct2(100.0),
         min_label: i18n::fmt_pct2(0.0),
         start_label,
@@ -369,40 +335,20 @@ fn adoption_chart(p: Period, a: &Adoption) -> Option<Chart> {
 }
 
 /// A type's signals (with an area) and users.
-fn type_chart(p: Period, series: &[AppPoint]) -> Chart {
-    let signals: Vec<i64> = series.iter().map(|s| s.signals).collect();
-    let users: Vec<i64> = series.iter().map(|s| s.users).collect();
-    let max = signals.iter().chain(&users).copied().max().unwrap_or(0);
-    let first = points(&signals, max);
-    let (start_label, end_label) = axis(p);
-    Chart {
-        area: format!("{first} 600.0,120.0 0.0,120.0"),
-        lines: vec![
-            Line {
-                points: first,
-                color: "var(--brand)",
-                label: i18n::t("app.signals").to_string(),
-                value: String::new(),
-            },
-            Line {
-                points: points(&users, max),
-                color: "var(--muted)",
-                label: i18n::t("app.users").to_string(),
-                value: String::new(),
-            },
+fn type_chart(p: Period, series: &[AppPoint]) -> LineChart {
+    let signals = floats(series.iter().map(|s| s.signals));
+    let users = floats(series.iter().map(|s| s.users));
+    let label = i18n::tf(
+        "app.type_chart_label",
+        &[
+            (
+                "signals",
+                &i18n::fmt_int(signals.iter().sum::<f64>() as i64),
+            ),
+            ("period", &date_range(p)),
         ],
-        label: i18n::tf(
-            "app.type_chart_label",
-            &[
-                ("signals", &i18n::fmt_int(signals.iter().sum())),
-                ("period", &date_range(p)),
-            ],
-        ),
-        max_label: i18n::fmt_int(max),
-        min_label: i18n::fmt_int(0),
-        start_label,
-        end_label,
-    }
+    );
+    pair_chart(p, label, ("app.signals", signals), ("app.users", users))
 }
 
 /// The numbers and charts (also sent alone as live updates).
@@ -415,8 +361,8 @@ pub struct Summary {
     pub period_label: String,
     /// "On 22 Oct" (the period's last day, which DAU/WAU/MAU are of).
     pub day_meta: String,
-    pub users_chart: Chart,
-    pub activity_chart: Chart,
+    pub users_chart: LineChart,
+    pub activity_chart: LineChart,
     pub strict: bool,
 }
 
@@ -902,12 +848,13 @@ pub struct AdoptionRow {
     pub width: String,
     /// Users over the period (counted per day).
     pub users: String,
-    pub color: &'static str,
+    /// Its colour in the chart (`series-N`).
+    pub series: usize,
 }
 
 /// The adoption card: the chart (periods of days) and the versions.
 pub struct AdoptionView {
-    pub chart: Option<Chart>,
+    pub chart: Option<LineChart>,
     pub rows: Vec<AdoptionRow>,
 }
 
@@ -921,15 +868,15 @@ fn adoption_view(p: Period, a: Option<&Adoption>) -> Option<AdoptionView> {
         rows: a
             .versions
             .iter()
-            .zip(COLORS)
-            .map(|((v, shares, users), color)| {
+            .zip(SERIES)
+            .map(|((v, shares, users), series)| {
                 let last = shares.last().copied().unwrap_or(0.0);
                 AdoptionRow {
                     label: value_label(v),
                     share: i18n::fmt_pct2(last),
                     width: format!("{last:.1}%"),
                     users: i18n::fmt_int(*users),
-                    color,
+                    series,
                 }
             })
             .collect(),
@@ -1155,7 +1102,7 @@ struct ExplorerTemplate {
     signals: String,
     users: String,
     period_label: String,
-    chart: Option<Chart>,
+    chart: Option<LineChart>,
     keys: Vec<KeyView>,
     /// Without a type: every type, to pick one.
     types: Vec<Bar>,
@@ -1290,43 +1237,9 @@ async fn explorer(
 // Live updates
 // ---------------------------------------------------------------------------
 
-enum Change {
-    Events,
-    Rollup,
-    Tick,
-}
-
-async fn next_change(rx: &mut broadcast::Receiver<WebChange>, project_id: i64) -> Option<Change> {
-    let mut rollup = loop {
-        match rx.recv().await {
-            Ok(WebChange::Events(p)) if p == project_id => break false,
-            Ok(WebChange::Rollup(p)) if p == project_id => break true,
-            Ok(_) => continue,
-            Err(RecvError::Lagged(_)) => break true,
-            Err(RecvError::Closed) => return None,
-        }
-    };
-    tokio::time::sleep(COALESCE).await;
-    loop {
-        match rx.try_recv() {
-            Ok(WebChange::Rollup(p)) if p == project_id => rollup = true,
-            Ok(_) => continue,
-            Err(TryRecvError::Lagged(_)) => rollup = true,
-            Err(TryRecvError::Empty) => break,
-            Err(TryRecvError::Closed) => return None,
-        }
-    }
-    Some(if rollup {
-        Change::Rollup
-    } else {
-        Change::Events
-    })
-}
-
 struct Live {
     core: Core,
     ingest: Ingest,
-    rx: broadcast::Receiver<WebChange>,
     project_id: i64,
     query: String,
     lang: i18n::Lang,
@@ -1383,36 +1296,32 @@ async fn live(
     RawQuery(q): RawQuery,
 ) -> ApiResult<Response> {
     load_project(&core, id).await?;
+    let changes = LiveChanges::new(ingest.writer(), id, COALESCE, TICK);
     let state = Live {
-        rx: ingest.writer().subscribe_web(),
         core,
         ingest,
         project_id: id,
         query: q.unwrap_or_default(),
         lang: i18n::current(),
     };
-    let events = futures_util::stream::unfold(state, |mut st| async move {
-        loop {
-            let change = tokio::select! {
-                c = next_change(&mut st.rx, st.project_id) => c?,
-                () = tokio::time::sleep(TICK) => Change::Tick,
-            };
-            let event = match change {
-                Change::Rollup => match st.summary().await {
-                    Some(html) => Event::default().event("app-updated").data(html),
-                    None => continue,
-                },
-                Change::Events | Change::Tick => match st.current().await {
-                    Some(n) => Event::default().event("app-live").data(n),
-                    None => continue,
-                },
-            };
-            return Some((Ok::<_, Infallible>(event), st));
-        }
-    });
-    Ok(Sse::new(events)
-        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-        .into_response())
+    Ok(live::sse(futures_util::stream::unfold(
+        (changes, state),
+        |(mut changes, st)| async move {
+            loop {
+                let event = match changes.next().await? {
+                    Change::Rollup => match st.summary().await {
+                        Some(html) => live::html_event("app-updated", &html),
+                        None => continue,
+                    },
+                    Change::Events | Change::Tick => match st.current().await {
+                        Some(n) => live::html_event("app-live", &n),
+                        None => continue,
+                    },
+                };
+                return Some((event, (changes, st)));
+            }
+        },
+    )))
 }
 
 // ---------------------------------------------------------------------------

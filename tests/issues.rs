@@ -19,8 +19,6 @@ use keen_kestrel::db::triage;
 use serde_json::{Value, json};
 use tower::ServiceExt as _;
 
-/// Sign-ins one at a time (see [`Browser::new`]).
-static SIGN_IN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const PASSWORD: &str = "Kestrel-Owner-Pass-2026!";
 const HOST: &str = "kestrel.test:3002";
 
@@ -63,13 +61,9 @@ impl<'a> Browser<'a> {
             app,
             cookies: BTreeMap::new(),
         };
-        // The kit's sign-in limiter is process-wide and keyed by user name, and
-        // parallel tests sign in with the same names: one at a time.
-        let guard = SIGN_IN.lock().await;
         let res = b
             .post("/login", &[("username", name), ("password", PASSWORD)])
             .await;
-        drop(guard);
         assert_eq!(res.status, StatusCode::SEE_OTHER, "{}", res.body);
         assert!(b.cookies.contains_key("kk_session"));
         b

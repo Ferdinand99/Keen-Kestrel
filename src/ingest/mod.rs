@@ -20,7 +20,6 @@ pub mod auth;
 pub mod body;
 pub mod capture;
 pub mod envelope;
-pub mod limit;
 pub mod signals;
 pub mod web;
 
@@ -33,6 +32,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::{Path as UrlPath, RawQuery, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri, header};
+use axum::middleware::map_response;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use deadpool_sqlite::Pool;
@@ -40,6 +40,8 @@ use serde_json::{Map, Value, json};
 use vole_kit::auth::guard::PeerAddr;
 use vole_kit::auth::session;
 use vole_kit::db::settings;
+use vole_kit::http::headers;
+use vole_kit::http::ratelimit::{Rate, TokenBuckets, retry_after_secs};
 use vole_kit::state::Core;
 
 use crate::difs::Difs;
@@ -48,7 +50,6 @@ use crate::event::{self, Context, normalize, scrub};
 use crate::writer::{AttachmentItem, FeedbackItem, Job, SessionItem, Writer, WriterSettings};
 use auth::KeyInfo;
 use body::{BodyError, MAX_ATTACHMENT, MAX_ENVELOPE, MAX_EVENT};
-use limit::{Buckets, retry_secs};
 
 /// The setting that holds the instance's key for user hashes.
 const HASH_KEY_SETTING: &str = "ingest_hash_key";
@@ -99,12 +100,46 @@ struct Inner {
     store: Pool,
     settings: Settings,
     hash_key: [u8; 32],
-    key_buckets: Buckets<i64>,
-    ip_buckets: Buckets<IpAddr>,
+    /// Requests per DSN key (its `rate_limit_per_minute`), in memory.
+    key_buckets: TokenBuckets<i64>,
+    /// Requests per client IP address (`ip_rate_limit_per_minute`).
+    ip_buckets: TokenBuckets<IpAddr>,
     /// The web visitor ids' salt (memory only, docs/design.md §5.2).
     salt: crate::analytics::DailySalt,
     /// App signals dropped for breaking the protocol's limits.
     dropped_signals: std::sync::atomic::AtomicU64,
+}
+
+impl Inner {
+    /// Takes one request from `ip`'s budget (`ip_rate_limit_per_minute`, 0
+    /// for none); `scope` names it in `X-Sentry-Rate-Limits`.
+    fn take_ip(&self, ip: Option<IpAddr>, scope: &'static str, now: Instant) -> Result<(), Reject> {
+        let per_ip = self.settings.ip_rate_limit_per_minute;
+        match ip {
+            Some(ip) if per_ip > 0 => self
+                .ip_buckets
+                .take(&ip, Rate::per_minute(per_ip), now)
+                .map_err(|wait| Reject::RateLimited {
+                    secs: retry_after_secs(wait),
+                    scope,
+                }),
+            _ => Ok(()),
+        }
+    }
+
+    /// Takes one request from DSN key `key_id`'s budget, if it has one.
+    fn take_key(&self, key_id: i64, per_minute: Option<i64>, now: Instant) -> Result<(), Reject> {
+        let Some(limit) = per_minute else {
+            return Ok(());
+        };
+        let rate = Rate::per_minute(u32::try_from(limit).unwrap_or(u32::MAX));
+        self.key_buckets
+            .take(&key_id, rate, now)
+            .map_err(|wait| Reject::RateLimited {
+                secs: retry_after_secs(wait),
+                scope: "key",
+            })
+    }
 }
 
 /// Why a request is refused.
@@ -276,8 +311,8 @@ impl Ingest {
                 store,
                 settings,
                 hash_key,
-                key_buckets: Buckets::new(),
-                ip_buckets: Buckets::new(),
+                key_buckets: TokenBuckets::new(),
+                ip_buckets: TokenBuckets::new(),
                 salt: crate::analytics::DailySalt::new(),
                 dropped_signals: std::sync::atomic::AtomicU64::new(0),
             }),
@@ -320,8 +355,13 @@ impl Ingest {
         &self.inner.hash_key
     }
 
-    /// The ingest routes, for the main router and the ingest port.
+    /// The ingest routes, for the main router and the ingest port: SDK and
+    /// k.js endpoints with the headers of an endpoint for programs, and
+    /// k.js itself as a file other sites load.
     pub fn router<S: Clone + Send + Sync + 'static>(&self) -> Router<S> {
+        let snippet = Router::new()
+            .route("/js/k.js", axum::routing::get(crate::analytics::kjs::serve))
+            .route_layer(map_response(headers::public_asset));
         Router::new()
             .route(
                 "/api/{project_id}/envelope/",
@@ -344,7 +384,8 @@ impl Ingest {
                 post(web::event_route).options(web::preflight),
             )
             .route("/ingest/v1/signals", post(signals::route))
-            .route("/js/k.js", axum::routing::get(crate::analytics::kjs::serve))
+            .route_layer(map_response(headers::machine))
+            .merge(snippet)
             .with_state(self.clone())
     }
 
@@ -385,18 +426,11 @@ impl Ingest {
         let headers = &headers;
         let inner = &self.inner;
         let now = Instant::now();
-        let per_ip = inner.settings.ip_rate_limit_per_minute;
-        if per_ip > 0
-            && let Some(ip) = session::client_ip(headers, peer, session::trust_proxy())
-        {
-            inner
-                .ip_buckets
-                .take(&ip, per_ip, now)
-                .map_err(|wait| Reject::RateLimited {
-                    secs: retry_secs(wait),
-                    scope: "organization",
-                })?;
-        }
+        inner.take_ip(
+            session::client_ip(headers, peer, session::trust_proxy()),
+            "organization",
+            now,
+        )?;
         let project_id: i64 = project
             .parse::<i64>()
             .ok()
@@ -461,16 +495,7 @@ impl Ingest {
         let Some(key) = key else {
             return Err(Reject::Unauthorized("missing authentication"));
         };
-        if let Some(limit) = key.rate_limit_per_minute {
-            let limit = u32::try_from(limit).unwrap_or(u32::MAX);
-            inner
-                .key_buckets
-                .take(&key.id, limit, now)
-                .map_err(|wait| Reject::RateLimited {
-                    secs: retry_secs(wait),
-                    scope: "key",
-                })?;
-        }
+        inner.take_key(key.id, key.rate_limit_per_minute, now)?;
 
         let this = self.clone();
         let (items, id) = tokio::task::spawn_blocking(move || this.jobs(parsed, &key))
@@ -829,48 +854,4 @@ async fn preflight() -> Response {
         HeaderValue::from_static("3600"),
     );
     res
-}
-
-/// Whether `path` is an ingest route (exempt from the CSRF check).
-pub fn is_ingest_path(path: &str) -> bool {
-    if matches!(path, "/ingest/v1/event" | "/ingest/v1/signals") {
-        return true;
-    }
-    let Some(rest) = path.strip_prefix("/api/") else {
-        return false;
-    };
-    let Some((id, tail)) = rest.split_once('/') else {
-        return false;
-    };
-    !id.is_empty()
-        && id.bytes().all(|b| b.is_ascii_digit())
-        && matches!(tail, "envelope" | "envelope/" | "store" | "store/")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ingest_paths() {
-        for p in [
-            "/api/1/envelope/",
-            "/api/42/store/",
-            "/api/7/envelope",
-            "/api/7/store",
-            "/ingest/v1/event",
-            "/ingest/v1/signals",
-        ] {
-            assert!(is_ingest_path(p), "{p}");
-        }
-        for p in [
-            "/api/v1/projects",
-            "/api//envelope/",
-            "/api/1/envelope/x",
-            "/api/1x/store/",
-            "/apix/1/store/",
-        ] {
-            assert!(!is_ingest_path(p), "{p}");
-        }
-    }
 }

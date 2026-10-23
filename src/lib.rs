@@ -72,9 +72,9 @@ pub async fn start(data_dir: &Path, public_url: Option<&str>) -> Result<Kestrel,
 
 /// Installs the configuration, opens and migrates both databases in
 /// `data_dir`, starts the writer and returns the state. `public_url`
-/// (`KK_PUBLIC_URL`) is kept in the `base_url` setting, which the kit's
-/// same-origin checks, API examples and DSNs read; without one the setting
-/// is cleared.
+/// (`KK_PUBLIC_URL`), when given, is stored in the `base_url` setting, which
+/// the kit's same-origin checks, API examples and DSNs read; without one
+/// the setting keeps what the General page saved.
 pub async fn start_with(
     data_dir: &Path,
     public_url: Option<&str>,
@@ -95,15 +95,16 @@ pub async fn start_with(
     let http = reqwest::Client::builder()
         .user_agent(product::USER_AGENT)
         .build()?;
-    let core = Core {
-        db: pool,
-        session_key: vole_kit::auth::load_or_create_key(data_dir),
+    let core = Core::new(
+        pool,
+        vole_kit::auth::load_or_create_key(data_dir),
         http,
-        cfg: &product::KIT,
-    };
-    let public_url = public_url.map(str::to_string);
-    core.with_conn(move |c| settings::set_opt(c, settings::BASE_URL, public_url.as_deref()))
-        .await?;
+        &product::KIT,
+    );
+    if let Some(url) = public_url.map(str::to_string) {
+        core.with_conn(move |c| settings::set(c, settings::BASE_URL, &url))
+            .await?;
+    }
     let alerts = alerts::Alerts::start(core.clone(), settings.alerts.clone());
     let ingest =
         ingest::Ingest::start(core.clone(), data_dir, settings, Some(alerts.sink())).await?;

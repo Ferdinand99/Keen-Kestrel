@@ -32,7 +32,6 @@ use serde_json::json;
 use vole_kit::auth::guard::PeerAddr;
 use vole_kit::auth::session;
 
-use super::limit::retry_secs;
 use super::{Ingest, Reject, auth, body};
 use crate::analytics::app::{self, BatchError, Ctx, MAX_BODY};
 use crate::writer::Job;
@@ -85,18 +84,11 @@ impl Ingest {
     ) -> Result<(usize, usize), Reject> {
         let inner = &self.inner;
         let now = Instant::now();
-        let per_ip = inner.settings.ip_rate_limit_per_minute;
-        if per_ip > 0
-            && let Some(ip) = session::client_ip(headers, peer, session::trust_proxy())
-        {
-            inner
-                .ip_buckets
-                .take(&ip, per_ip, now)
-                .map_err(|wait| Reject::RateLimited {
-                    secs: retry_secs(wait),
-                    scope: "ip",
-                })?;
-        }
+        inner.take_ip(
+            session::client_ip(headers, peer, session::trust_proxy()),
+            "ip",
+            now,
+        )?;
         let given = headers
             .get("x-kestrel-key")
             .and_then(|v| v.to_str().ok())
@@ -132,16 +124,7 @@ impl Ingest {
                 detail: "the project has no secret for user hashes",
             });
         }
-        if let Some(limit) = key.rate_limit_per_minute {
-            let limit = u32::try_from(limit).unwrap_or(u32::MAX);
-            inner
-                .key_buckets
-                .take(&key.id, limit, now)
-                .map_err(|wait| Reject::RateLimited {
-                    secs: retry_secs(wait),
-                    scope: "key",
-                })?;
-        }
+        inner.take_key(key.id, key.rate_limit_per_minute, now)?;
 
         let raw = axum::body::to_bytes(raw_body, MAX_BODY)
             .await

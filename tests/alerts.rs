@@ -135,7 +135,9 @@ async fn new_issues_and_regressions_alert() {
         summary(&got[0]),
         "\u{1f534} New issue in Fixtures — ValueError: it broke"
     );
-    assert_eq!(got[0]["monitor"], "ValueError: it broke");
+    // The webhook speaks of an issue (KitConfig::webhook), not a monitor.
+    assert_eq!(got[0]["issue"], "ValueError: it broke");
+    assert!(got[0].get("monitor").is_none(), "{:#?}", got[0]);
 
     // The same issue again: nothing new.
     send(&app, &event("ValueError")).await;
@@ -453,6 +455,13 @@ async fn channels_are_managed_with_their_secrets_kept() {
     assert!(picker.body.contains("ntfy"));
     let form = ed.get("/settings/notifications/form?kind=webhook").await;
     assert!(form.body.contains("name=\"c_url\""), "{}", form.body);
+    assert!(
+        form.body.contains("https://example.com/hooks/kestrel…"),
+        "{}",
+        form.body
+    );
+    // The kit's field partial, with the kit's words for the headers.
+    assert!(form.body.contains("Add header"), "{}", form.body);
     assert!(form.body.contains("name=\"language\""));
 
     // Test before saving.

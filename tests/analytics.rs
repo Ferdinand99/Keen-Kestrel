@@ -1039,6 +1039,11 @@ async fn k_js_is_small_cached_and_cookie_free() {
     assert!(!plain.body.contains("// "), "comments are stripped");
     assert!(plain.header("cache-control").contains("max-age"));
     assert!(plain.headers.get(header::SET_COOKIE).is_none());
+    // A file other sites load: no CSP or frame rules, any origin may embed it.
+    assert_eq!(plain.header("cross-origin-resource-policy"), "cross-origin");
+    assert_eq!(plain.header("content-security-policy"), "");
+    assert_eq!(plain.header("x-frame-options"), "");
+    assert_eq!(plain.header("x-content-type-options"), "nosniff");
     let etag = plain.header("etag").to_string();
     assert!(etag.starts_with('"'));
     let mut req = Request::get("/js/k.js")
@@ -1068,10 +1073,14 @@ async fn k_js_is_small_cached_and_cookie_free() {
         StatusCode::OK
     );
     let mut req = beacon(&pageview(&app.key, "/via-ingest-port"), FIREFOX);
+    let res = common::send_to(&ingest, &mut req).await;
+    assert_eq!(res.status, StatusCode::ACCEPTED);
+    // An endpoint for programs: a CSP that allows nothing, no frame rules.
     assert_eq!(
-        common::send_to(&ingest, &mut req).await.status,
-        StatusCode::ACCEPTED
+        res.header("content-security-policy"),
+        "default-src 'none'; frame-ancestors 'none'"
     );
+    assert_eq!(res.header("x-frame-options"), "");
     let mut req = Request::get(format!("/projects/{}/web", app.project_id))
         .body(Body::empty())
         .unwrap();

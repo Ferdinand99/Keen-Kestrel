@@ -410,6 +410,9 @@ retention_releases = "فایل‌های اشکال‌زدایی نسخه‌ها�
 retention_releases_unit = "نسخه"
 retention_releases_help = "فایل‌های اشکال‌زدایی که این تعداد از جدیدترین نسخه‌ها از آن‌ها استفاده می‌کنند، هر قدر هم قدیمی باشند، می‌مانند."
 err_releases = "یک عدد صحیح از ۰ تا ۱٬۰۰۰ وارد کنید."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "خواندن و بارگذاری فایل‌های اشکال‌زدایی"
+scope_help = "همه‌چیز را می‌خواند و فایل‌های اشکال‌زدایی را بارگذاری می‌کند، اما چیز دیگری را تغییر نمی‌دهد"
 
 [releases]
 tab = "نسخه‌ها"
@@ -564,11 +567,6 @@ rule_count.other = "استفاده‌شده در {n} قانون هشدار"
 language = "زبان پیام"
 language_help = "هشدارهای این کانال به این زبان نوشته می‌شوند."
 language_default = "زبان این نمونه ({name})"
-kv_name = "نام هدر"
-kv_value = "مقدار"
-kv_value_aria = "مقدار هدر"
-kv_remove = "حذف هدر"
-kv_add = "افزودن هدر"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -612,7 +610,6 @@ period_yesterday = "دیروز"
 period_7d = "۷ روز"
 period_30d = "۳۰ روز"
 period_custom = "سفارشی"
-period_last_days = "{n} روز گذشته"
 from = "از"
 to = "تا"
 custom_help = "روزهای کامل به وقت UTC، حداکثر ۴۰۰ روز."
@@ -805,7 +802,7 @@ subtitle = "خوش آمدید. وارد شوید تا پروژه‌ها و مش�
 
 [setup]
 site_name_placeholder = "خطاهای شرکت من…"
-tz_after = "نمایش داده می‌شوند."
+tz_after = "نمایش داده می‌شوند. این را می‌توان در تنظیمات تغییر داد."
 
 [users]
 roles_help = "بینندگان فقط می‌بینند و چیزی را تغییر نمی‌دهند. ویرایشگرها پروژه‌ها، کلیدها، مشکل‌ها، هشدارها و کانال‌های اطلاع‌رسانی را مدیریت می‌کنند. مدیران به همه‌چیز، از جمله کاربران، دسترسی دارند."
@@ -820,3 +817,10 @@ setup_token_required = "این نمونه به توکن راه‌اندازی ن
 
 [error]
 back = "بازگشت به پروژه‌ها"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "نام این نمونه، نشانی دسترسی به آن و منطقهٔ زمانی‌ای که زمان‌ها با آن نمایش داده می‌شوند."
+base_url_help = "نشانی‌ای که SDKها و افراد با آن به این نمونه می‌رسند: در DSNها و پیوندهای هشدارها به کار می‌رود. اگر KK_PUBLIC_URL روی سرور تنظیم شده باشد، در هر بار راه‌اندازی جای این مقدار را می‌گیرد."

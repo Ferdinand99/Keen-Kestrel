@@ -410,6 +410,9 @@ retention_releases = "Felsökningsfiler för de senaste versionerna"
 retention_releases_unit = "versioner"
 retention_releases_help = "Felsökningsfiler som används av så många av de nyaste versionerna finns kvar, oavsett hur gamla de är."
 err_releases = "Ange ett heltal från 0 till 1 000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Läsa och ladda upp felsökningsfiler"
+scope_help = "Läser allt och laddar upp felsökningsfiler, men ändrar inget annat"
 
 [releases]
 tab = "Versioner"
@@ -564,11 +567,6 @@ rule_count.other = "Används av {n} larmregler"
 language = "Meddelandespråk"
 language_help = "Larm till den här kanalen skrivs på det här språket."
 language_default = "Instansens språk ({name})"
-kv_name = "Rubriknamn"
-kv_value = "Värde"
-kv_value_aria = "Rubrikvärde"
-kv_remove = "Ta bort rubrik"
-kv_add = "Lägg till rubrik"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -612,7 +610,6 @@ period_yesterday = "I går"
 period_7d = "7 dagar"
 period_30d = "30 dagar"
 period_custom = "Anpassad"
-period_last_days = "Senaste {n} dagarna"
 from = "Från"
 to = "Till"
 custom_help = "Hela dagar i UTC, högst 400."
@@ -805,7 +802,7 @@ subtitle = "Välkommen tillbaka. Logga in för att se dina projekt och deras pro
 
 [setup]
 site_name_placeholder = "Acme-fel…"
-tz_after = "."
+tz_after = ". Det kan ändras under Inställningar."
 
 [users]
 roles_help = "Läsare kan titta men inte ändra något. Redaktörer hanterar projekt, nycklar, problem, larm och aviseringskanaler. Administratörer kan göra allt, inklusive användare."
@@ -820,3 +817,10 @@ setup_token_required = "Den här instansen kräver en installationstoken. Öppna
 
 [error]
 back = "Tillbaka till projekten"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Vad instansen heter, var den nås och i vilken tidszon den visar tider."
+base_url_help = "Adressen där SDK:er och personer når instansen: används i DSN:er och i länkar i larm. Om KK_PUBLIC_URL är satt på servern ersätter den värdet vid varje start."

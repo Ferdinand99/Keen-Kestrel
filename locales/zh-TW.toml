@@ -394,6 +394,9 @@ retention_releases = "近期版本的偵錯檔案"
 retention_releases_unit = "個版本"
 retention_releases_help = "最新這些版本所使用的偵錯檔案會一直保留，無論多舊。"
 err_releases = "請輸入 0 到 1,000 之間的整數。"
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "讀取並上傳偵錯檔案"
+scope_help = "可讀取所有內容並上傳偵錯檔案，但不會變更其他任何內容"
 
 [releases]
 tab = "版本"
@@ -543,11 +546,6 @@ rule_count.other = "{n} 條警報規則使用中"
 language = "訊息語言"
 language_help = "傳送到此管道的警報會以這個語言撰寫。"
 language_default = "站台語言（{name}）"
-kv_name = "標頭名稱"
-kv_value = "值"
-kv_value_aria = "標頭值"
-kv_remove = "移除標頭"
-kv_add = "新增標頭"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -589,7 +587,6 @@ period_yesterday = "昨天"
 period_7d = "7 天"
 period_30d = "30 天"
 period_custom = "自訂"
-period_last_days = "過去 {n} 天"
 from = "開始日期"
 to = "結束日期"
 custom_help = "以 UTC 整日計算，最多 400 天。"
@@ -781,7 +778,7 @@ subtitle = "歡迎回來。登入後即可查看你的專案及其問題。"
 
 [setup]
 site_name_placeholder = "Acme 錯誤…"
-tz_after = "顯示。"
+tz_after = "顯示。可以在「設定」中修改。"
 
 [users]
 roles_help = "檢視者只能查看，無法變更任何內容。編輯者可管理專案、金鑰、問題、警報與通知管道。管理員可執行所有操作，包括使用者。"
@@ -796,3 +793,10 @@ setup_token_required = "此站台需要設定權杖。請開啟 /setup?token=…
 
 [error]
 back = "返回專案"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "此站台的名稱、存取位址，以及顯示時間所用的時區。"
+base_url_help = "SDK 與使用者存取此站台的位址，用於 DSN 和警報中的連結。若伺服器設定了 KK_PUBLIC_URL，每次啟動時都會以它取代此值。"

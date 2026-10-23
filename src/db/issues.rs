@@ -563,7 +563,8 @@ mod tests {
             std::env::temp_dir().join(format!("kk-issues-{}-{name}.sqlite", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let mut store = Connection::open(&path).unwrap();
-        crate::store::prepare(&store).unwrap();
+        vole_kit::db::apply_new_database_pragmas(&store, crate::store::POOL.new_database_pragmas)
+            .unwrap();
         vole_kit::db::migrate::apply_migrations_with(&mut store, &crate::store::MIGRATIONS)
             .unwrap();
         drop(store);

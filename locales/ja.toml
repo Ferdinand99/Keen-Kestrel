@@ -394,6 +394,9 @@ retention_releases = "最近のリリースのデバッグファイル"
 retention_releases_unit = "リリース"
 retention_releases_help = "最新のリリースからこの数までで使われたデバッグファイルは、古さに関係なく保持されます。"
 err_releases = "0〜1,000の整数を入力してください。"
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "読み取りとデバッグファイルのアップロード"
+scope_help = "すべてを読み取り、デバッグファイルをアップロードできますが、それ以外は変更しません"
 
 [releases]
 tab = "リリース"
@@ -543,11 +546,6 @@ rule_count.other = "{n}件のアラートルールで使用中"
 language = "メッセージの言語"
 language_help = "このチャンネルへのアラートはこの言語で書かれます。"
 language_default = "インスタンスの言語（{name}）"
-kv_name = "ヘッダー名"
-kv_value = "値"
-kv_value_aria = "ヘッダーの値"
-kv_remove = "ヘッダーを削除"
-kv_add = "ヘッダーを追加"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -589,7 +587,6 @@ period_yesterday = "昨日"
 period_7d = "7日間"
 period_30d = "30日間"
 period_custom = "カスタム"
-period_last_days = "過去{n}日間"
 from = "開始日"
 to = "終了日"
 custom_help = "UTCの日単位で、最大400日です。"
@@ -781,7 +778,7 @@ subtitle = "おかえりなさい。ログインしてプロジェクトと問�
 
 [setup]
 site_name_placeholder = "Acmeのエラー…"
-tz_after = "で表示されます。"
+tz_after = "で表示されます。設定で変更できます。"
 
 [users]
 roles_help = "閲覧者は表示のみで、変更はできません。編集者はプロジェクト、キー、問題、アラート、通知チャンネルを管理できます。管理者はユーザーを含むすべての操作ができます。"
@@ -796,3 +793,10 @@ setup_token_required = "このインスタンスにはセットアップトー�
 
 [error]
 back = "プロジェクトに戻る"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "このインスタンスの名前、アクセス先のアドレス、時刻を表示するタイムゾーンです。"
+base_url_help = "SDKやユーザーがこのインスタンスにアクセスするアドレスです。DSNやアラート内のリンクに使われます。サーバーでKK_PUBLIC_URLが設定されている場合は、起動のたびにこの値が置き換えられます。"

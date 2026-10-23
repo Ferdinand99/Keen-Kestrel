@@ -1109,9 +1109,7 @@ fn tag_views(tags: Vec<triage::TagSummary>) -> Vec<TagView> {
                     .top
                     .into_iter()
                     .map(|(value, count, last_seen)| TagValueView {
-                        pct: i18n::fmt_pct2(count as f64 * 100.0 / t.total.max(1) as f64)
-                            .replace(".00", "")
-                            .replace(",00", ""),
+                        pct: i18n::fmt_pct0(count as f64 * 100.0 / t.total.max(1) as f64),
                         value,
                         count,
                         last_seen,

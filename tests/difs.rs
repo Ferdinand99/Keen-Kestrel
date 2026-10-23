@@ -20,8 +20,6 @@ use serde_json::{Value, json};
 use tower::ServiceExt as _;
 use vole_kit::auth::{TokenScope, tokens};
 
-/// Sign-ins one at a time (see [`Browser::new`]).
-static SIGN_IN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const PASSWORD: &str = "Kestrel-Owner-Pass-2026!";
 const HOST: &str = "kestrel.test:3002";
 /// The app's arm64 slice: the simulator build the crashes came from.
@@ -73,8 +71,8 @@ async fn user(app: &App, name: &'static str, role: &'static str) -> i64 {
         .unwrap()
 }
 
-/// A token of `user_id` with `scope`, and the `difs:write` grant if asked.
-async fn token(app: &App, user_id: i64, scope: TokenScope, grant: bool) -> String {
+/// A token of `user_id` with `scope`, and the `difs:write` scope if asked.
+async fn token(app: &App, user_id: i64, scope: TokenScope, upload: bool) -> String {
     let token = tokens::generate();
     let (hash, prefix) = (tokens::hash(&token), tokens::display_prefix(&token));
     app.kestrel
@@ -82,8 +80,8 @@ async fn token(app: &App, user_id: i64, scope: TokenScope, grant: bool) -> Strin
         .with_conn(move |c| {
             let id =
                 vole_kit::db::api_tokens::insert(c, user_id, "t", &prefix, &hash, scope, None)?;
-            if grant {
-                keen_kestrel::db::difs::grant(c, id, keen_kestrel::db::difs::DIFS_WRITE)?;
+            if upload {
+                vole_kit::db::api_tokens::add_scope(c, id, keen_kestrel::product::DIFS_WRITE)?;
             }
             Ok(())
         })
@@ -584,18 +582,18 @@ async fn only_tokens_that_may_upload_debug_files_can() {
     let app = App::new().await;
     let editor = user(&app, "eve", "editor").await;
     let viewer = user(&app, "vic", "viewer").await;
-    let grant = token(&app, editor, TokenScope::Read, true).await;
+    let upload = token(&app, editor, TokenScope::Read, true).await;
     let write = token(&app, editor, TokenScope::Write, false).await;
     let read = token(&app, editor, TokenScope::Read, false).await;
     let viewer_write = token(&app, viewer, TokenScope::Write, false).await;
-    let viewer_grant = token(&app, viewer, TokenScope::Read, true).await;
+    let viewer_upload = token(&app, viewer, TokenScope::Read, true).await;
     let options = "/api/0/organizations/x/chunk-upload/";
     for (t, status) in [
-        (&grant, StatusCode::OK),
+        (&upload, StatusCode::OK),
         (&write, StatusCode::OK),
         (&read, StatusCode::FORBIDDEN),
         (&viewer_write, StatusCode::FORBIDDEN),
-        (&viewer_grant, StatusCode::FORBIDDEN),
+        (&viewer_upload, StatusCode::FORBIDDEN),
     ] {
         let res = bearer(&app, "GET", options, t, Body::empty(), "").await;
         assert_eq!(res.status, status, "{}", res.body);
@@ -607,29 +605,167 @@ async fn only_tokens_that_may_upload_debug_files_can() {
     assert_eq!(res.status, StatusCode::UNAUTHORIZED);
     let res = bearer(&app, "GET", options, "kk_nope", Body::empty(), "").await;
     assert_eq!(res.status, StatusCode::UNAUTHORIZED);
-    // The grant doesn't make the token write anything else.
+    // The scope doesn't make the token write anything else.
     let res = bearer(
         &app,
         "POST",
         "/api/v1/projects",
-        &grant,
+        &upload,
         Body::from(r#"{"name":"X"}"#),
         "application/json",
     )
     .await;
     assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
-    let res = bearer(&app, "GET", "/api/v1/projects", &grant, Body::empty(), "").await;
+    let res = bearer(&app, "GET", "/api/v1/projects", &upload, Body::empty(), "").await;
     assert_eq!(res.status, StatusCode::OK);
     // A demoted owner's upload token stops working.
     app.exec(format!(
         "UPDATE users SET role = 'viewer' WHERE id = {editor}"
     ))
     .await;
-    let res = bearer(&app, "GET", options, &grant, Body::empty(), "").await;
+    let res = bearer(&app, "GET", options, &upload, Body::empty(), "").await;
     assert_eq!(res.status, StatusCode::FORBIDDEN);
     // The zip endpoint checks the same.
     let res = upload_zip(&app, &read).await;
     assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+}
+
+/// A database as Kestrel 0.2.0 (on vole-kit 0.1) left it, with an upload
+/// token granted in its own `token_grants`: after the upgrade the grant is
+/// the kit's `difs:write` token scope and the token still uploads.
+#[tokio::test]
+async fn upload_tokens_keep_working_after_the_upgrade() {
+    let app = App::new().await;
+    let editor = user(&app, "uma", "editor").await;
+    let upload = token(&app, editor, TokenScope::Read, false).await;
+    let plain = token(&app, editor, TokenScope::Read, false).await;
+    // Back to 0.2.0's schema: no api_token_scopes (kit/0002_token_scopes.sql)
+    // and no 0008, but 0004's token_grants with the first token's grant.
+    app.exec(format!(
+        "DROP TABLE api_token_scopes;
+         DELETE FROM schema_migrations
+             WHERE name IN ('kit/0002_token_scopes.sql', '0008_token_scopes.sql');
+         CREATE TABLE token_grants (
+             token_id INTEGER NOT NULL REFERENCES api_tokens(id) ON DELETE CASCADE,
+             scope TEXT NOT NULL CHECK (scope IN ('difs:write')),
+             PRIMARY KEY (token_id, scope)
+         ) WITHOUT ROWID;
+         INSERT INTO token_grants (token_id, scope)
+             SELECT MIN(id), 'difs:write' FROM api_tokens WHERE user_id = {editor};"
+    ))
+    .await;
+
+    // Kestrel starts again on the same data: the kit's migration, then
+    // Kestrel's, after a copy of the database.
+    let upgraded = keen_kestrel::start(&app.dir, None).await.unwrap();
+    let (old_table, scopes) = upgraded
+        .core
+        .with_conn(move |c| {
+            let old: i64 = c.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'token_grants'",
+                [],
+                |r| r.get(0),
+            )?;
+            let scopes: Vec<(String, String)> = c
+                .prepare(
+                    "SELECT t.name, s.scope FROM api_token_scopes s
+                     JOIN api_tokens t ON t.id = s.token_id ORDER BY t.id",
+                )?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            Ok((old, scopes))
+        })
+        .await
+        .unwrap();
+    assert_eq!(old_table, 0, "token_grants is gone");
+    assert_eq!(scopes, [("t".to_string(), "difs:write".to_string())]);
+    let backups: Vec<String> = std::fs::read_dir(app.dir.join("backups"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        backups
+            .iter()
+            .any(|b| b.starts_with("kestrel-before-kit-0002_token_scopes")),
+        "{backups:?}"
+    );
+
+    let router = keen_kestrel::router(upgraded);
+    let get = |token: &str| {
+        Request::get("/api/0/organizations/x/chunk-upload/")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap()
+    };
+    let res = common::send_to(&router, &mut get(&upload)).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let res = common::send_to(&router, &mut get(&plain)).await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+    let mut zip = Request::post(format!("/api/v1/projects/{}/dsyms", app.project_id))
+        .header(header::AUTHORIZATION, format!("Bearer {upload}"))
+        .header(header::CONTENT_TYPE, "application/zip")
+        .body(Body::from(dsym_zip()))
+        .unwrap();
+    let res = common::send_to(&router, &mut zip).await;
+    assert_eq!(res.status, StatusCode::CREATED, "{}", res.body);
+}
+
+/// The kit's API tokens page offers the upload scope and shows it as the
+/// token's access; such a token uploads and otherwise only reads.
+#[tokio::test]
+async fn the_tokens_page_makes_upload_tokens() {
+    let app = App::new().await;
+    let mut ed = Browser::new(&app, "tess", "editor").await;
+    let page = ed.get("/settings/tokens").await;
+    assert!(page.body.contains(r#"value="difs:write""#), "{}", page.body);
+    assert!(page.body.contains("Read and upload debug files"));
+    assert!(
+        page.body
+            .contains("Reads everything and uploads debug files, but changes nothing else")
+    );
+    let res = ed
+        .post(
+            "/settings/tokens",
+            &[
+                ("name", "Build Mac"),
+                ("scope", "difs:write"),
+                ("expires", "30"),
+            ],
+        )
+        .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let token = res
+        .body
+        .split("id=\"created-token\">")
+        .nth(1)
+        .and_then(|s| s.split('<').next())
+        .unwrap()
+        .to_string();
+    assert!(token.starts_with("kk_"), "{token}");
+    assert_eq!(upload_zip(&app, &token).await.status, StatusCode::CREATED);
+    let res = bearer(
+        &app,
+        "POST",
+        "/api/v1/projects",
+        &token,
+        Body::from(r#"{"name":"X"}"#),
+        "application/json",
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+    // Listed with the scope's label, here and on the Debug files page.
+    let page = ed.get("/settings/tokens").await;
+    assert!(
+        page.body
+            .contains(r#"<span class="badge">Read and upload debug files</span>"#),
+        "{}",
+        page.body
+    );
+    let difs = ed
+        .get(&format!("/projects/{}/debug-files", app.project_id))
+        .await;
+    assert!(difs.body.contains("Build Mac"), "{}", difs.body);
 }
 
 #[tokio::test]
@@ -884,13 +1020,9 @@ impl<'a> Browser<'a> {
             app,
             cookies: BTreeMap::new(),
         };
-        // The kit's sign-in limiter is process-wide and keyed by user name, and
-        // parallel tests sign in with the same names: one at a time.
-        let guard = SIGN_IN.lock().await;
         let res = b
             .post("/login", &[("username", name), ("password", PASSWORD)])
             .await;
-        drop(guard);
         assert_eq!(res.status, StatusCode::SEE_OTHER, "{}", res.body);
         b
     }

@@ -426,6 +426,9 @@ retention_releases = "Ficheiros de depuração das versões recentes"
 retention_releases_unit = "versões"
 retention_releases_help = "Os ficheiros de depuração usados por este número das versões mais recentes ficam, seja qual for a sua antiguidade."
 err_releases = "Introduza um número inteiro de 0 a 1000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Ler e carregar ficheiros de depuração"
+scope_help = "Lê tudo e carrega ficheiros de depuração, mas não altera mais nada"
 
 [releases]
 tab = "Versões"
@@ -585,11 +588,6 @@ rule_count.other = "Usado por {n} regras de alerta"
 language = "Idioma das mensagens"
 language_help = "Os alertas para este canal são escritos neste idioma."
 language_default = "Idioma da instância ({name})"
-kv_name = "Nome do cabeçalho"
-kv_value = "Valor"
-kv_value_aria = "Valor do cabeçalho"
-kv_remove = "Remover cabeçalho"
-kv_add = "Adicionar cabeçalho"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -635,7 +633,6 @@ period_yesterday = "Ontem"
 period_7d = "7 dias"
 period_30d = "30 dias"
 period_custom = "Personalizado"
-period_last_days = "Últimos {n} dias"
 from = "De"
 to = "Até"
 custom_help = "Dias inteiros em UTC, no máximo 400."
@@ -829,7 +826,7 @@ subtitle = "Bem-vindo de volta. Inicie sessão para ver os seus projetos e os re
 
 [setup]
 site_name_placeholder = "Erros da Acme…"
-tz_after = "."
+tz_after = ". É possível alterar isto nas Definições."
 
 [users]
 roles_help = "Os visualizadores podem ver, mas não alterar nada. Os editores gerem projetos, chaves, problemas, alertas e canais de notificação. Os administradores podem fazer tudo, incluindo utilizadores."
@@ -844,3 +841,10 @@ setup_token_required = "Esta instância precisa de um token de configuração. A
 
 [error]
 back = "Voltar aos projetos"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Como esta instância se chama, onde é acedida e em que fuso horário mostra as horas."
+base_url_help = "O endereço em que SDKs e pessoas acedem a esta instância: usado nos DSNs e nas ligações dos alertas. Se KK_PUBLIC_URL estiver definido no servidor, substitui este valor em cada arranque."

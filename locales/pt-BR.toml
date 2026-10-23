@@ -426,6 +426,9 @@ retention_releases = "Arquivos de depuração das versões recentes"
 retention_releases_unit = "versões"
 retention_releases_help = "Arquivos de depuração usados por este número das versões mais recentes ficam, não importa a idade."
 err_releases = "Digite um número inteiro de 0 a 1.000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Ler e enviar arquivos de depuração"
+scope_help = "Lê tudo e envia arquivos de depuração, mas não altera mais nada"
 
 [releases]
 tab = "Versões"
@@ -585,11 +588,6 @@ rule_count.other = "Usado por {n} regras de alerta"
 language = "Idioma das mensagens"
 language_help = "Os alertas para este canal são escritos neste idioma."
 language_default = "Idioma da instância ({name})"
-kv_name = "Nome do cabeçalho"
-kv_value = "Valor"
-kv_value_aria = "Valor do cabeçalho"
-kv_remove = "Remover cabeçalho"
-kv_add = "Adicionar cabeçalho"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -635,7 +633,6 @@ period_yesterday = "Ontem"
 period_7d = "7 dias"
 period_30d = "30 dias"
 period_custom = "Personalizado"
-period_last_days = "Últimos {n} dias"
 from = "De"
 to = "Até"
 custom_help = "Dias inteiros em UTC, no máximo 400."
@@ -829,7 +826,7 @@ subtitle = "Que bom ver você de novo. Entre para ver seus projetos e os problem
 
 [setup]
 site_name_placeholder = "Erros da Acme…"
-tz_after = "."
+tz_after = ". É possível mudar isso em Configurações."
 
 [users]
 roles_help = "Leitores podem ver, mas não alterar nada. Editores gerenciam projetos, chaves, problemas, alertas e canais de notificação. Administradores podem tudo, incluindo usuários."
@@ -844,3 +841,10 @@ setup_token_required = "Esta instância precisa de um token de configuração. A
 
 [error]
 back = "Voltar aos projetos"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Como esta instância se chama, onde ela é acessada e em qual fuso horário mostra os horários."
+base_url_help = "O endereço em que SDKs e pessoas acessam esta instância: usado nos DSNs e nos links dos alertas. Se KK_PUBLIC_URL estiver definida no servidor, ela substitui este valor a cada inicialização."

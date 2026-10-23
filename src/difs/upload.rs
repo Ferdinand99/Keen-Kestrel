@@ -21,9 +21,9 @@
 //! body or as multipart `file`).
 //!
 //! Every upload needs an API token (`Authorization: Bearer kk_…`) that may
-//! upload debug files: one with the `difs:write` grant (made on the Debug
-//! files page), or a read-and-write token, and its owner must be an editor
-//! or admin. The REST endpoint also takes an editor's session.
+//! upload debug files: one with the `difs:write` scope (made on the Debug
+//! files page or the API tokens page), or a read-and-write token, and its
+//! owner must be an editor or admin. The REST endpoint also takes an editor's session.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -39,7 +39,7 @@ use futures_util::StreamExt as _;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use symbolic_common::DebugId;
-use vole_kit::auth::{AuthMethod, CurrentUser, TokenScope};
+use vole_kit::auth::{AuthMethod, CurrentUser, Role};
 use vole_kit::http::rest::{V1Error, V1Result, json_ok, limit, no_content, paginate, parse_cursor};
 use vole_kit::state::Core;
 
@@ -109,7 +109,7 @@ impl Denied {
         match self {
             Denied::NeedsToken => "use an API token (Authorization: Bearer kk_…)",
             Denied::NotAllowed => {
-                "this token can't upload debug files: use one with the difs:write grant \
+                "this token can't upload debug files: use one with the difs:write scope \
                  (Debug files page) or a read-and-write token of an editor"
             }
         }
@@ -123,32 +123,17 @@ impl Denied {
     }
 }
 
-/// Whether the request may upload debug files: a read-and-write token of
-/// an editor or admin, a token with the `difs:write` grant whose owner is
-/// one, or (when `session_ok`) an editor's session.
-pub async fn may_upload(
-    core: &Core,
+/// Whether the request may upload debug files: a token with the
+/// `difs:write` scope (a read-and-write token has every scope) whose owner
+/// is an editor or admin, or (when `session_ok`) an editor's session.
+pub fn may_upload(
     user: &CurrentUser,
     method: Option<AuthMethod>,
     session_ok: bool,
 ) -> Result<(), Denied> {
     match method {
-        Some(AuthMethod::Token { token_id, scope }) => {
-            if scope == TokenScope::Write && user.can_edit() {
-                return Ok(());
-            }
-            let owner = user.id;
-            let allowed = core
-                .with_conn(move |c| {
-                    if !db::token_has(c, token_id, db::DIFS_WRITE)? {
-                        return Ok(false);
-                    }
-                    Ok(vole_kit::db::users::get_user(c, owner)?
-                        .is_some_and(|u| u.active && u.role.can_edit()))
-                })
-                .await
-                .unwrap_or(false);
-            if allowed {
+        Some(AuthMethod::Token { .. }) => {
+            if user.has_scope(crate::product::DIFS_WRITE) && user.may_act_as(Role::Editor) {
                 Ok(())
             } else {
                 Err(Denied::NotAllowed)
@@ -175,9 +160,8 @@ async fn project(core: &Core, segment: &str) -> Option<Project> {
 /// The request's auth method, if `require_auth` set one.
 type Method = Option<Extension<AuthMethod>>;
 
-async fn check(core: &Core, user: &CurrentUser, method: Method) -> Option<Response> {
-    may_upload(core, user, method.map(|Extension(m)| m), false)
-        .await
+fn check(user: &CurrentUser, method: Method) -> Option<Response> {
+    may_upload(user, method.map(|Extension(m)| m), false)
         .err()
         .map(|d| detail(d.status(), d.message()))
 }
@@ -206,10 +190,10 @@ pub fn dif_json(d: &DifFile) -> Value {
 /// `GET /api/0/`: who the token belongs to and what it may do. Kestrel keeps
 /// no email addresses, so `email` (what `sentry-cli info` shows as the
 /// user) is the user name.
-async fn auth_info(State(core): State<Core>, user: CurrentUser, method: Method) -> Response {
+async fn auth_info(user: CurrentUser, method: Method) -> Response {
     let method = method.map(|Extension(m)| m);
     let mut scopes = vec!["org:read", "project:read"];
-    if may_upload(&core, &user, method, false).await.is_ok() {
+    if may_upload(&user, method, false).is_ok() {
         scopes.extend(["project:write", "project:releases"]);
     }
     axum::Json(json!({
@@ -222,12 +206,11 @@ async fn auth_info(State(core): State<Core>, user: CurrentUser, method: Method) 
 
 /// `GET …/chunk-upload/`: the limits sentry-cli works with.
 async fn chunk_options(
-    State(core): State<Core>,
     user: CurrentUser,
     method: Method,
     UrlPath(org): UrlPath<String>,
 ) -> Response {
-    if let Some(res) = check(&core, &user, method).await {
+    if let Some(res) = check(&user, method) {
         return res;
     }
     let org: String = url::form_urlencoded::byte_serialize(org.as_bytes()).collect();
@@ -249,13 +232,12 @@ async fn chunk_options(
 /// `POST …/chunk-upload/`: chunks as multipart files named by their SHA-1
 /// (`file`, or `file_gzip` gzip-compressed).
 async fn chunk_upload(
-    State(core): State<Core>,
     Extension(ingest): Extension<Ingest>,
     user: CurrentUser,
     method: Method,
     mut form: Multipart,
 ) -> Response {
-    if let Some(res) = check(&core, &user, method).await {
+    if let Some(res) = check(&user, method) {
         return res;
     }
     let dir = ingest.difs().chunk_dir();
@@ -498,7 +480,7 @@ async fn assemble(
     UrlPath((_org, project_segment)): UrlPath<(String, String)>,
     body: Bytes,
 ) -> Response {
-    if let Some(res) = check(&core, &user, method).await {
+    if let Some(res) = check(&user, method) {
         return res;
     }
     let Some(project) = project(&core, &project_segment).await else {
@@ -750,7 +732,7 @@ async fn legacy_upload(
     headers: HeaderMap,
     body: Body,
 ) -> Response {
-    if let Some(res) = check(&core, &user, method).await {
+    if let Some(res) = check(&user, method) {
         return res;
     }
     let Some(project) = project(&core, &project_segment).await else {
@@ -778,7 +760,7 @@ async fn legacy_list(
     method: Method,
     UrlPath((_org, project_segment)): UrlPath<(String, String)>,
 ) -> Response {
-    if let Some(res) = check(&core, &user, method).await {
+    if let Some(res) = check(&user, method) {
         return res;
     }
     let Some(project) = project(&core, &project_segment).await else {
@@ -831,7 +813,7 @@ pub async fn v1_upload(
     headers: HeaderMap,
     body: Body,
 ) -> V1Result<Response> {
-    if let Err(d) = may_upload(&core, &user, method.map(|Extension(m)| m), true).await {
+    if let Err(d) = may_upload(&user, method.map(|Extension(m)| m), true) {
         return Err(match d {
             Denied::NeedsToken => {
                 V1Error::new(StatusCode::UNAUTHORIZED, "unauthorized", d.message())

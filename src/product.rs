@@ -1,11 +1,14 @@
 //! What makes this build Keen Kestrel as far as vole-kit is concerned: names,
-//! cookies, token prefix, migrations, translations, API reference and what
-//! the shared layouts show.
+//! cookies, token prefix, migrations, translations, API reference, the token
+//! scope for debug file uploads, the General settings page, the webhook's
+//! words and what the shared layouts show.
 
 use rust_embed::Embed;
-use vole_kit::config::KitConfig;
+use vole_kit::config::{ExtraScope, KitConfig};
 use vole_kit::http::assets::StaticFile;
+use vole_kit::notify::webhook::Wording;
 use vole_kit::page::{NavItem, SettingsTab, Ui};
+use vole_kit::settings::GeneralSettings;
 
 /// The product's version (`CARGO_PKG_VERSION`), reported by the OpenAPI
 /// document and the MCP server.
@@ -20,6 +23,9 @@ pub const SESSION_COOKIE: &str = "kk_session";
 pub const TOKEN_PREFIX: &str = "kk_";
 /// The database file in the data directory.
 pub const DB_FILE: &str = "kestrel.sqlite";
+/// The token scope that lets an otherwise read-only API token upload debug
+/// files and manage releases with sentry-cli (docs/design.md §4.8).
+pub const DIFS_WRITE: &str = "difs:write";
 
 /// Kestrel's own static files: icons and the web app manifest. The design
 /// system (stylesheet, scripts, icon sprite, fonts) is the kit's.
@@ -57,11 +63,19 @@ pub static KIT: KitConfig = KitConfig {
     flash_cookie: "kk_flash",
     env_prefix: "KK",
     // `/api/0`: sentry-cli's debug file upload, which takes API tokens only.
-    csrf_exempt_prefixes: &["/api/v1", "/api/0", "/mcp"],
     // Ingest (`/api/{project_id}/envelope/`, `/api/{project_id}/store/`,
-    // `/ingest/v1/event`): SDKs and k.js post from any site with a DSN key,
-    // never with a session cookie.
-    csrf_exempt_path: crate::ingest::is_ingest_path,
+    // `/ingest/v1/event`, `/ingest/v1/signals`): SDKs, k.js and KestrelKit
+    // post from anywhere with a DSN key, never with a session cookie.
+    csrf_exempt_prefixes: &[
+        "/api/v1",
+        "/api/0",
+        "/mcp",
+        "/api/*/envelope",
+        "/api/*/store",
+        "/ingest/v1/event",
+        "/ingest/v1/signals",
+    ],
+    csrf_exempt_path: no_exempt_path,
     extra_common_passwords: &["keenkestrel", "kestrel123"],
     migrations: &crate::db::MIGRATIONS,
     embeddable_prefixes: &[],
@@ -120,6 +134,7 @@ pub static KIT: KitConfig = KitConfig {
             },
         ],
         settings_tabs: &[
+            SettingsTab::GENERAL,
             SettingsTab::USERS,
             SettingsTab::SECURITY,
             SettingsTab::TOKENS,
@@ -127,9 +142,29 @@ pub static KIT: KitConfig = KitConfig {
         ],
         home_url: "https://hedgerow.tools/Keen-Kestrel/",
     },
-    // The public URL comes from the environment, not from a settings page.
-    public_url_setting: Some("KK_PUBLIC_URL"),
+    // Set on the General page; `KK_PUBLIC_URL` stores it at start-up.
+    public_url_setting: Some("Settings → General"),
+    webhook: Wording {
+        subject: "issue",
+        duration: "duration",
+        url_example: "https://example.com/hooks/kestrel…",
+    },
+    token_scopes: &[ExtraScope {
+        name: DIFS_WRITE,
+        label: "difs.scope",
+        help: "difs.scope_help",
+        implies_read: true,
+        paths: &[],
+    }],
+    // Site name, public URL, time zone and language; Kestrel's own settings
+    // (retention, analytics) are per project.
+    general: Some(&GeneralSettings::CORE_ONLY),
 };
+
+/// Every exempt path is a prefix above.
+fn no_exempt_path(_: &str) -> bool {
+    false
+}
 
 /// Installs [`KIT`]. Call it first thing at start-up, and in test set-up.
 pub fn install() {

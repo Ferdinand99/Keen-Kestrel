@@ -426,6 +426,9 @@ retention_releases = "Fișiere de depanare ale versiunilor recente"
 retention_releases_unit = "versiuni"
 retention_releases_help = "Fișierele de depanare folosite de atâtea dintre cele mai noi versiuni rămân, oricât de vechi ar fi."
 err_releases = "Introdu un număr întreg de la 0 la 1.000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Citire și încărcare de fișiere de depanare"
+scope_help = "Citește tot și încarcă fișiere de depanare, dar nu modifică nimic altceva"
 
 [releases]
 tab = "Versiuni"
@@ -585,11 +588,6 @@ rule_count.other = "Folosit de {n} de reguli de alertă"
 language = "Limba mesajelor"
 language_help = "Alertele către acest canal sunt scrise în această limbă."
 language_default = "Limba instanței ({name})"
-kv_name = "Nume antet"
-kv_value = "Valoare"
-kv_value_aria = "Valoare antet"
-kv_remove = "Elimină antetul"
-kv_add = "Adaugă antet"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -635,7 +633,6 @@ period_yesterday = "Ieri"
 period_7d = "7 zile"
 period_30d = "30 de zile"
 period_custom = "Personalizat"
-period_last_days = "Ultimele {n} zile"
 from = "De la"
 to = "Până la"
 custom_help = "Zile întregi în UTC, cel mult 400."
@@ -829,7 +826,7 @@ subtitle = "Bine ai revenit. Autentifică-te pentru a-ți vedea proiectele și p
 
 [setup]
 site_name_placeholder = "Erori Acme…"
-tz_after = "."
+tz_after = ". Se poate schimba din Setări."
 
 [users]
 roles_help = "Cititorii pot vedea, dar nu pot modifica nimic. Editorii gestionează proiecte, chei, probleme, alerte și canale de notificări. Administratorii pot face orice, inclusiv utilizatori."
@@ -844,3 +841,10 @@ setup_token_required = "Această instanță are nevoie de un token de configurar
 
 [error]
 back = "Înapoi la proiecte"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Cum se numește această instanță, unde poate fi accesată și în ce fus orar afișează orele."
+base_url_help = "Adresa la care SDK-urile și oamenii ajung la această instanță: apare în DSN-uri și în linkurile din alerte. Dacă pe server e setat KK_PUBLIC_URL, acesta înlocuiește valoarea la fiecare pornire."

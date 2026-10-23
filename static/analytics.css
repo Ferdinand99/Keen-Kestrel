@@ -1,6 +1,7 @@
-/* Keen Kestrel's Web and App tabs: lists with bars (the design system has
-   no bar list yet), the App tab's filter bar. Only the design system's
-   tokens; loaded by templates/web.html, app.html and app_explorer.html. */
+/* Keen Kestrel's Web and App tabs: the live count, empty lists and tips,
+   the App tab's filter bar and version swatches. The bar lists and charts
+   are the design system's. Only the design system's tokens; loaded by
+   templates/web.html, app.html and app_explorer.html. */
 
 .web-live {
   display: inline-flex;
@@ -15,71 +16,6 @@
   font-weight: 600;
 }
 
-.bars-head,
-.bar-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 4.5rem 4.5rem;
-  gap: var(--sp-3);
-  align-items: center;
-}
-.bar-row-2 {
-  grid-template-columns: minmax(0, 1fr) 4.5rem;
-}
-.bars-head {
-  padding: 0 var(--sp-3) var(--sp-2);
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-.bars-head > :not(:first-child) {
-  text-align: end;
-}
-.bars {
-  display: grid;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.bar-row {
-  position: relative;
-  min-height: 34px;
-  padding: 0 var(--sp-3);
-  isolation: isolate;
-  font-size: 0.875rem;
-}
-.bar-row::before {
-  content: "";
-  position: absolute;
-  inset-block: 2px;
-  inset-inline-start: 0;
-  z-index: -1;
-  width: var(--share, 0%);
-  min-width: 2px;
-  border-radius: var(--r-xs);
-  background: var(--brand-fill);
-}
-.bar-label {
-  overflow: hidden;
-  color: inherit;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-a.bar-label:hover {
-  text-decoration: underline;
-}
-a.bar-label:focus-visible {
-  border-radius: var(--r-xs);
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.bar-num {
-  font-variant-numeric: tabular-nums;
-  text-align: end;
-}
-.bar-num + .bar-num {
-  color: var(--muted);
-}
 .web-empty {
   margin: 0;
   padding: var(--sp-4) var(--sp-3);

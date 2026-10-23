@@ -394,6 +394,9 @@ retention_releases = "近期版本的调试文件"
 retention_releases_unit = "个版本"
 retention_releases_help = "最新的这么多个版本所用的调试文件会一直保留，无论多旧。"
 err_releases = "请输入0到1,000之间的整数。"
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "读取并上传调试文件"
+scope_help = "可读取全部内容并上传调试文件，但不会更改其他任何内容"
 
 [releases]
 tab = "版本"
@@ -543,11 +546,6 @@ rule_count.other = "被{n}条告警规则使用"
 language = "消息语言"
 language_help = "发往此渠道的告警使用此语言撰写。"
 language_default = "实例语言（{name}）"
-kv_name = "请求头名称"
-kv_value = "值"
-kv_value_aria = "请求头值"
-kv_remove = "移除请求头"
-kv_add = "添加请求头"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -589,7 +587,6 @@ period_yesterday = "昨天"
 period_7d = "7天"
 period_30d = "30天"
 period_custom = "自定义"
-period_last_days = "过去{n}天"
 from = "开始日期"
 to = "结束日期"
 custom_help = "按UTC整天计算，最多400天。"
@@ -781,7 +778,7 @@ subtitle = "欢迎回来。登录后查看项目及其问题。"
 
 [setup]
 site_name_placeholder = "Acme错误…"
-tz_after = "显示。"
+tz_after = "显示。可以在“设置”中修改。"
 
 [users]
 roles_help = "查看者只能查看，不能更改任何内容。编辑者管理项目、密钥、问题、告警和通知渠道。管理员可执行所有操作，包括管理用户。"
@@ -796,3 +793,10 @@ setup_token_required = "此实例需要设置令牌。请打开/setup?token=…�
 
 [error]
 back = "返回项目"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "此实例的名称、访问地址，以及显示时间所用的时区。"
+base_url_help = "SDK 和用户访问此实例的地址，用于 DSN 和告警中的链接。如果服务器上设置了 KK_PUBLIC_URL，每次启动时都会用它替换此值。"

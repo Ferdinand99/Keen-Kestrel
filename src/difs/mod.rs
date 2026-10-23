@@ -4,7 +4,7 @@
 //!   architecture) with the SymCache made from it, chunks, zip archives;
 //! - [`upload`]: sentry-cli's chunk-upload protocol, the legacy dSYM
 //!   endpoint and the zip endpoint of the REST API, with their limits and
-//!   the `difs:write` grant;
+//!   the `difs:write` token scope;
 //! - [`symbolicate`]: a native event's frames mapped through
 //!   `debug_meta.images` to SymCaches, inlined frames expanded, Swift
 //!   demangled;

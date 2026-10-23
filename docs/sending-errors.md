@@ -15,8 +15,9 @@ https://0123456789abcdef0123456789abcdef@kestrel.example.com/1
 ```
 
 The part before the `@` is the project's public key, the number at the end its id. A DSN can only send events, so
-it is fine in an app. Set `KK_PUBLIC_URL` on the server (for example `https://kestrel.example.com`) so DSNs and the
-links in alerts use the address your apps and people reach; without it, Kestrel uses the address of each request.
+it is fine in an app. Set the public URL under **Settings → General** (or `KK_PUBLIC_URL` on the server, for example
+`https://kestrel.example.com`) so DSNs and the links in alerts use the address your apps and people reach; without
+it, Kestrel uses the address of each request.
 If ingest should be reachable from the internet while the web interface stays on your LAN or VPN, give it a port
 of its own with `KK_INGEST_PORT`.
 
@@ -122,7 +123,8 @@ Release builds of Swift apps are stripped, so a crash only has addresses until K
 it with the official `sentry-cli`; the project's **Debug files** page has the commands with this instance's address
 and the project's slug filled in.
 
-1. On the **Debug files** page, **Create an upload token**. It may only upload debug files and manage releases.
+1. On the **Debug files** page, **Create an upload token** (or make one under **Settings → API tokens** with
+   **Read and upload debug files**). It may only upload debug files and manage releases.
 2. Upload the dSYMs after each build:
 
    ```bash
@@ -177,7 +179,7 @@ Google Chat, Mattermost, Telegram, Signal, ntfy, Pushover, Gotify, email, PagerD
    Deliveries that fail are tried again after 1, 5 and 15 minutes.
 
 Messages say what happened and where ("New issue in Shop — ValueError: invalid literal for int()"), with the
-project, level, release, environment and counts, and link to the issue when `KK_PUBLIC_URL` is set.
+project, level, release, environment and counts, and link to the issue when the public URL is set.
 
 ## 6. Automate it
 

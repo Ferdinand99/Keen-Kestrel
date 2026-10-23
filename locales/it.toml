@@ -426,6 +426,9 @@ retention_releases = "File di debug delle versioni recenti"
 retention_releases_unit = "versioni"
 retention_releases_help = "I file di debug usati da questo numero di versioni più recenti restano, per quanto vecchi siano."
 err_releases = "Inserisci un numero intero da 0 a 1.000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Lettura e caricamento dei file di debug"
+scope_help = "Legge tutto e carica file di debug, ma non modifica nient’altro"
 
 [releases]
 tab = "Versioni"
@@ -585,11 +588,6 @@ rule_count.other = "Usato da {n} regole di avviso"
 language = "Lingua dei messaggi"
 language_help = "Gli avvisi per questo canale sono scritti in questa lingua."
 language_default = "La lingua dell’istanza ({name})"
-kv_name = "Nome intestazione"
-kv_value = "Valore"
-kv_value_aria = "Valore intestazione"
-kv_remove = "Rimuovi intestazione"
-kv_add = "Aggiungi intestazione"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -635,7 +633,6 @@ period_yesterday = "Ieri"
 period_7d = "7 giorni"
 period_30d = "30 giorni"
 period_custom = "Personalizzato"
-period_last_days = "Ultimi {n} giorni"
 from = "Dal"
 to = "Al"
 custom_help = "Giorni interi in UTC, al massimo 400."
@@ -829,7 +826,7 @@ subtitle = "Bentornato. Accedi per vedere i tuoi progetti e i loro problemi."
 
 [setup]
 site_name_placeholder = "Errori Acme…"
-tz_after = "."
+tz_after = ". Si può cambiare nelle Impostazioni."
 
 [users]
 roles_help = "I lettori possono guardare ma non modificare nulla. Gli editor gestiscono progetti, chiavi, problemi, avvisi e canali di notifica. Gli admin possono fare tutto, inclusi gli utenti."
@@ -844,3 +841,10 @@ setup_token_required = "Questa istanza richiede un token di configurazione. Apri
 
 [error]
 back = "Torna ai progetti"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Come si chiama questa istanza, dove la si raggiunge e con quale fuso orario mostra gli orari."
+base_url_help = "L’indirizzo da cui SDK e persone raggiungono questa istanza: si usa nei DSN e nei link degli avvisi. Se sul server è impostato KK_PUBLIC_URL, sostituisce questo valore a ogni avvio."

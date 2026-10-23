@@ -442,6 +442,9 @@ retention_releases = "Pliki debugowania ostatnich wersji"
 retention_releases_unit = "wersji"
 retention_releases_help = "Pliki debugowania używane przez tyle najnowszych wersji zostają bez względu na wiek."
 err_releases = "Wpisz liczbę całkowitą od 0 do 1000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Odczyt i przesyłanie plików debugowania"
+scope_help = "Odczytuje wszystko i przesyła pliki debugowania, ale niczego innego nie zmienia"
 
 [releases]
 tab = "Wersje"
@@ -606,11 +609,6 @@ rule_count.other = "Używany przez {n} reguły alertu"
 language = "Język wiadomości"
 language_help = "Alerty do tego kanału są pisane w tym języku."
 language_default = "Język instancji ({name})"
-kv_name = "Nazwa nagłówka"
-kv_value = "Wartość"
-kv_value_aria = "Wartość nagłówka"
-kv_remove = "Usuń nagłówek"
-kv_add = "Dodaj nagłówek"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -658,7 +656,6 @@ period_yesterday = "Wczoraj"
 period_7d = "7 dni"
 period_30d = "30 dni"
 period_custom = "Własny"
-period_last_days = "Ostatnie {n} dni"
 from = "Od"
 to = "Do"
 custom_help = "Pełne dni w UTC, najwyżej 400."
@@ -853,7 +850,7 @@ subtitle = "Witaj ponownie. Zaloguj się, aby zobaczyć swoje projekty i ich pro
 
 [setup]
 site_name_placeholder = "Błędy Acme…"
-tz_after = "."
+tz_after = ". Można to zmienić w Ustawieniach."
 
 [users]
 roles_help = "Obserwatorzy mogą oglądać, ale niczego nie zmieniają. Edytorzy zarządzają projektami, kluczami, problemami, alertami i kanałami powiadomień. Adminowie mogą wszystko, także użytkowników."
@@ -868,3 +865,10 @@ setup_token_required = "Ta instancja wymaga tokenu konfiguracji. Otwórz /setup?
 
 [error]
 back = "Wróć do projektów"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Jak nazywa się ta instancja, pod jakim adresem jest dostępna i w jakiej strefie czasowej pokazuje godziny."
+base_url_help = "Adres, pod którym SDK i ludzie docierają do tej instancji: trafia do DSN i do linków w alertach. Jeśli na serwerze ustawiono KK_PUBLIC_URL, zastępuje on tę wartość przy każdym uruchomieniu."

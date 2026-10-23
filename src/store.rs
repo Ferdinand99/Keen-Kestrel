@@ -3,15 +3,17 @@
 //! feedback and raw analytics events (docs/design.md §4.1, §5).
 //!
 //! It has its own small migration set, run by the kit's runner
-//! ([`apply_migrations_with`]) without the pre-migration backup the main
-//! database gets: losing it loses event details, never issues or settings.
-//! Pages are given back to the file system with incremental auto-vacuum.
+//! ([`vole_kit::db::migrate_with`]) without the pre-migration backup the
+//! main database gets: losing it loses event details, never issues or
+//! settings. Pages are given back to the file system with incremental
+//! auto-vacuum, set by the pool before the first table exists.
 
 use std::path::Path;
 
 use deadpool_sqlite::Pool;
 use rusqlite::Connection;
-use vole_kit::db::migrate::{MigrationError, MigrationSet, apply_migrations_with};
+use vole_kit::db::migrate::{MigrateOptions, MigrationError, MigrationSet};
+use vole_kit::db::{PoolOptions, build_pool_with, migrate_with};
 
 /// The store's file in the data directory.
 pub const STORE_FILE: &str = "store.sqlite";
@@ -55,32 +57,23 @@ pub static MIGRATIONS: MigrationSet = MigrationSet {
     after: no_fixups,
 };
 
-/// Opens (creating it if needed) and migrates the store in `data_dir`.
+/// The store's pool: incremental auto-vacuum on a new file (it only takes
+/// effect before the first table exists).
+pub const POOL: PoolOptions = PoolOptions {
+    max_size: None,
+    pragmas: "",
+    new_database_pragmas: "PRAGMA auto_vacuum = INCREMENTAL;",
+};
+
+/// Opens (creating it if needed) and migrates the store in `data_dir`, in
+/// WAL mode like the main database and without a backup.
 pub async fn open(data_dir: &Path) -> Result<Pool, crate::StartError> {
-    let pool = vole_kit::db::build_pool(&data_dir.join(STORE_FILE));
-    let conn = pool.get().await?;
-    let applied = conn
-        .interact(|c| -> Result<Vec<String>, MigrationError> {
-            prepare(c)?;
-            apply_migrations_with(c, &MIGRATIONS)
-        })
-        .await
-        .map_err(|e| e.to_string())??;
-    if !applied.is_empty() {
-        tracing::info!(?applied, "store migrated");
+    let pool = build_pool_with(&data_dir.join(STORE_FILE), POOL);
+    let report = migrate_with(&pool, &MIGRATIONS, MigrateOptions::default()).await?;
+    if !report.applied.is_empty() {
+        tracing::info!(applied = ?report.applied, "store migrated");
     }
     Ok(pool)
-}
-
-/// Incremental auto-vacuum only takes effect on a database without tables,
-/// so it is set before the first migration; WAL like the main database.
-pub fn prepare(conn: &Connection) -> rusqlite::Result<()> {
-    let tables: i64 = conn.query_row("SELECT COUNT(*) FROM sqlite_master", [], |r| r.get(0))?;
-    if tables == 0 {
-        conn.pragma_update(None, "auto_vacuum", "INCREMENTAL")?;
-    }
-    conn.pragma_update(None, "journal_mode", "WAL")?;
-    Ok(())
 }
 
 /// Compresses a payload for the store.
@@ -103,12 +96,35 @@ pub fn decompress(data: &[u8], limit: usize) -> std::io::Result<Vec<u8>> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_store_migrates_with_incremental_auto_vacuum() {
+    #[tokio::test]
+    async fn the_store_migrates_with_incremental_auto_vacuum() {
         crate::product::install();
-        let mut c = Connection::open_in_memory().unwrap();
-        prepare(&c).unwrap();
-        let applied = apply_migrations_with(&mut c, &MIGRATIONS).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "kk-store-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = open(&dir).await.unwrap();
+        let conn = pool.get().await.unwrap();
+        let (mode, journal, applied): (i64, String, Vec<String>) = conn
+            .interact(|c| {
+                let mode = c.query_row("PRAGMA auto_vacuum", [], |r| r.get(0))?;
+                let journal = c.query_row("PRAGMA journal_mode", [], |r| r.get(0))?;
+                let applied = c
+                    .prepare("SELECT name FROM schema_migrations ORDER BY rowid")?
+                    .query_map([], |r| r.get(0))?
+                    .collect::<rusqlite::Result<_>>()?;
+                Ok::<_, rusqlite::Error>((mode, journal, applied))
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(mode, 2, "incremental");
+        assert_eq!(journal, "wal");
         assert_eq!(
             applied,
             [
@@ -117,13 +133,13 @@ mod tests {
                 "0003_app_signals.sql"
             ]
         );
-        let mode: i64 = c.query_row("PRAGMA auto_vacuum", [], |r| r.get(0)).unwrap();
-        assert_eq!(mode, 2, "incremental");
-        assert!(
-            apply_migrations_with(&mut c, &MIGRATIONS)
-                .unwrap()
-                .is_empty()
-        );
+        drop(conn);
+        vole_kit::db::close(&pool).await;
+        // Again: nothing to do, and no backup is taken.
+        let pool = open(&dir).await.unwrap();
+        vole_kit::db::close(&pool).await;
+        assert!(!dir.join("backups").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
