@@ -103,7 +103,7 @@
             </div>
             <a class="live-pill" href="#roadmap">
               <span class="dot is-live" aria-hidden="true"></span>
-              <span>v0.1 “errors” · early release</span>
+              <span>v0.2 “analytics” · early release</span>
               <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"></use></svg>
             </a>
             <h1 class="display" id="hero-title">Know what broke.<br class="br-wide" /> See how it’s used.</h1>
@@ -130,11 +130,11 @@
             <div
               class="mock mock-wide"
               role="img"
-              aria-label="Concept illustration of a project overview for an example notes app. On the left, three issues: a new EXC_BAD_ACCESS crash in ImageCache.decode, a regressed DecodingError, and an ongoing JavaScript TypeError. On the right, a week of active users as bars, and the crash-free users rate for the latest release. The data is made up."
+              aria-label="Illustration of a project overview for an example notes app. On the left, three issues: a new EXC_BAD_ACCESS crash in ImageCache.decode, a regressed DecodingError, and an ongoing JavaScript TypeError. On the right, a week of active users as bars, and the crash-free users rate for the latest release. The data is made up."
             >
               <div class="mock-bar">
                 <span class="mock-title">Notes · project overview</span>
-                <span class="pill status-accent"><span class="dot"></span>Concept</span>
+                <span class="pill status-accent"><span class="dot"></span>Illustration</span>
               </div>
               <div class="overview">
                 <div class="overview-col">
@@ -176,7 +176,7 @@
                 </div>
               </div>
             </div>
-            <figcaption>Concept illustration with made-up data. Kestrel has no interface yet; it will follow the Vigilant Vole design system.</figcaption>
+            <figcaption>Concept illustration with made-up data. The real interface follows the Vigilant Vole design system.</figcaption>
           </figure>
         </div>
       </section>
@@ -260,7 +260,7 @@
                 <div
                   class="mock"
                   role="img"
-                  aria-label="Concept illustration of a symbolicated crash: EXC_BAD_ACCESS in the example Notes app. Frame 0, highlighted as app code, is ImageCache.decode at ImageCache.swift line 87; frame 1 is a closure in ThumbnailView.load at ThumbnailView.swift line 42, inlined; frames 2 and 3 are system frames in libdispatch."
+                  aria-label="Illustration of a symbolicated crash: EXC_BAD_ACCESS in the example Notes app. Frame 0, highlighted as app code, is ImageCache.decode at ImageCache.swift line 87; frame 1 is a closure in ThumbnailView.load at ThumbnailView.swift line 42, inlined; frames 2 and 3 are system frames in libdispatch."
                 >
                   <div class="mock-bar">
                     <span class="mock-title mono">EXC_BAD_ACCESS</span>
@@ -318,7 +318,7 @@
                 <div
                   class="mock"
                   role="img"
-                  aria-label="Concept illustration of the issue list filtered by is:unresolved release:1.4. Four example issues: a new EXC_BAD_ACCESS, a regressed DecodingError, an ongoing URLError timeout and an ongoing JavaScript TypeError, each with a count of events."
+                  aria-label="Illustration of the issue list filtered by is:unresolved release:1.4. Four example issues: a new EXC_BAD_ACCESS, a regressed DecodingError, an ongoing URLError timeout and an ongoing JavaScript TypeError, each with a count of events."
                 >
                   <div class="searchbar">
                     <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#search"></use></svg>
@@ -377,11 +377,11 @@
                 <div
                   class="mock"
                   role="img"
-                  aria-label="Concept illustration of four alert rules: new issue to Discord, regression to Slack and email, spike to ntfy, and first crash in a new release to Pushover."
+                  aria-label="Illustration of four alert rules: new issue to Discord, regression to Slack and email, spike to ntfy, and first crash in a new release to Pushover."
                 >
                   <div class="mock-bar">
                     <span class="mock-title">Alert rules</span>
-                    <span class="pill status-accent"><span class="dot"></span>Concept</span>
+                    <span class="pill status-accent"><span class="dot"></span>Illustration</span>
                   </div>
                   <ul class="list">
                     <li>
@@ -484,11 +484,11 @@
                 <div
                   class="mock"
                   role="img"
-                  aria-label="Concept illustration of version adoption for the example Notes app: version 1.4.0 is the largest share, 1.3.2 is second, and older versions are a small remainder. Below, the top signal types App.launched, Note.created and Paywall.shown."
+                  aria-label="Illustration of version adoption for the example Notes app: version 1.4.0 is the largest share, 1.3.2 is second, and older versions are a small remainder. Below, the top signal types App.launched, Note.created and Paywall.shown."
                 >
                   <div class="mock-bar">
                     <span class="mock-title">Version adoption</span>
-                    <span class="pill status-accent"><span class="dot"></span>Concept</span>
+                    <span class="pill status-accent"><span class="dot"></span>Illustration</span>
                   </div>
                   <div class="adoption" aria-hidden="true">
                     <span class="seg seg-1"></span><span class="seg seg-2"></span><span class="seg seg-3"></span>
@@ -539,11 +539,11 @@
                 <div
                   class="mock"
                   role="img"
-                  aria-label="Concept illustration of web analytics: top pages, with the home page first, then the docs and the pricing page, and top referrers, with a search engine first, then GitHub and a newsletter."
+                  aria-label="Illustration of web analytics: top pages, with the home page first, then the docs and the pricing page, and top referrers, with a search engine first, then GitHub and a newsletter."
                 >
                   <div class="mock-bar">
                     <span class="mock-title">Top pages</span>
-                    <span class="pill status-accent"><span class="dot"></span>Concept</span>
+                    <span class="pill status-accent"><span class="dot"></span>Illustration</span>
                   </div>
                   <ul class="list">
                     <li><div class="list-row"><span class="list-main"><span class="list-title mono">/</span></span><span class="meter"><span class="meter-fill w9"></span></span></div></li>
@@ -683,9 +683,8 @@ sentry-cli debug-files upload --org any --project notes build/</code></pre>
               <div class="callout status-info">
                 <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#info"></use></svg>
                 <p>
-                  <span class="callout-title">Errors today, analytics next</span>
-                  The error tracking above works in v0.1. KestrelKit and k.js arrive with analytics in
-                  v0.2.
+                  <span class="callout-title">Errors and analytics today</span>
+                  Error tracking arrived in v0.1, and analytics with KestrelKit and k.js in v0.2.
                 </p>
               </div>
             </div>
@@ -911,12 +910,12 @@ sentry-cli debug-files upload --org any --project notes build/</code></pre>
                 </p>
               </div>
             </li>
-            <li class="milestone reveal">
-              <span class="ms-marker" aria-hidden="true"></span>
+            <li class="milestone is-done reveal">
+              <span class="ms-marker" aria-hidden="true"><svg class="icon"><use href="assets/icons.svg#check"></use></svg></span>
               <div class="ms-body">
-                <p class="ms-status"><span class="pill status-accent">Next</span></p>
+                <p class="ms-status"><span class="pill status-up"><span class="dot"></span>Released</span></p>
                 <h3>v0.2 “analytics”</h3>
-                <p>Web analytics with k.js, then KestrelKit for apps, and release pages that show adoption next to crashes.</p>
+                <p>Web analytics with k.js, app signals with the KestrelKit Swift package, and release pages that show adoption next to crashes.</p>
               </div>
             </li>
             <li class="milestone reveal">
@@ -949,10 +948,11 @@ sentry-cli debug-files upload --org any --project notes build/</code></pre>
                 <summary>When can I use it?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-down"></use></svg></summary>
                 <div class="faq-body">
                   <p>
-                    Now, for errors. v0.1 “errors” is an early release as a Docker image
-                    (<code class="nw">ghcr.io/ferdinand99/keen-kestrel</code>); the
-                    <a href="https://github.com/Ferdinand99/Keen-Kestrel#install">README</a> shows how to run it.
-                    Analytics follow in v0.2, installers and templates by v1.0. Watch or star the
+                    Now. v0.2 “analytics” is an early release as a Docker image
+                    (<code class="nw">ghcr.io/ferdinand99/keen-kestrel</code>) with error tracking and web and app
+                    analytics; the <a href="https://github.com/Ferdinand99/Keen-Kestrel#install">README</a> shows how
+                    to run it, and an Unraid template is in <a href="https://github.com/Ferdinand99/unraid-templates">unraid-templates</a>. Installers
+                    and more templates come by v1.0. Watch or star the
                     <a href="https://github.com/Ferdinand99/Keen-Kestrel">repository</a> to hear about new releases.
                   </p>
                 </div>
