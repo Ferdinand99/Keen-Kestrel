@@ -12,16 +12,16 @@
   <a href="https://hedgerow.tools/Keen-Kestrel/"><img src="https://img.shields.io/badge/website-hedgerow.tools%2FKeen--Kestrel-black.svg" alt="Website"></a>
 </p>
 
-> **Status: v0.1 "errors", an early release (Docker image only).** Error tracking works end to end
+> **Status: v0.2 "analytics", an early release (Docker image only).** Error tracking works end to end
 > in 26 languages: the official Sentry SDKs send events, which are scrubbed of personal data, grouped into issues
 > and stored; issue and event pages with search, live updates, stack traces and triage; iOS and macOS crashes
 > symbolicated from dSYMs uploaded with `sentry-cli`; alerts for new issues, regressions, spikes and a release's
 > first crash to ~40 notification channels (Slack, Discord, Teams, Telegram, ntfy, email, webhooks …); release
 > health with crash-free sessions and users; and a REST API, OpenAPI document and MCP tools for all of it.
-> **Web analytics works too** (not released yet): a script under 2 KB, no cookies and no stored IP addresses, a Web
+> **Web analytics:** a script under 2 KB, no cookies and no stored IP addresses, a Web
 > tab with visitors, pageviews, pages, referrers, UTM, browsers and devices, filters and live current visitors, and it
-> respects Global Privacy Control. **App analytics work as well** (not released yet; they become v0.2 once the
-> [KestrelKit](https://github.com/Ferdinand99/KestrelKit) Swift package has its first release): an App tab with daily,
+> respects Global Privacy Control. **App analytics** with the
+> [KestrelKit](https://github.com/Ferdinand99/KestrelKit) Swift package: an App tab with daily,
 > weekly and monthly active users, sessions, signal types, version adoption, OS versions, devices and locales, a signal
 > explorer for payloads, and each release's adoption next to its crash-free rate. Installers and Unraid/Proxmox
 > templates come by v1.0. The translations are unreviewed drafts. **[Sending errors to Kestrel](docs/sending-errors.md)**
