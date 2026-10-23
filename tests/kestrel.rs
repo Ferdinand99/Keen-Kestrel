@@ -1004,6 +1004,7 @@ async fn static_files_and_health() {
     for (path, kind) in [
         ("/static/style.css", "text/css"),
         ("/static/app.js", "javascript"),
+        ("/static/passkeys.js", "javascript"),
         ("/static/favicon.svg", "image/svg+xml"),
         ("/static/apple-touch-icon.png", "image/png"),
         ("/static/icon-192.png", "image/png"),
@@ -1163,6 +1164,8 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "issues_fts_docsize",
             "issues_fts_idx",
             "notification_channels",
+            "passkey_challenges",
+            "passkeys",
             "project_keys",
             "projects",
             "release_health",
@@ -1178,6 +1181,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
         [
             "kit/0001_core.sql",
             "kit/0002_token_scopes.sql",
+            "kit/0003_passkeys.sql",
             "0001_projects.sql",
             "0002_errors.sql",
             "0003_triage.sql",
@@ -1217,4 +1221,73 @@ fn notification_forms_name_kestrel() {
         }
     }
     assert!(shown.contains(&"slack.username".to_string()), "{shown:?}");
+}
+
+/// Passkeys at a `http://localhost` public URL: after the password, a signed-in
+/// user gets registration options, registers a (software) passkey, signs out
+/// and signs in with it alone.
+#[tokio::test]
+async fn passkey_registers_and_signs_in_at_localhost() {
+    use vole_kit::auth::webauthn::{b64, soft::SoftAuthenticator, unb64};
+    const ORIGIN: &str = "http://localhost:3002";
+    let mut app = App::set_up().await;
+    app.core
+        .with_conn(|c| db::settings::set(c, "base_url", ORIGIN))
+        .await
+        .unwrap();
+    let json_post = |path: &str, body: &Value| {
+        Request::post(path)
+            .header(header::ORIGIN, format!("http://{HOST}"))
+            .header(header::ACCEPT, "application/json")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let options = |res: &Res| {
+        assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+        let o = res.json()["publicKey"].clone();
+        let challenge = unb64(o["challenge"].as_str().unwrap(), "c").unwrap();
+        (o, challenge)
+    };
+
+    let res = app
+        .post(
+            "/settings/security/passkeys/options",
+            &[("password", "wrong")],
+        )
+        .await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN);
+    let res = app
+        .post(
+            "/settings/security/passkeys/options",
+            &[("password", PASSWORD)],
+        )
+        .await;
+    let (o, challenge) = options(&res);
+    assert_eq!(o["rp"]["id"], "localhost");
+    assert_eq!(o["user"]["name"], ADMIN);
+    let handle = unb64(o["user"]["id"].as_str().unwrap(), "h").unwrap();
+
+    let mut auth = SoftAuthenticator::es256();
+    let (client, att) = auth.register("localhost", ORIGIN, &challenge, &handle);
+    let id = b64(&auth.credential_id);
+    let body = json!({"name": "", "credential": {"id": id, "rawId": id, "type": "public-key",
+        "response": {"clientDataJSON": b64(&client), "attestationObject": b64(&att)}}});
+    let res = app
+        .send(json_post("/settings/security/passkeys", &body))
+        .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+
+    app.post("/logout", &[]).await;
+    let res = app.post("/login/passkey/options", &[]).await;
+    let (o, challenge) = options(&res);
+    assert_eq!(o["rpId"], "localhost");
+    let (client, data, sig) = auth.assert("localhost", ORIGIN, &challenge);
+    let body = json!({"next": "/projects", "credential": {"id": id, "rawId": id, "type": "public-key",
+        "response": {"clientDataJSON": b64(&client), "authenticatorData": b64(&data),
+            "signature": b64(&sig), "userHandle": b64(&auth.user_handle)}}});
+    let res = app.send(json_post("/login/passkey", &body)).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    assert_eq!(res.json()["redirect"], "/projects");
+    assert_eq!(app.get("/projects").await.status, StatusCode::OK);
 }
