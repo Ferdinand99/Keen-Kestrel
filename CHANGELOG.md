@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.3.1...v0.4.0) (2026-10-23)
+
+
+### Features
+
+* move to vole-kit 0.3 with a version footer on signed-in pages ([#18](https://github.com/Ferdinand99/Keen-Kestrel/issues/18)) ([64ffbf1](https://github.com/Ferdinand99/Keen-Kestrel/commit/64ffbf16ee4305ef219ac3c60236fdc49df2636c))
+
 ## [0.3.1](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.3.0...v0.3.1) (2026-10-23)
 
 
