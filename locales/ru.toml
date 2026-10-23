@@ -442,6 +442,9 @@ retention_releases = "Отладочные файлы последних рел�
 retention_releases_unit = "релизов"
 retention_releases_help = "Отладочные файлы, которые использует заданное число новейших релизов, сохраняются независимо от возраста."
 err_releases = "Введите целое число от 0 до 1 000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Чтение и загрузка отладочных файлов"
+scope_help = "Читает все и загружает отладочные файлы, но больше ничего не меняет"
 
 [releases]
 tab = "Релизы"
@@ -606,11 +609,6 @@ rule_count.other = "Используется в {n} правила оповещ�
 language = "Язык сообщений"
 language_help = "Оповещения в этот канал пишутся на этом языке."
 language_default = "Язык экземпляра ({name})"
-kv_name = "Имя заголовка"
-kv_value = "Значение"
-kv_value_aria = "Значение заголовка"
-kv_remove = "Удалить заголовок"
-kv_add = "Добавить заголовок"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -658,7 +656,6 @@ period_yesterday = "Вчера"
 period_7d = "7 дней"
 period_30d = "30 дней"
 period_custom = "Свой"
-period_last_days = "Последние {n} дней"
 from = "С"
 to = "По"
 custom_help = "Целые дни по UTC, не больше 400."
@@ -853,7 +850,7 @@ subtitle = "С возвращением. Войдите, чтобы увидет
 
 [setup]
 site_name_placeholder = "Ошибки Acme…"
-tz_after = "."
+tz_after = ". Это можно изменить в настройках."
 
 [users]
 roles_help = "Наблюдатели могут смотреть, но не менять. Редакторы управляют проектами, ключами, проблемами, оповещениями и каналами уведомлений. Админы могут все, включая пользователей."
@@ -868,3 +865,10 @@ setup_token_required = "Для этого экземпляра нужен ток
 
 [error]
 back = "Назад к проектам"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Как называется этот экземпляр, по какому адресу он доступен и в каком часовом поясе показывает время."
+base_url_help = "Адрес, по которому SDK и люди обращаются к этому экземпляру: он используется в DSN и в ссылках в оповещениях. Если на сервере задан KK_PUBLIC_URL, он заменяет это значение при каждом запуске."

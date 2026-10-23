@@ -426,6 +426,9 @@ retention_releases = "Fichiers de débogage des versions récentes"
 retention_releases_unit = "versions"
 retention_releases_help = "Les fichiers de débogage utilisés par ce nombre de versions les plus récentes sont conservés, quel que soit leur âge."
 err_releases = "Saisir un nombre entier de 0 à 1 000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Lecture et envoi de fichiers de débogage"
+scope_help = "Lit tout et envoie des fichiers de débogage, sans rien modifier d’autre"
 
 [releases]
 tab = "Versions"
@@ -585,11 +588,6 @@ rule_count.other = "Utilisé par {n} règles d’alerte"
 language = "Langue des messages"
 language_help = "Les alertes envoyées à ce canal sont rédigées dans cette langue."
 language_default = "Langue de l’instance ({name})"
-kv_name = "Nom de l’en-tête"
-kv_value = "Valeur"
-kv_value_aria = "Valeur de l’en-tête"
-kv_remove = "Retirer l’en-tête"
-kv_add = "Ajouter un en-tête"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -635,7 +633,6 @@ period_yesterday = "Hier"
 period_7d = "7 jours"
 period_30d = "30 jours"
 period_custom = "Personnalisée"
-period_last_days = "{n} derniers jours"
 from = "Du"
 to = "Au"
 custom_help = "Jours entiers en UTC, 400 au maximum."
@@ -829,7 +826,7 @@ subtitle = "Bon retour. Se connecter pour voir les projets et leurs problèmes."
 
 [setup]
 site_name_placeholder = "Erreurs d’Acme…"
-tz_after = "."
+tz_after = ". Modifiable dans les Réglages."
 
 [users]
 roles_help = "Les lecteurs consultent sans rien modifier. Les éditeurs gèrent les projets, clés, problèmes, alertes et canaux de notification. Les admins peuvent tout faire, y compris gérer les utilisateurs."
@@ -844,3 +841,10 @@ setup_token_required = "Cette instance exige un jeton de configuration. Ouvrir /
 
 [error]
 back = "Retour aux projets"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Le nom de cette instance, l’adresse où la joindre et le fuseau horaire de ses heures."
+base_url_help = "L’adresse à laquelle les SDK et les personnes joignent cette instance : elle sert dans les DSN et dans les liens des alertes. Si KK_PUBLIC_URL est défini sur le serveur, il remplace cette valeur à chaque démarrage."

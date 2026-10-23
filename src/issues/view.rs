@@ -18,14 +18,9 @@ use crate::difs::symbolicate::{self, Image};
 use crate::event::grouping;
 use crate::event::normalize;
 
-/// One line of source around a frame.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CodeLine {
-    pub no: String,
-    pub code: String,
-    /// The frame's own line.
-    pub current: bool,
-}
+/// One line of source around a frame (`current`: the frame's own line), as
+/// the design system's `m::code_lines` shows it.
+pub use vole_kit::components::CodeLine;
 
 /// One stack frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -270,19 +265,19 @@ fn frame_view(frame: &Map<String, Value>, native: bool, images: &[Image]) -> Fra
         for (i, code) in pre.into_iter().enumerate() {
             context.push(CodeLine {
                 no: (first + i as i64).to_string(),
-                code: cut(&code, 300),
+                text: cut(&code, 300),
                 current: false,
             });
         }
         context.push(CodeLine {
             no: line.to_string(),
-            code: cut(current.trim_end(), 300),
+            text: cut(current.trim_end(), 300),
             current: true,
         });
         for (i, code) in post.into_iter().enumerate() {
             context.push(CodeLine {
                 no: (line + 1 + i as i64).to_string(),
-                code: cut(&code, 300),
+                text: cut(&code, 300),
                 current: false,
             });
         }

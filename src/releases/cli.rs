@@ -12,7 +12,7 @@
 //! Like sentry-cli's other routes these take API tokens only. Reading needs
 //! any token; creating and changing needs one that may upload debug files
 //! (an editor's read-and-write token, or a token with the `difs:write`
-//! grant), which is what a build machine has.
+//! scope), which is what a build machine has.
 
 use axum::Router;
 use axum::extract::{Extension, Path, State};
@@ -79,12 +79,12 @@ fn not_found() -> Response {
 }
 
 /// `None` when the token may create and change releases, else the refusal.
-async fn may_write(core: &Core, user: &CurrentUser, method: Method) -> Option<Response> {
-    match may_upload(core, user, method.map(|Extension(m)| m), false).await {
+fn may_write(user: &CurrentUser, method: Method) -> Option<Response> {
+    match may_upload(user, method.map(|Extension(m)| m), false) {
         Ok(()) => None,
         Err(_) => Some(detail(
             StatusCode::FORBIDDEN,
-            "this token can't manage releases: use one with the difs:write grant \
+            "this token can't manage releases: use one with the difs:write scope \
              (Debug files page) or a read-and-write token of an editor",
         )),
     }
@@ -256,7 +256,7 @@ async fn org_create(
     method: Method,
     axum::Json(body): axum::Json<ReleaseBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&core, &user, method).await {
+    if let Some(refused) = may_write(&user, method) {
         return refused;
     }
     let version = body.version.unwrap_or_default();
@@ -280,7 +280,7 @@ async fn org_update(
     Path((_org, version)): Path<(String, String)>,
     axum::Json(body): axum::Json<ReleaseBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&core, &user, method).await {
+    if let Some(refused) = may_write(&user, method) {
         return refused;
     }
     upsert(&core, version, body.projects, body.date_released, false).await
@@ -372,7 +372,7 @@ async fn project_create(
     Path((_org, project)): Path<(String, String)>,
     axum::Json(body): axum::Json<ReleaseBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&core, &user, method).await {
+    if let Some(refused) = may_write(&user, method) {
         return refused;
     }
     upsert(
@@ -400,7 +400,7 @@ async fn project_update(
     Path((_org, project, version)): Path<(String, String, String)>,
     axum::Json(body): axum::Json<ReleaseBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&core, &user, method).await {
+    if let Some(refused) = may_write(&user, method) {
         return refused;
     }
     upsert(
@@ -441,7 +441,7 @@ async fn deploy_create(
     Path((_org, version)): Path<(String, String)>,
     axum::Json(body): axum::Json<DeployBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&core, &user, method).await {
+    if let Some(refused) = may_write(&user, method) {
         return refused;
     }
     let exists = core

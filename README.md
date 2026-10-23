@@ -53,8 +53,9 @@ docker compose up -d
 ```
 
 Then open `http://<host>:3002/setup` to create the first admin, create a project and copy its DSN.
-Set `KK_PUBLIC_URL` in `docker-compose.yml` to the address your apps use (it goes into the DSNs and alert
-links), and put Kestrel behind HTTPS with `KK_TRUST_PROXY=1` when it's reachable from the internet. Images
+Set the address your apps use under **Settings → General** (public URL), or as `KK_PUBLIC_URL` in
+`docker-compose.yml`, which is stored there at every start: it goes into the DSNs and alert links. Put Kestrel
+behind HTTPS with `KK_TRUST_PROXY=1` when it's reachable from the internet. Images
 are on GHCR for amd64 and arm64: `ghcr.io/ferdinand99/keen-kestrel:<version>` or `:latest`.
 
 ## Planned for v1

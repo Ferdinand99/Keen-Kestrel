@@ -96,10 +96,8 @@ pub async fn serve(headers: HeaderMap) -> Response {
         header::ACCESS_CONTROL_ALLOW_ORIGIN,
         HeaderValue::from_static("*"),
     );
-    h.insert(
-        "cross-origin-resource-policy",
-        HeaderValue::from_static("cross-origin"),
-    );
+    // `Cross-Origin-Resource-Policy: cross-origin` comes from the route's
+    // header policy (`headers::public_asset`).
     res
 }
 

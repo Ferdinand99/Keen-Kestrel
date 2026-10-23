@@ -486,10 +486,59 @@ async fn the_reference_documents_errors_and_ingest() {
     ] {
         assert!(doc["paths"][path][method].is_object(), "{method} {path}");
     }
-    // Ingest takes a DSN key, no security scheme of the API.
+    // Ingest takes a DSN key in a header of its own, not an API token.
+    let envelope = &doc["paths"]["/api/{project_id}/envelope/"]["post"];
+    assert_eq!(envelope["security"], json!([{"sentryAuth": []}]));
     assert_eq!(
-        doc["paths"]["/api/{project_id}/envelope/"]["post"]["security"],
-        json!([])
+        doc["components"]["securitySchemes"]["sentryAuth"],
+        json!({"type": "apiKey", "in": "header", "name": "X-Sentry-Auth", "description": doc["components"]["securitySchemes"]["sentryAuth"]["description"]})
+    );
+    assert!(
+        envelope["requestBody"]["content"]["application/x-sentry-envelope"]["example"]
+            .as_str()
+            .unwrap()
+            .contains("\n{\"type\":\"event\"}\n")
+    );
+    let event = &doc["paths"]["/ingest/v1/event"]["post"];
+    assert_eq!(event["security"], json!([{"kestrelKey": []}]));
+    assert!(event["requestBody"]["content"]["text/plain"].is_object());
+    assert_eq!(
+        doc["paths"]["/ingest/v1/signals"]["post"]["security"],
+        json!([{"kestrelKey": []}])
+    );
+    // Path parameters that aren't numbers say so.
+    let param = |path: &str, method: &str, name: &str| {
+        doc["paths"][path][method]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == name)
+            .unwrap()["schema"]["type"]
+            .clone()
+    };
+    assert_eq!(
+        param("/api/v1/projects/{id}/events/{event_id}", "get", "event_id"),
+        "string"
+    );
+    assert_eq!(
+        param("/api/v1/projects/{id}/events/{event_id}", "get", "id"),
+        "integer"
+    );
+    assert_eq!(
+        param(
+            "/api/0/organizations/{org}/releases/{version}/",
+            "put",
+            "org"
+        ),
+        "string"
+    );
+    assert_eq!(
+        param(
+            "/api/0/organizations/{org}/releases/{version}/",
+            "put",
+            "version"
+        ),
+        "string"
     );
     assert_eq!(
         doc["paths"]["/mcp"]["post"]["security"],
@@ -501,6 +550,17 @@ async fn the_reference_documents_errors_and_ingest() {
     assert!(md.body.contains("## Endpoints: Ingest"));
     assert!(md.body.contains("### POST /api/{project_id}/envelope/"));
     assert!(md.body.contains("DSN key"));
+    // Its curl example sends the key in its header and the envelope as is.
+    let env = &md.body[md
+        .body
+        .find("### POST /api/{project_id}/envelope/")
+        .unwrap()..];
+    let env = &env[..env[4..].find("### ").map_or(env.len(), |i| i + 4)];
+    assert!(
+        env.contains("X-Sentry-Auth: Sentry sentry_key=$KK_DSN_KEY, sentry_version=7"),
+        "{env}"
+    );
+    assert!(env.contains("application/x-sentry-envelope"), "{env}");
     assert!(md.body.contains("## Endpoints: Alerts"));
     assert!(md.body.contains("## Endpoints: sentry-cli"));
     // MCP and sentry-cli take an API token (not "public").

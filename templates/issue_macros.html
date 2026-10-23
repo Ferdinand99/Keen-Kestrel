@@ -24,8 +24,7 @@
     <summary>{% if f.context.is_empty() %}{{ tr("event.variables") }}{% else %}{{ tr("event.source") }}{% endif %}{{ m::icon("chevron-down") }}</summary>
     <div class="disclosure-body stack-sm">
       {%- if !f.context.is_empty() %}
-      <pre class="code"><code>{% for l in f.context %}{% if l.current %}<strong>{{ l.no }}  {{ l.code }}</strong>{% else %}{{ l.no }}  {{ l.code }}{% endif %}
-{% endfor %}</code></pre>
+      {{ m::code_lines(f.context.as_slice(), tr("event.source")) }}
       {%- endif %}
       {%- if !f.vars.is_empty() %}
       <dl class="dl dl-stack">

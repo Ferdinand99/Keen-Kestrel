@@ -656,7 +656,7 @@ fn write_stack(out: &mut String, groups: &[FrameGroup]) {
                 }
                 let _ = writeln!(out, "{line}");
                 if let Some(current) = f.context.iter().find(|l| l.current) {
-                    let _ = writeln!(out, "        {}: {}", current.no, current.code.trim_end());
+                    let _ = writeln!(out, "        {}: {}", current.no, current.text.trim_end());
                 }
                 shown += 1;
             }

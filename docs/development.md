@@ -2,8 +2,10 @@
 
 Keen Kestrel is one Rust crate (`keen-kestrel`, binary `kestrel`) on top of
 [vole-kit](https://github.com/Ferdinand99/Vigilant-Vole/blob/main/docs/vole-kit.md), the shared kit that lives in the
-Vigilant Vole repository. The kit brings sign-in, users, API tokens, Security, the API reference, i18n, the
-database plumbing and the design system; Kestrel adds its own pages, API, migrations and strings, the
+Vigilant Vole repository (tag `vole-kit-v0.2.0`). The kit brings sign-in, users, API tokens (with Kestrel's
+`difs:write` scope), Security, General settings, the API reference, i18n, the database plumbing, request budgets,
+live updates, the notification channels' forms and the design system; Kestrel adds its own pages, API, migrations
+and strings, the
 Sentry-compatible ingest ([below](#ingest)), debug files with symbolication
 ([below](#debug-files-and-symbolication)), alerts ([below](#alerts)), release health
 ([below](#releases-and-release-health)), the REST API and MCP tools ([below](#rest-api-and-mcp)), web analytics
@@ -18,20 +20,21 @@ rust-toolchain.toml   # Rust 1.99
 src/
   main.rs             # `kestrel`: flags/env, logging, server
   lib.rs              # start() (config, database, state) and router()
-  product.rs          # KitConfig: names, cookies, token prefix, nav, locales, static files
+  product.rs          # KitConfig: names, cookies, token prefix and scope, CSRF exemptions, nav, settings
+                      # tabs (General), the webhook's words, locales, static files
   config.rs           # flags and KK_* environment variables
   server.rs           # listener and graceful shutdown
   project.rs          # project and key rules (names, slugs, origins, rate limits)
   db/                 # migration set, projects and project_keys, issues (the writer's upsert),
                       # triage (the issue pages' reads, lifecycle actions, retention deletes)
   dsn.rs              # public address, DSNs, SDK snippets
-  ingest/             # Sentry endpoints: keys, body decoding and limits, envelopes, rate limits, capture mode;
+  ingest/             # Sentry endpoints: keys, body decoding and limits, envelopes, capture mode;
                       # web.rs: POST /ingest/v1/event; signals.rs: POST /ingest/v1/signals
   event/              # normalisation and privacy (scrub.rs, paths.rs), grouping (kestrel:v2), title, culprit, tags
   difs/               # debug files: on disk (files.rs), sentry-cli upload (upload.rs), symbolication
                       # (symbolicate.rs), the symbolication queue (worker.rs), the Debug files page (pages.rs)
   writer.rs           # the single batch writer
-  store.rs            # store.sqlite: event payloads, attachments, sessions, feedback
+  store.rs            # store.sqlite: event payloads, attachments, sessions, feedback (its pool and migrations)
   pages.rs            # project pages: list, overview, settings (keys, retention)
   issues/             # issue pages: list (search.rs: the search syntax), issue, event (view.rs: the
                       # payload as the pages show it), actions, the live list (live.rs, SSE)
@@ -40,14 +43,15 @@ src/
   releases/           # the releases pages (mod.rs), release-health rollup (health.rs), sentry-cli's release
                       # commands (cli.rs)
   analytics/          # web analytics: k.js and its handler (kjs.rs), what a pageview keeps (clean.rs, ua.rs),
-                      # the rollups (rollup.rs), the queries (query.rs), the Web tab (pages.rs); app/: app
-                      # signals (what a signal keeps, hashes, rollup, queries, the App tab and explorer)
+                      # the rollups (rollup.rs), the queries (query.rs), the Web tab (pages.rs), what the
+                      # live streams wake for (live.rs); app/: app signals (what a signal keeps, hashes,
+                      # rollup, queries, the App tab and explorer)
   retention.rs        # the daily retention job; every minute the end of time-limited ignoring and the rollups
   api.rs, api/        # REST API v1 and its route table (API reference); issues and events, releases, alert rules,
                       # web and app analytics
   mcp.rs              # MCP tools
 templates/            # Kestrel's pages (extend kit/layout.html)
-static/               # favicon, home-screen icons, web manifest, the Web tab's stylesheet
+static/               # favicon, home-screen icons, web manifest, the Web and App tabs' few own styles
 migrations/           # Kestrel's migrations (after the kit's core set); store/ has store.sqlite's own
 locales/              # Kestrel's strings, 26 languages; glossaries in locales/glossary/
 tests/                # in-process app tests, translation coverage, ingest, grouping, issue pages, debug files,
@@ -77,7 +81,7 @@ The first start opens `/setup`, which creates the admin account.
 | `--data-dir` | `KK_DATA_DIR` | `./data` | `kestrel.sqlite`, `store.sqlite`, `session.key`, `backups/`, `difs/` (debug files) |
 | `--host` | `KK_HOST` | `0.0.0.0` | listen address |
 | `--port` | `KK_PORT` | `3002` | listen port |
-| `--public-url` | `KK_PUBLIC_URL` | (none) | the address in DSNs and API examples, e.g. `https://kestrel.example.com`; without it each request's own address is used |
+| `--public-url` | `KK_PUBLIC_URL` | (none) | the address in DSNs and API examples, e.g. `https://kestrel.example.com`; stored as the public URL at every start (Settings → General otherwise); without either, each request's own address is used |
 | `--ingest-port` | `KK_INGEST_PORT` | (none) | a second port that serves only ingest and `/healthz`, so the admin interface can stay on a LAN or VPN; ingest stays on the main port too |
 | `--ingest-ip-rate-limit` | `KK_INGEST_IP_RATE_LIMIT` | `6000` | ingest requests per minute from one IP address, counted in memory only; `0` turns the limit off |
 | `--capture-dir` | `KESTREL_CAPTURE_DIR` | (none) | write every ingest request to this directory ([capture mode](#capture-mode-and-sdk-fixtures)); test instances only |
@@ -85,8 +89,11 @@ The first start opens `/setup`, which creates the admin account.
 | | `KK_SETUP_TOKEN` | (none) | `/setup` opens only with `?token=…` |
 | | `RUST_LOG` | `info` | log filter |
 
-`KK_PUBLIC_URL` is stored as the `base_url` setting at start-up (and removed when unset), so the kit's same-origin
-checks, the API reference and the MCP origin check use the same address as the DSNs.
+The public URL is the kit's `base_url` setting, which admins set on Settings → General (the kit's page: site name,
+public URL, time zone, language). `KK_PUBLIC_URL`, when set, is stored there at every start and so wins over the
+page; when it is unset, the saved value stays. The kit's same-origin checks, the API reference and the MCP origin
+check use the same address as the DSNs. The site language chosen there is also the language of notification
+channels that have none of their own.
 
 ## Ingest
 
@@ -106,8 +113,13 @@ What happens to a request (docs/design.md §4):
 
 1. **Checks**, cheapest first: the per-IP bucket (`KK_INGEST_IP_RATE_LIMIT`), the project id, the body size, the
    key, the browser's `Origin` against the key's allowed origins, the key's own bucket (`rate_limit_per_minute`).
-   Rate limits answer 429 with `Retry-After` and `X-Sentry-Rate-Limits`. The ingest routes are exempt from the CSRF
-   check (`csrf_exempt_path` in `src/product.rs`) and answer CORS with `*` or the key's allowed origins.
+   The buckets are the kit's token buckets (`vole_kit::http::ratelimit::TokenBuckets`, in memory, per IP address
+   and per key); rate limits answer 429 with `Retry-After` and `X-Sentry-Rate-Limits` and Kestrel's Sentry-style
+   body. The ingest routes are exempt from the CSRF check (`csrf_exempt_prefixes` in `src/product.rs`:
+   `/api/*/envelope`, `/api/*/store`, `/ingest/v1/event`, `/ingest/v1/signals`), carry the kit's machine header
+   policy (`headers::machine`: a CSP that allows nothing, no frame rules) and answer CORS with `*` or the key's
+   allowed origins. `GET /js/k.js` is a public asset (`headers::public_asset`: no CSP, `Cross-Origin-Resource-Policy:
+   cross-origin`).
 2. **Decoding**: gzip, deflate, br or zstd, at most 20 MB per envelope, 1 MB per event and 10 MB per attachment
    once decompressed (413 when larger, 400 when broken). Larger attachments are dropped, the event is kept.
 3. **Items**: `event` is normalised and grouped; `session`/`sessions` are kept for the release-health rollup
@@ -147,9 +159,10 @@ What happens to a request (docs/design.md §4):
    counts go on. After each committed batch the writer hands the alerts what may set them off (new issues,
    regressions, first crashes, issues with events) without waiting ([below](#alerts)).
 
-`kestrel.sqlite` holds the index; `store.sqlite` (own migrations in `migrations/store/`, incremental auto-vacuum,
-no backup before migrating) holds payloads, attachments, sessions, feedback and raw analytics events, and can be deleted
-without losing issues or analytics rollups.
+`kestrel.sqlite` holds the index; `store.sqlite` (own migrations in `migrations/store/`, run by the kit's
+`migrate_with` without a backup; incremental auto-vacuum, set by the kit's pool through
+`PoolOptions::new_database_pragmas` before the first table exists) holds payloads, attachments, sessions, feedback
+and raw analytics events, and can be deleted without losing issues or analytics rollups.
 
 ### Capture mode and SDK fixtures
 
@@ -213,8 +226,9 @@ Everyone signed in reads them; editors and admins act.
   environment filters, sort by last seen, first seen, events or users, 25 per page, 14-day sparklines, badges
   for new (first seen in the last 7 days), regressed and unsymbolicated issues. Filter changes swap the results
   with htmx and push the URL; the status chips come back out of band. While the list is open it listens on
-  `/projects/{id}/issues/live` (server-sent events with the same query string): the writer says which project
-  changed after each batch and each action, and the list is rendered again at most about once a second. Select
+  `/projects/{id}/issues/live` (server-sent events with the same query string, built on the kit's `http::live`):
+  the writer says which project changed after each batch and each action, and the list is rendered again at most
+  about once a second; lists open on the same view share one render. Select
   mode (`?select=1`, editors) resolves, ignores, unresolves or merges the ticked issues.
 - **Search** (`src/issues/search.rs`): `is:unresolved|resolved|ignored|all|new|regressed|ongoing|unsymbolicated`,
   `level:`, `release:` (as sent, or only the version: `release:1.4` matches `shop@1.4` and `shop@1.4+12`; `*` is
@@ -298,11 +312,13 @@ that takes longer than 10 seconds answers `assembling` until it is (`--wait` pol
 for ten minutes. At most two files are processed at once.
 
 The `/api/0/` routes take API tokens only (no sessions, so they are exempt from the CSRF check). A token may
-upload when it is a read-and-write token of an editor or admin, or when it has Kestrel's `difs:write` grant
-(`token_grants`) and its owner is an editor or admin. Upload tokens are made on a project's Debug files page: a
-read-only kit token plus the grant, so a build machine's token can't change anything else. The kit has no
-product scopes yet, so the API tokens page shows them as read-only tokens. The zip endpoint also takes an
-editor's session.
+upload when it has the `difs:write` token scope and its owner is an editor or admin
+(`user.has_scope("difs:write") && user.may_act_as(Role::Editor)`); a read-and-write token has every scope.
+`difs:write` is a kit token scope (`KitConfig::token_scopes`, stored in the kit's `api_token_scopes`): a
+read-only token that also uploads, so a build machine's token can't change anything else. Upload tokens are made
+on a project's Debug files page or on the API tokens page ("Read and upload debug files", which is also the
+token's access there). `migrations/0008_token_scopes.sql` moved the grants of Kestrel 0.2 (`token_grants`) into
+the kit's table, so existing upload tokens kept working. The zip endpoint also takes an editor's session.
 
 Limits: chunks of at most 8 MiB (after gzip too), 64 per request, request bodies of 33 MiB; files of at most
 1 GiB; zip uploads of at most 1 GiB with at most 10,000 entries and 2 GiB unpacked in all, and no entry over
@@ -374,9 +390,13 @@ docs/design.md §4.7. `src/alerts/`, tables in `migrations/0005_alerts_releases.
 **Channels** (Settings → Notifications, `/settings/notifications`, editors and admins) are the instance's, with
 vole-kit's ~40 providers: the provider picker, the provider's form rendered from its schema, secrets never shown
 again (an empty secret keeps the stored one; changing a destination asks for its secrets again), "Send test",
-pause and delete. Each channel has a message language ("" means the instance's); new channels start in the
-language of the person adding them. The page follows Vigilant Vole's, whose form view-model and templates the
-kit doesn't share yet, so `src/alerts/channels.rs` and `templates/partials/notification_*.html` carry a port.
+pause and delete. Each channel has a message language ("" means the instance's: the site language from Settings →
+General); new channels start in the language of the person adding them. The provider picker and form are the
+kit's (`vole_kit::notify::form` and its `kit/partials/notification_*.html`); the list, the language and the
+toggles are Kestrel's (`src/alerts/channels.rs`). "Send test" sends the kit's test alert (`Alert::test`) in the
+channel's language (`notify::send_in`). The webhook provider speaks of an issue (`KitConfig::webhook`): its default
+body has `issue`, `issue_id`, `issue_type` and `duration_seconds`, its template the `{{issue_name}}` …
+placeholders.
 
 **Rules** (a project's Alerts tab, `/projects/{id}/alerts`; editors change them, everyone reads them):
 
@@ -403,8 +423,8 @@ retries after 1, 5 and 15 minutes (then `failed`), and notes every result, which
 the last hour", "First crash in shop@1.4.1 (Shop)", "3 alerts from Keen Kestrel" (a digest), with the project,
 level, release, environment, culprit, events and users as facts. Kind and level follow the issue: a new issue,
 regression or first crash is a `Problem`, a spike an `Escalation`; fatal and error are `Critical`, warning
-`Warning`, the rest `Info` (first crashes are always `Critical`). The link is the issue on `KK_PUBLIC_URL`; without
-it the message says to set it.
+`Warning`, the rest `Info` (first crashes are always `Critical`). The link is the issue on the public URL; without
+one the message says to set it.
 
 To try it on a test instance, run a receiver nobody else uses, for example
 `docker run --rm -p 8099:8080 mendhak/http-https-echo` on a test machine, add a Webhook channel pointing at it, a
@@ -540,7 +560,9 @@ rollup the writer tells the Web tabs (`Writer::subscribe_web`).
 with tabs: top and entry pages; referrers and UTM sources, mediums and campaigns; browsers, operating systems, device
 types, screen sizes; custom events. Clicking a value adds a filter (`?page=`, `referrer=`, `utm_*=`, `browser=`, `os=`,
 `device=`, `screen=`); chips remove them. Without filters everything reads the rollups; with filters the raw events (so
-at most the raw retention, which the page says when the period starts earlier). `…/web/live` streams `web-live` (current
+at most the raw retention, which the page says when the period starts earlier). The chart is the design system's
+line chart (`components::LineChart`, `m::line_chart`), the lists its bar list styles. `…/web/live` (the kit's
+`http::live`, `analytics/live.rs`) streams `web-live` (current
 visitors: distinct visitors in the last five minutes, from the raw events; after new events, at most every two seconds,
 and every 30 seconds) and `web-updated` (the numbers and chart again, after a rollup, while the period includes today).
 Before the first pageview the tab shows the snippet with an enabled key and how to use it. The overview shows the last
@@ -721,7 +743,9 @@ user (uid 1000, or `PUID`/`PGID`), then runs as that user. `HEALTHCHECK` calls `
 `locales/en.toml` holds Kestrel's own English strings; the other 25 files translate every key, with the words from
 `locales/glossary/<code>.md`. `tests/i18n.rs` calls vole-kit's `assert_full_coverage()`, which fails when a language
 misses a key, has an extra one, changes a placeholder or lacks a plural form its language needs. Core strings
-(sign-in, users, tokens, Security, the layout) come from vole-kit; a key may not be in both catalogs. The few
-texts the kit's pages take from the product (`vole_kit::i18n::catalog::PRODUCT_KEYS`: the sign-in subtitle, the
-setup page's placeholders, what roles and tokens may do, the setup-token hint naming `KK_SETUP_TOKEN`, the error
-page's link) are at the end of each of Kestrel's files.
+(sign-in, users, tokens, Security, General, the layout, number, size and percentage formats, the provider forms)
+come from vole-kit; a key may not be in both catalogs. The few texts the kit's pages take from the product
+(`vole_kit::i18n::catalog::PRODUCT_KEYS`: the sign-in subtitle, the setup page's placeholders, what roles and
+tokens may do, the setup-token hint naming `KK_SETUP_TOKEN`, the error page's link; `GENERAL_PRODUCT_KEYS`: the
+General page's subtitle and what the public URL is used for) are at the end of each of Kestrel's files; the
+`difs:write` scope's title and description are `difs.scope` and `difs.scope_help`.

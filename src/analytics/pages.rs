@@ -8,31 +8,30 @@
 //! The overview's small summary ([`overview`]) and the switch in the
 //! settings are here too.
 
-use std::convert::Infallible;
 use std::time::Duration;
 
 use askama::Template;
 use axum::extract::{Extension, Path, RawQuery, State};
 use axum::http::HeaderMap;
-use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Form, Router};
 use axum_extra::extract::cookie::SignedCookieJar;
 use serde::Deserialize;
-use tokio::sync::broadcast::{self, error::RecvError, error::TryRecvError};
 use vole_kit::auth::CurrentUser;
+use vole_kit::components::LineChart;
+use vole_kit::http::live;
 use vole_kit::http::{ApiError, ApiResult, HtmlTemplate};
 use vole_kit::i18n::{self, Tr as _};
 use vole_kit::page::{PageCtx, flash};
 use vole_kit::state::Core;
 
+use super::live::{Change, LiveChanges};
 use super::query::{self, Filters, Period, Point, Row, Totals};
 use super::{Dim, day_number};
 use crate::db::projects::{self as db, Project};
 use crate::ingest::Ingest;
 use crate::pages::ProjectView;
-use crate::writer::WebChange;
 
 /// Values per list.
 const TOP: i64 = 10;
@@ -164,18 +163,8 @@ pub struct Summary {
     pub events: String,
     pub has_events: bool,
     pub period_label: String,
-    pub chart: Chart,
-}
-
-/// Visitors (line and area) and pageviews (a second line) on one scale.
-pub struct Chart {
-    pub visitors_line: String,
-    pub visitors_area: String,
-    pub pageviews_line: String,
-    pub label: String,
-    pub max_label: String,
-    pub start_label: String,
-    pub end_label: String,
+    /// Visitors (line and area) and pageviews on one scale.
+    pub chart: LineChart,
 }
 
 /// One value in a list, with a bar as wide as its share of the top value.
@@ -275,10 +264,7 @@ fn period_label(v: &View) -> String {
         "today" | "day" => i18n::t("web.period_today").to_string(),
         "yesterday" => i18n::t("web.period_yesterday").to_string(),
         "custom" => date_range(v.period),
-        _ => i18n::tf(
-            "web.period_last_days",
-            &[("n", &v.period.days().to_string())],
-        ),
+        _ => i18n::fmt_last_days(v.period.days()),
     }
 }
 
@@ -297,42 +283,42 @@ fn date_range(p: Period) -> String {
     }
 }
 
-fn points(values: &[i64], max: i64) -> String {
-    let v: Vec<f64> = values.iter().map(|n| *n as f64).collect();
-    crate::releases::scaled_points(&v, 0.0, max.max(1) as f64, 600.0, 120.0)
-}
-
-fn chart(p: Period, series: &[Point]) -> Chart {
-    let visitors: Vec<i64> = series.iter().map(|s| s.visitors).collect();
-    let pageviews: Vec<i64> = series.iter().map(|s| s.pageviews).collect();
-    let max = pageviews
+fn chart(p: Period, series: &[Point]) -> LineChart {
+    let visitors: Vec<f64> = series.iter().map(|s| s.visitors as f64).collect();
+    let pageviews: Vec<f64> = series.iter().map(|s| s.pageviews as f64).collect();
+    let max = series
         .iter()
-        .chain(&visitors)
-        .copied()
+        .map(|s| s.visitors.max(s.pageviews))
         .max()
         .unwrap_or(0);
-    let visitors_line = points(&visitors, max);
+    let total = |values: &[f64]| i18n::fmt_int(values.iter().sum::<f64>() as i64);
+    let label = i18n::tf(
+        "web.chart_label",
+        &[
+            ("visitors", &total(&visitors)),
+            ("pageviews", &total(&pageviews)),
+            ("period", &date_range(p)),
+        ],
+    );
     let (start_label, end_label) = if p.hourly() {
         ("00:00".to_string(), "23:00".to_string())
     } else {
         (day_label(p.from), day_label(p.to))
     };
-    Chart {
-        visitors_area: format!("{visitors_line} 600.0,120.0 0.0,120.0"),
-        visitors_line,
-        pageviews_line: points(&pageviews, max),
-        label: i18n::tf(
-            "web.chart_label",
-            &[
-                ("visitors", &i18n::fmt_int(visitors.iter().sum())),
-                ("pageviews", &i18n::fmt_int(pageviews.iter().sum())),
-                ("period", &date_range(p)),
-            ],
-        ),
-        max_label: i18n::fmt_int(max),
-        start_label,
-        end_label,
-    }
+    LineChart::new(
+        label,
+        vec![
+            (i18n::t("web.visitors").to_string(), visitors, String::new()),
+            (
+                i18n::t("web.pageviews").to_string(),
+                pageviews,
+                String::new(),
+            ),
+        ],
+        true,
+    )
+    .scale(i18n::fmt_int(max), i18n::fmt_int(0))
+    .axis(start_label, end_label)
 }
 
 fn summary(v: &View, totals: Totals, series: &[Point]) -> Summary {
@@ -703,45 +689,9 @@ async fn dashboard(
 // Live updates
 // ---------------------------------------------------------------------------
 
-enum Change {
-    Events,
-    Rollup,
-    Tick,
-}
-
-/// Waits for a change to `project_id`, then swallows what else arrives
-/// within [`COALESCE`]. `None` once the writer is gone.
-async fn next_change(rx: &mut broadcast::Receiver<WebChange>, project_id: i64) -> Option<Change> {
-    let mut rollup = loop {
-        match rx.recv().await {
-            Ok(WebChange::Events(p)) if p == project_id => break false,
-            Ok(WebChange::Rollup(p)) if p == project_id => break true,
-            Ok(_) => continue,
-            Err(RecvError::Lagged(_)) => break true,
-            Err(RecvError::Closed) => return None,
-        }
-    };
-    tokio::time::sleep(COALESCE).await;
-    loop {
-        match rx.try_recv() {
-            Ok(WebChange::Rollup(p)) if p == project_id => rollup = true,
-            Ok(_) => continue,
-            Err(TryRecvError::Lagged(_)) => rollup = true,
-            Err(TryRecvError::Empty) => break,
-            Err(TryRecvError::Closed) => return None,
-        }
-    }
-    Some(if rollup {
-        Change::Rollup
-    } else {
-        Change::Events
-    })
-}
-
 struct Live {
     core: Core,
     ingest: Ingest,
-    rx: broadcast::Receiver<WebChange>,
     project_id: i64,
     query: String,
     lang: i18n::Lang,
@@ -792,36 +742,32 @@ async fn live(
     RawQuery(q): RawQuery,
 ) -> ApiResult<Response> {
     load_project(&core, id).await?;
+    let changes = LiveChanges::new(ingest.writer(), id, COALESCE, TICK);
     let state = Live {
-        rx: ingest.writer().subscribe_web(),
         core,
         ingest,
         project_id: id,
         query: q.unwrap_or_default(),
         lang: i18n::current(),
     };
-    let events = futures_util::stream::unfold(state, |mut st| async move {
-        loop {
-            let change = tokio::select! {
-                c = next_change(&mut st.rx, st.project_id) => c?,
-                () = tokio::time::sleep(TICK) => Change::Tick,
-            };
-            let event = match change {
-                Change::Rollup => match st.summary().await {
-                    Some(html) => Event::default().event("web-updated").data(html),
-                    None => continue,
-                },
-                Change::Events | Change::Tick => match st.current().await {
-                    Some(n) => Event::default().event("web-live").data(n),
-                    None => continue,
-                },
-            };
-            return Some((Ok::<_, Infallible>(event), st));
-        }
-    });
-    Ok(Sse::new(events)
-        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-        .into_response())
+    Ok(live::sse(futures_util::stream::unfold(
+        (changes, state),
+        |(mut changes, st)| async move {
+            loop {
+                let event = match changes.next().await? {
+                    Change::Rollup => match st.summary().await {
+                        Some(html) => live::html_event("web-updated", &html),
+                        None => continue,
+                    },
+                    Change::Events | Change::Tick => match st.current().await {
+                        Some(n) => live::html_event("web-live", &n),
+                        None => continue,
+                    },
+                };
+                return Some((event, (changes, st)));
+            }
+        },
+    )))
 }
 
 // ---------------------------------------------------------------------------

@@ -341,10 +341,6 @@ pub fn new_id() -> String {
 pub const PASSWORD: &str = "Kestrel-Owner-Pass-2026!";
 const HOST: &str = "kestrel.test:3002";
 
-/// Sign-ins one at a time: the kit's sign-in limiter is process-wide and
-/// keyed by user name.
-static SIGN_IN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
 /// Adds a user with `role` (`viewer`, `editor`, `admin`); its id.
 pub async fn add_user(app: &App, name: &'static str, role: &'static str) -> i64 {
     let hash = vole_kit::auth::hash_password(PASSWORD);
@@ -407,11 +403,9 @@ impl<'a> Web<'a> {
             app,
             cookies: std::collections::BTreeMap::new(),
         };
-        let guard = SIGN_IN.lock().await;
         let res = b
             .post("/login", &[("username", name), ("password", PASSWORD)])
             .await;
-        drop(guard);
         assert_eq!(res.status, StatusCode::SEE_OTHER, "{}", res.body);
         b
     }

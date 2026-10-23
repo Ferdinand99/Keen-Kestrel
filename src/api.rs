@@ -23,7 +23,7 @@ use axum::routing::{get, post};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use vole_kit::auth::CurrentUser;
-use vole_kit::docs::{BearerScheme, Credential, DocsSpec, ErrorCode, RouteDoc, r};
+use vole_kit::docs::{BearerScheme, Credential, DocsSpec, ErrorCode, HeaderScheme, RouteDoc, r};
 use vole_kit::http::rest::{
     Body, Id, Params, V1Error, V1Result, created, json_ok, limit, no_content, paginate,
     parse_cursor,
@@ -274,7 +274,7 @@ pub static ROUTES: &[RouteDoc] = &[
         .res(KEY_EXAMPLE),
     r("DELETE", "/api/v1/projects/{id}/keys/{key_id}", "editor", "Keys", "Delete a key. SDKs that use its DSN can no longer send."),
     // -- Debug files --
-    r("POST", "/api/v1/projects/{id}/dsyms", "editor", "Debug files", "Upload debug files: a zip of dSYMs (or one object file) as the body (Content-Type: application/zip) or as multipart field `file`. Each object (one per architecture) is stored with a SymCache; files in the zip that aren't debug files are listed in `skipped`. Needs a token with the difs:write grant or a read-and-write token of an editor. At most 1 GB per upload and per file.")
+    r("POST", "/api/v1/projects/{id}/dsyms", "editor", "Debug files", "Upload debug files: a zip of dSYMs (or one object file) as the body (Content-Type: application/zip) or as multipart field `file`. Each object (one per architecture) is stored with a SymCache; files in the zip that aren't debug files are listed in `skipped`. Needs a token with the difs:write scope or a read-and-write token of an editor. At most 1 GB per upload and per file.")
         .req("<zip archive>")
         .res(DIF_UPLOAD_EXAMPLE),
     r("GET", "/api/v1/projects/{id}/debug-files", "viewer", "Debug files", "List a project's debug files, oldest first.")
@@ -348,14 +348,16 @@ pub static ROUTES: &[RouteDoc] = &[
         .res(r#"{"data": [{"id": 2, "name": "Ops Slack", "kind": "slack", "active": true, "language": "", "created_at": "2026-10-22 08:00:00"}], "next_cursor": null}"#),
     // -- Ingest --
     r("POST", "/api/{project_id}/envelope/", "dsn key", "Ingest", "Where the Sentry SDKs send events, sessions, user feedback and attachments: a Sentry envelope (newline-delimited JSON), optionally gzip, deflate, br or zstd encoded (20 MB at most, 1 MB per event, 10 MB per attachment). Authenticated with the project's DSN key in `X-Sentry-Auth: Sentry sentry_key=<public key>, sentry_version=7`, `?sentry_key=` or the envelope header's `dsn`; API tokens don't work here. Answers `{\"id\": \"<event id>\"}` at once; 429 with `Retry-After` and `X-Sentry-Rate-Limits` when a limit or the queue is full. Point an SDK at it with the DSN from the project's settings.")
+        .body_type("application/x-sentry-envelope")
         .req("{\"event_id\":\"9ec79c33ec9942ab8353589fcb2e04dc\",\"dsn\":\"https://<public key>@kestrel.example.com/1\"}\n{\"type\":\"event\"}\n{\"message\":\"Hello\",\"level\":\"warning\"}")
         .res(r#"{"id": "9ec79c33ec9942ab8353589fcb2e04dc"}"#),
     r("POST", "/api/{project_id}/store/", "dsn key", "Ingest", "The older endpoint for one event as JSON (old SDKs), with the same authentication and limits as the envelope endpoint.")
         .req(r#"{"message": "Hello", "level": "warning"}"#)
         .res(r#"{"id": "9ec79c33ec9942ab8353589fcb2e04dc"}"#),
-    r("POST", "/ingest/v1/event", "dsn key", "Ingest", "Where the k.js snippet sends pageviews and custom events: one JSON object, as `text/plain` (no CORS preflight) or `application/json` (64 KB at most). `k` (or `key`, `X-Kestrel-Key`, `?key=`) is the project's public key; `n` the event (`pageview` or a custom event's name); `u` the page's URL; `r` the referrer; `w` the screen width; `h: 1` keeps a `#/route` in the path; `p` up to 20 properties of a custom event. The key's allowed origins are checked against `Origin` (else `Referer`); the project must have web analytics on. Bots are answered like everyone else and not counted. Answers `202 Accepted` with an empty body and never sets a cookie; 429 with `Retry-After` when a limit or the queue is full.")
+    r("POST", "/ingest/v1/event", "public key", "Ingest", "Where the k.js snippet sends pageviews and custom events: one JSON object, as `text/plain` (no CORS preflight) or `application/json` (64 KB at most). `k` (or `key`, `X-Kestrel-Key`, `?key=`) is the project's public key; `n` the event (`pageview` or a custom event's name); `u` the page's URL; `r` the referrer; `w` the screen width; `h: 1` keeps a `#/route` in the path; `p` up to 20 properties of a custom event. The key's allowed origins are checked against `Origin` (else `Referer`); the project must have web analytics on. Bots are answered like everyone else and not counted. Answers `202 Accepted` with an empty body and never sets a cookie; 429 with `Retry-After` when a limit or the queue is full.")
+        .body_type("text/plain")
         .req(r#"{"k": "<public key>", "n": "pageview", "u": "https://shop.example/pricing?utm_source=newsletter", "r": "https://news.example/", "w": 1440}"#),
-    r("POST", "/ingest/v1/signals", "dsn key", "Ingest", "Where KestrelKit (and any app SDK that speaks its protocol, v1) sends app signals: `{\"sent_at\", \"sdk\", \"signals\": [...]}` with at most 100 signals and 256 KB (also once gzip is undone), the project's public key in `X-Kestrel-Key`, optionally `Content-Encoding: gzip`. A signal has `type` (1–100 characters from `[A-Za-z0-9._-]`), `time`, `install_id`, `session_id`, `app` (`bundle_id`, `version`, `build`), `device` (`platform`, `os_version`, `model`, `locale`), `flags` (`debug`, `testflight`, `simulator`) and `payload` (at most 20 keys of 40 characters, string values of 200). Signals that break a limit are cut or dropped one by one; `time` is corrected by `sent_at` for the device's clock. Kestrel keeps a keyed hash of the install id, never the id, the IP address or the user agent, and scrubs email addresses, phone and card numbers in payloads. Answers `202 {\"accepted\": n}` (and `dropped` when signals were dropped); 400 for a malformed batch, 401 for a missing or unknown key, 403 for a disabled key or app analytics turned off, 413 for too large, 429 (rate limit) and 503 (queue full) with `Retry-After` in seconds.")
+    r("POST", "/ingest/v1/signals", "public key", "Ingest", "Where KestrelKit (and any app SDK that speaks its protocol, v1) sends app signals: `{\"sent_at\", \"sdk\", \"signals\": [...]}` with at most 100 signals and 256 KB (also once gzip is undone), the project's public key in `X-Kestrel-Key`, optionally `Content-Encoding: gzip`. A signal has `type` (1–100 characters from `[A-Za-z0-9._-]`), `time`, `install_id`, `session_id`, `app` (`bundle_id`, `version`, `build`), `device` (`platform`, `os_version`, `model`, `locale`), `flags` (`debug`, `testflight`, `simulator`) and `payload` (at most 20 keys of 40 characters, string values of 200). Signals that break a limit are cut or dropped one by one; `time` is corrected by `sent_at` for the device's clock. Kestrel keeps a keyed hash of the install id, never the id, the IP address or the user agent, and scrubs email addresses, phone and card numbers in payloads. Answers `202 {\"accepted\": n}` (and `dropped` when signals were dropped); 400 for a malformed batch, 401 for a missing or unknown key, 403 for a disabled key or app analytics turned off, 413 for too large, 429 (rate limit) and 503 (queue full) with `Retry-After` in seconds.")
         .req(r#"{"sent_at": "2026-10-22T19:00:00.000Z", "sdk": {"name": "kestrelkit", "version": "0.1.0"}, "signals": [{"type": "Paywall.shown", "time": "2026-10-22T18:59:58.123Z", "install_id": "8F3C2B1A-0D4E-4F5A-9B6C-7D8E9F0A1B2C", "session_id": "1B2C3D4E-5F60-4718-8293-A4B5C6D7E8F9", "app": {"bundle_id": "com.example.app", "version": "1.4.0", "build": "57"}, "device": {"platform": "iOS", "os_version": "18.2", "model": "iPhone16,2", "locale": "nb_NO"}, "flags": {"debug": false, "testflight": false, "simulator": false}, "payload": {"plan": "pro"}}]}"#)
         .res(r#"{"accepted": 1}"#),
     r("GET", "/js/k.js", "public", "Ingest", "The web analytics snippet (under 2 KB gzip-compressed): `<script defer src=\"https://kestrel.example.com/js/k.js\" data-key=\"<public key>\"></script>`. Cached for a day, with an ETag."),
@@ -381,6 +383,23 @@ const CREDENTIALS: &[Credential] = &[
         access: "dsn key",
         words: "a project's DSN key (`X-Sentry-Auth: Sentry sentry_key=<public key>`, `?sentry_key=` or the envelope's `dsn` header), not an API token",
         bearer: None,
+        header: Some(HeaderScheme {
+            name: "sentryAuth",
+            header: "X-Sentry-Auth",
+            description: "A project's DSN key: `Sentry sentry_key=<public key>, sentry_version=7` (also `?sentry_key=` or the envelope's `dsn` header)",
+            example: "Sentry sentry_key=$KK_DSN_KEY, sentry_version=7",
+        }),
+    },
+    Credential {
+        access: "public key",
+        words: "a project's public key (the DSN key) in `X-Kestrel-Key` (k.js also sends it as `k` in the body), not an API token",
+        bearer: None,
+        header: Some(HeaderScheme {
+            name: "kestrelKey",
+            header: "X-Kestrel-Key",
+            description: "A project's public key (the DSN key)",
+            example: "$KK_DSN_KEY",
+        }),
     },
     Credential {
         access: "api token",
@@ -390,6 +409,7 @@ const CREDENTIALS: &[Credential] = &[
             description: "API token (kk_…), sessions not accepted",
             variable: "TOKEN",
         }),
+        header: None,
     },
 ];
 
@@ -427,6 +447,7 @@ fn markdown_intro(out: &mut String, base: &str) {
          export KK_TOKEN=\"<API token from Settings → API tokens>\"\n\
          curl -H \"Authorization: Bearer $KK_TOKEN\" \"$KK_URL/api/v1/projects\"\n\
          ```\n\n\
+         The ingest examples send a project's public key (its DSN key) as `$KK_DSN_KEY`.\n\n\
          ## Authentication\n\n\
          - Create a token in the web app under **Settings → API tokens** (`/settings/tokens`). Tokens start with `kk_`, \
          are shown once and can expire (30, 90, 365 days or never).\n\
@@ -463,7 +484,7 @@ fn markdown_middle(out: &mut String) {
          --project <slug or id> <path>`, with `SENTRY_AUTH_TOKEN` (or `--auth-token`) set to an API token. Its endpoints are \
          `GET /api/0/organizations/{org}/chunk-upload/`, `POST` to the same path, `POST /api/0/projects/{org}/{project}/files/difs/assemble/` \
          and the older `POST /api/0/projects/{org}/{project}/files/dsyms/`; any organization slug is accepted.\n\
-         - Uploading needs a token made on the project's Debug files page (grant `difs:write`; it only reads otherwise) or a \
+         - Uploading needs a token with the scope `difs:write` (made on the project's Debug files page or under Settings → API tokens; it only reads otherwise) or a \
          read-and-write token, and the token's owner must be an editor or admin.\n\
          - A debug file applies to events that arrive after it; stored events are not symbolicated again.\n\n\
          ## Issues, events and releases\n\n\
@@ -501,7 +522,7 @@ fn markdown_middle(out: &mut String) {
          - Alert rules belong to a project and send to the instance's notification channels (Settings → Notifications: Slack, Discord, \
          Teams, Telegram, ntfy, email, webhooks, PagerDuty and about 30 more).\n\
          - Rules are evaluated after events are written and messages are sent by a task of their own, retried after 1, 5 and 15 minutes; \
-         `GET …/alerts` shows each result. Messages link to the issue when the instance's public URL (`KK_PUBLIC_URL`) is set.\n\n",
+         `GET …/alerts` shows each result. Messages link to the issue when the instance's public URL is set (Settings → General, or `KK_PUBLIC_URL`).\n\n",
     );
 }
 
@@ -529,6 +550,18 @@ pub static DOCS: DocsSpec = DocsSpec {
     example_path: "/api/v1/projects",
     metrics_path: None,
     fallback_host: Some("localhost:3002"),
+    // Path parameters that aren't integers; the others (`{id}`,
+    // `{issue_id}` …) are.
+    param_types: &[
+        ("event_id", "string"),
+        ("org", "string"),
+        ("version", "string"),
+        ("debug_id", "string"),
+        ("project", "string"),
+    ],
+    // Every route says who may call it: a role, `public`, `dsn key`,
+    // `public key` or `api token`.
+    strict_access: true,
 };
 
 /// Kestrel's wording of the kit's `conflict` row: what clashes here.

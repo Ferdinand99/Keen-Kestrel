@@ -3,19 +3,19 @@
 //! rendered for exactly the view the user is looking at. The writer says
 //! which project changed after each batch and each action; bursts are
 //! merged, so a busy project re-renders at most about once a second per
-//! open list.
+//! view, and lists open on the same view share one render (the kit's
+//! `http::live`).
 
-use std::convert::Infallible;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use askama::Template;
 use axum::extract::{Extension, Path, Query as UrlQuery, State};
-use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::response::{IntoResponse, Response};
-use tokio::sync::broadcast::{self, error::RecvError, error::TryRecvError};
+use axum::response::Response;
 use vole_kit::auth::CurrentUser;
-use vole_kit::http::ApiResult;
-use vole_kit::i18n;
+use vole_kit::http::live::{self, Changes, SharedRenders};
+use vole_kit::http::{ApiError, ApiResult};
+use vole_kit::i18n::{self, Lang};
 use vole_kit::state::Core;
 
 use super::{ListForm, ListOnlyTemplate, ListState, load_list, load_project};
@@ -24,34 +24,41 @@ use crate::ingest::Ingest;
 /// Quiet time that merges a burst of changes into one render.
 const COALESCE: Duration = Duration::from_millis(1000);
 
-/// Waits for a change to `project_id`, then swallows whatever else arrives
-/// within [`COALESCE`]. `false` once the writer is gone.
-async fn next_change(rx: &mut broadcast::Receiver<i64>, project_id: i64) -> bool {
-    loop {
-        match rx.recv().await {
-            Ok(p) if p == project_id => break,
-            Ok(_) => continue,
-            Err(RecvError::Lagged(_)) => break,
-            Err(RecvError::Closed) => return false,
-        }
-    }
-    tokio::time::sleep(COALESCE).await;
-    loop {
-        match rx.try_recv() {
-            Ok(_) | Err(TryRecvError::Lagged(_)) => continue,
-            Err(TryRecvError::Empty) => return true,
-            Err(TryRecvError::Closed) => return false,
-        }
-    }
-}
+/// One view of a list: project, query string, whether the reader may edit
+/// (bulk actions), language.
+type ViewKey = (i64, String, bool, Lang);
+
+/// Views rendered at most once per change, however many lists show them.
+static RENDERS: LazyLock<SharedRenders<ViewKey>> = LazyLock::new(|| SharedRenders::new(256));
 
 struct Live {
     core: Core,
-    rx: broadcast::Receiver<i64>,
     project_id: i64,
     form: ListForm,
     can_edit: bool,
-    lang: i18n::Lang,
+    lang: Lang,
+}
+
+impl Live {
+    fn key(&self) -> ViewKey {
+        let (state, _) = ListState::from_form(&self.form);
+        (
+            self.project_id,
+            state.qs(state.page),
+            self.can_edit,
+            self.lang,
+        )
+    }
+
+    async fn render(&self) -> Result<String, ApiError> {
+        let (state, query) = ListState::from_form(&self.form);
+        let mut data = load_list(&self.core, self.project_id, &state, query, self.can_edit).await?;
+        data.select = false;
+        ListOnlyTemplate { data }.render().map_err(|err| {
+            tracing::warn!(%err, "can't render the live issue list");
+            ApiError::Internal(err.to_string())
+        })
+    }
 }
 
 pub async fn stream(
@@ -62,41 +69,27 @@ pub async fn stream(
     UrlQuery(form): UrlQuery<ListForm>,
 ) -> ApiResult<Response> {
     load_project(&core, id).await?;
+    let changes =
+        Changes::new(ingest.writer().subscribe(), move |p: &i64| *p == id).quiet(COALESCE);
     let live = Live {
         core,
-        rx: ingest.writer().subscribe(),
         project_id: id,
         form,
         can_edit: user.can_edit(),
+        // The stream runs outside the request's language scope.
         lang: i18n::current(),
     };
-    let events = futures_util::stream::unfold(live, |mut live| async move {
-        loop {
-            if !next_change(&mut live.rx, live.project_id).await {
-                return None;
-            }
-            let lang = live.lang;
-            let (state, query) = ListState::from_form(&live.form);
-            let loaded = i18n::scope(
-                lang,
-                load_list(&live.core, live.project_id, &state, query, live.can_edit),
-            )
-            .await;
-            let Ok(mut data) = loaded else {
-                continue;
-            };
-            data.select = false;
-            let html = i18n::sync_scope(lang, || ListOnlyTemplate { data }.render());
-            match html {
-                Ok(html) => {
-                    let event = Event::default().event("issues-updated").data(html);
-                    return Some((Ok::<_, Infallible>(event), live));
+    Ok(live::sse(futures_util::stream::unfold(
+        (changes, live),
+        |(mut changes, live)| async move {
+            loop {
+                let since = changes.next().await?;
+                let render = RENDERS.get(live.key(), since, || live.render());
+                if let Ok(html) = i18n::scope(live.lang, render).await {
+                    let event = live::html_event("issues-updated", &html);
+                    return Some((event, (changes, live)));
                 }
-                Err(err) => tracing::warn!(%err, "can't render the live issue list"),
             }
-        }
-    });
-    Ok(Sse::new(events)
-        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-        .into_response())
+        },
+    )))
 }

@@ -442,6 +442,9 @@ retention_releases = "Ladicí soubory nedávných verzí"
 retention_releases_unit = "verzí"
 retention_releases_help = "Ladicí soubory, které používá tento počet nejnovějších verzí, zůstávají bez ohledu na stáří."
 err_releases = "Zadejte celé číslo od 0 do 1 000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Čtení a nahrávání ladicích souborů"
+scope_help = "Čte vše a nahrává ladicí soubory, ale nic jiného nemění"
 
 [releases]
 tab = "Verze"
@@ -606,11 +609,6 @@ rule_count.other = "Používá ho {n} pravidel upozornění"
 language = "Jazyk zpráv"
 language_help = "Upozornění do tohoto kanálu se píší v tomto jazyce."
 language_default = "Jazyk instance ({name})"
-kv_name = "Název hlavičky"
-kv_value = "Hodnota"
-kv_value_aria = "Hodnota hlavičky"
-kv_remove = "Odebrat hlavičku"
-kv_add = "Přidat hlavičku"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -658,7 +656,6 @@ period_yesterday = "Včera"
 period_7d = "7 dní"
 period_30d = "30 dní"
 period_custom = "Vlastní"
-period_last_days = "Posledních {n} dní"
 from = "Od"
 to = "Do"
 custom_help = "Celé dny v UTC, nejvýše 400."
@@ -853,7 +850,7 @@ subtitle = "Vítejte zpět. Přihlaste se a podívejte se na své projekty a jej
 
 [setup]
 site_name_placeholder = "Chyby Acme…"
-tz_after = "."
+tz_after = ". Změnit to lze v Nastavení."
 
 [users]
 roles_help = "Čtenáři se mohou dívat, ale nic neměnit. Editoři spravují projekty, klíče, problémy, upozornění a kanály oznámení. Správci mohou všechno, včetně uživatelů."
@@ -868,3 +865,10 @@ setup_token_required = "Tato instance vyžaduje token nastavení. Otevřete /set
 
 [error]
 back = "Zpět na projekty"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Jak se tato instance jmenuje, kde je dostupná a v jakém časovém pásmu ukazuje čas."
+base_url_help = "Adresa, na které tuto instanci najdou SDK i lidé: používá se v DSN a v odkazech v upozorněních. Je-li na serveru nastavena proměnná KK_PUBLIC_URL, při každém spuštění tuto hodnotu nahradí."

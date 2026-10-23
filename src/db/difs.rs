@@ -1,7 +1,8 @@
-//! `dif_files` (debug information files) and `token_grants` (what an API
-//! token may do beyond the kit's read/write scope).
+//! `dif_files` (debug information files), and the API tokens that may
+//! upload them (the kit's `difs:write` token scope).
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use vole_kit::db::api_tokens::{self, ApiToken};
 
 /// One stored object: a debug id and architecture of an uploaded file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,9 +44,6 @@ pub struct NewDif {
     pub symcache_size: i64,
     pub sha1: String,
 }
-
-/// The scope that lets a token upload debug files.
-pub const DIFS_WRITE: &str = "difs:write";
 
 const COLUMNS: &str = "id, project_id, debug_id, code_id, object_name, arch, kind, features, size,
      symcache_size, sha1, release, uploaded_at, last_used_at";
@@ -233,53 +231,16 @@ pub fn expired(
     .collect()
 }
 
-/// Whether token `token_id` has Kestrel's `scope`.
-pub fn token_has(c: &Connection, token_id: i64, scope: &str) -> rusqlite::Result<bool> {
-    c.query_row(
-        "SELECT EXISTS (SELECT 1 FROM token_grants WHERE token_id = ?1 AND scope = ?2)",
-        params![token_id, scope],
-        |r| r.get(0),
-    )
-}
-
-pub fn grant(c: &Connection, token_id: i64, scope: &str) -> rusqlite::Result<()> {
-    c.execute(
-        "INSERT OR IGNORE INTO token_grants (token_id, scope) VALUES (?1, ?2)",
-        params![token_id, scope],
-    )?;
-    Ok(())
-}
-
-/// A token with a Kestrel grant, for the Debug files page.
-#[derive(Debug, Clone)]
-pub struct GrantedToken {
-    pub id: i64,
-    pub name: String,
-    pub prefix: String,
-    pub username: String,
-    pub created_at: String,
-    pub last_used_at: Option<String>,
-    pub expires_at: Option<String>,
-}
-
-/// The tokens that may upload debug files: `user_id`'s, or everyone's.
-pub fn upload_tokens(c: &Connection, user_id: Option<i64>) -> rusqlite::Result<Vec<GrantedToken>> {
-    c.prepare(
-        "SELECT t.id, t.name, t.prefix, u.username, t.created_at, t.last_used_at, t.expires_at
-         FROM token_grants g JOIN api_tokens t ON t.id = g.token_id JOIN users u ON u.id = t.user_id
-         WHERE g.scope = 'difs:write' AND (?1 IS NULL OR t.user_id = ?1)
-         ORDER BY t.created_at DESC, t.id DESC",
-    )?
-    .query_map([user_id], |r| {
-        Ok(GrantedToken {
-            id: r.get(0)?,
-            name: r.get(1)?,
-            prefix: r.get(2)?,
-            username: r.get(3)?,
-            created_at: r.get(4)?,
-            last_used_at: r.get(5)?,
-            expires_at: r.get(6)?,
-        })
-    })?
-    .collect()
+/// The tokens with the `difs:write` scope, newest first: `user_id`'s, or
+/// everyone's.
+pub fn upload_tokens(c: &Connection, user_id: Option<i64>) -> rusqlite::Result<Vec<ApiToken>> {
+    let mut tokens = Vec::new();
+    for id in api_tokens::with_scope(c, crate::product::DIFS_WRITE)? {
+        if let Some(token) = api_tokens::get(c, id)?
+            && user_id.is_none_or(|u| u == token.user_id)
+        {
+            tokens.push(token);
+        }
+    }
+    Ok(tokens)
 }

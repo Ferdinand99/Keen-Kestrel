@@ -298,42 +298,25 @@ pub fn digest(entries: &[(String, Value)], base_url: Option<&str>) -> Alert {
     }
 }
 
-/// The message "Send test" sends.
+/// The message "Send test" sends: the kit's test alert in Kestrel's words,
+/// linking to the projects (or saying how to get links).
 pub fn test(base_url: Option<&str>) -> Alert {
-    let kind = AlertKind::Test;
-    let lvl = kind.level();
-    let title = i18n::tf("alert_msg.test_title", &[("product", crate::product::NAME)]);
-    let body = i18n::t("alert_msg.test_body").to_string();
     let url = link(base_url, "/projects");
-    let mut facts = Vec::new();
-    if url.is_none() {
-        facts.push((
+    let no_link = url.is_none();
+    let mut alert = Alert::test(
+        i18n::tf("alert_msg.test_title", &[("product", crate::product::NAME)]),
+        i18n::t("alert_msg.test_body"),
+        kind_label("test"),
+        i18n::t("alert_msg.view_projects"),
+        url,
+    );
+    if no_link {
+        alert.facts.push((
             i18n::t("alert_msg.fact_link").to_string(),
             i18n::t("alert_msg.no_link").to_string(),
         ));
     }
-    Alert {
-        kind,
-        event: "test".into(),
-        event_label: kind_label("test").to_string(),
-        status: "test".into(),
-        level: lvl,
-        colour: lvl.colour(),
-        emoji: kind.emoji().to_string(),
-        title: title.clone(),
-        detail: Some(body.clone()),
-        facts,
-        link_label: i18n::t("alert_msg.view_projects").to_string(),
-        subject_id: None,
-        subject: title,
-        subject_type: String::new(),
-        target: String::new(),
-        message: Some(body),
-        duration: None,
-        expires_in_days: None,
-        url,
-        occurred_at: OffsetDateTime::now_utc(),
-    }
+    alert
 }
 
 #[cfg(test)]

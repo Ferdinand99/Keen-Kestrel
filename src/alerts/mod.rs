@@ -226,12 +226,8 @@ impl Alerts {
         let core = &self.inner.core;
         let lang = channel_lang(core, language).await;
         let base = core.base_url().await;
-        let http = core.http.clone();
-        let kind = kind.to_string();
-        let config = config.clone();
-        vole_kit::i18n::scope(lang, async move {
-            let alert = message::test(base.as_deref());
-            vole_kit::notify::send_config(&http, &kind, &config, &alert).await
+        vole_kit::notify::send_in(&core.http, kind, config, lang, || {
+            message::test(base.as_deref())
         })
         .await
     }

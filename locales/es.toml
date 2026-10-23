@@ -426,6 +426,9 @@ retention_releases = "Archivos de depuración de versiones recientes"
 retention_releases_unit = "versiones"
 retention_releases_help = "Los archivos de depuración que usan este número de las versiones más recientes se conservan, sea cual sea su antigüedad."
 err_releases = "Introduce un número entero del 0 al 1000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Leer y subir archivos de depuración"
+scope_help = "Lee todo y sube archivos de depuración, pero no cambia nada más"
 
 [releases]
 tab = "Versiones"
@@ -585,11 +588,6 @@ rule_count.other = "Lo usan {n} reglas de alerta"
 language = "Idioma de los mensajes"
 language_help = "Las alertas para este canal se escriben en este idioma."
 language_default = "El idioma de la instancia ({name})"
-kv_name = "Nombre de la cabecera"
-kv_value = "Valor"
-kv_value_aria = "Valor de la cabecera"
-kv_remove = "Quitar cabecera"
-kv_add = "Añadir cabecera"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -635,7 +633,6 @@ period_yesterday = "Ayer"
 period_7d = "7 días"
 period_30d = "30 días"
 period_custom = "Personalizado"
-period_last_days = "Últimos {n} días"
 from = "Desde"
 to = "Hasta"
 custom_help = "Días completos en UTC, como máximo 400."
@@ -829,7 +826,7 @@ subtitle = "Te damos la bienvenida. Inicia sesión para ver tus proyectos y sus 
 
 [setup]
 site_name_placeholder = "Errores de Acme…"
-tz_after = "."
+tz_after = ". Se puede cambiar en Ajustes."
 
 [users]
 roles_help = "Los lectores pueden mirar, pero no cambiar nada. Los editores gestionan proyectos, claves, problemas, alertas y canales de notificaciones. Los administradores pueden hacerlo todo, incluidos los usuarios."
@@ -844,3 +841,10 @@ setup_token_required = "Esta instancia necesita un token de configuración. Abre
 
 [error]
 back = "Volver a proyectos"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Cómo se llama esta instancia, dónde se accede a ella y en qué zona horaria muestra las horas."
+base_url_help = "La dirección en la que los SDK y las personas acceden a esta instancia: se usa en los DSN y en los enlaces de las alertas. Si KK_PUBLIC_URL está definida en el servidor, sustituye este valor en cada arranque."

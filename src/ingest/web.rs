@@ -32,7 +32,6 @@ use serde_json::{Map, Value, json};
 use vole_kit::auth::guard::PeerAddr;
 use vole_kit::auth::session;
 
-use super::limit::retry_secs;
 use super::{Cors, Ingest, Reject, auth, body, cors_headers};
 use crate::analytics::{self, PAGEVIEW, WebEvent, clean, ua};
 use crate::writer::Job;
@@ -149,18 +148,7 @@ impl Ingest {
         let inner = &self.inner;
         let now = Instant::now();
         let ip = session::client_ip(headers, peer, session::trust_proxy());
-        let per_ip = inner.settings.ip_rate_limit_per_minute;
-        if per_ip > 0
-            && let Some(ip) = ip
-        {
-            inner
-                .ip_buckets
-                .take(&ip, per_ip, now)
-                .map_err(|wait| Reject::RateLimited {
-                    secs: retry_secs(wait),
-                    scope: "ip",
-                })?;
-        }
+        inner.take_ip(ip, "ip", now)?;
         if gpc(headers) {
             return Ok(());
         }
@@ -228,16 +216,7 @@ impl Ingest {
                 }
             }
         }
-        if let Some(limit) = key.rate_limit_per_minute {
-            let limit = u32::try_from(limit).unwrap_or(u32::MAX);
-            inner
-                .key_buckets
-                .take(&key.id, limit, now)
-                .map_err(|wait| Reject::RateLimited {
-                    secs: retry_secs(wait),
-                    scope: "key",
-                })?;
-        }
+        inner.take_key(key.id, key.rate_limit_per_minute, now)?;
 
         let name = match str_field(&fields, "n", "name").map(str::trim) {
             None | Some(PAGEVIEW) | Some("") => PAGEVIEW.to_string(),

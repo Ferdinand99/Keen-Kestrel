@@ -22,6 +22,7 @@
 pub mod app;
 pub mod clean;
 pub mod kjs;
+pub mod live;
 pub mod pages;
 pub mod query;
 pub mod rollup;

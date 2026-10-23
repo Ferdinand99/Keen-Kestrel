@@ -410,6 +410,9 @@ retention_releases = "Son sürümlerin hata ayıklama dosyaları"
 retention_releases_unit = "sürüm"
 retention_releases_help = "En yeni bu kadar sürümün kullandığı hata ayıklama dosyaları, ne kadar eski olursa olsun kalır."
 err_releases = "0 ile 1.000 arasında bir tam sayı girin."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Okuma ve hata ayıklama dosyası yükleme"
+scope_help = "Her şeyi okur ve hata ayıklama dosyaları yükler, ama başka hiçbir şeyi değiştirmez"
 
 [releases]
 tab = "Sürümler"
@@ -564,11 +567,6 @@ rule_count.other = "{n} uyarı kuralı kullanıyor"
 language = "Mesaj dili"
 language_help = "Bu kanala giden uyarılar bu dilde yazılır."
 language_default = "Bu örneğin dili ({name})"
-kv_name = "Başlık adı"
-kv_value = "Değer"
-kv_value_aria = "Başlık değeri"
-kv_remove = "Başlığı kaldır"
-kv_add = "Başlık ekle"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -612,7 +610,6 @@ period_yesterday = "Dün"
 period_7d = "7 gün"
 period_30d = "30 gün"
 period_custom = "Özel"
-period_last_days = "Son {n} gün"
 from = "Başlangıç"
 to = "Bitiş"
 custom_help = "UTC’ye göre tam günler, en fazla 400."
@@ -805,7 +802,7 @@ subtitle = "Tekrar hoş geldiniz. Projelerinizi ve sorunlarını görmek için g
 
 [setup]
 site_name_placeholder = "Acme hataları…"
-tz_after = "."
+tz_after = ". Ayarlar’dan değiştirilebilir."
 
 [users]
 roles_help = "Görüntüleyiciler bakabilir ama hiçbir şeyi değiştiremez. Editörler projeleri, anahtarları, sorunları, uyarıları ve bildirim kanallarını yönetir. Yöneticiler kullanıcılar dahil her şeyi yapabilir."
@@ -820,3 +817,10 @@ setup_token_required = "Bu örnek bir kurulum belirteci gerektiriyor. /setup?tok
 
 [error]
 back = "Projelere dön"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Bu örneğin adı, hangi adresten erişildiği ve saatleri hangi saat diliminde gösterdiği."
+base_url_help = "SDK’ların ve kişilerin bu örneğe ulaştığı adres: DSN’lerde ve uyarılardaki bağlantılarda kullanılır. Sunucuda KK_PUBLIC_URL ayarlıysa her başlatmada bu değerin yerini alır."

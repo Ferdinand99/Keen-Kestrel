@@ -44,6 +44,10 @@ const MIGRATION_FILES: &[(&str, &str)] = &[
         "0007_app_analytics.sql",
         include_str!("../../migrations/0007_app_analytics.sql"),
     ),
+    (
+        "0008_token_scopes.sql",
+        include_str!("../../migrations/0008_token_scopes.sql"),
+    ),
 ];
 
 fn migrations() -> Vec<(String, String)> {
@@ -57,7 +61,9 @@ fn no_fixups(_: &mut Connection) -> Result<(), MigrationError> {
     Ok(())
 }
 
-/// The kit's core set first, then Kestrel's (a fresh product: nothing to adopt).
+/// The kit's core set first (with `api_token_scopes`, which the upload
+/// tokens' `difs:write` scope needs), then Kestrel's (a fresh product:
+/// nothing to adopt).
 pub static MIGRATIONS: MigrationSet = MigrationSet {
     core: migrate::CORE,
     adopt_core: None,

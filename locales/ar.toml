@@ -474,6 +474,9 @@ retention_releases = "ملفات تصحيح الأخطاء للإصدارات ا
 retention_releases_unit = "إصدارات"
 retention_releases_help = "تبقى ملفات تصحيح الأخطاء التي يستخدمها هذا العدد من أحدث الإصدارات، مهما كان عمرها."
 err_releases = "أدخل عددًا صحيحًا من 0 إلى 1,000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "قراءة ورفع ملفات تصحيح الأخطاء"
+scope_help = "يقرأ كل شيء ويرفع ملفات تصحيح الأخطاء، ولا يغيّر أي شيء آخر"
 
 [releases]
 tab = "الإصدارات"
@@ -648,11 +651,6 @@ rule_count.other = "مستخدمة في {n} قاعدة تنبيه"
 language = "لغة الرسائل"
 language_help = "تُكتب التنبيهات المرسلة إلى هذه القناة بهذه اللغة."
 language_default = "لغة التثبيت ({name})"
-kv_name = "اسم الترويسة"
-kv_value = "القيمة"
-kv_value_aria = "قيمة الترويسة"
-kv_remove = "إزالة الترويسة"
-kv_add = "إضافة ترويسة"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -704,7 +702,6 @@ period_yesterday = "أمس"
 period_7d = "7 أيام"
 period_30d = "30 يومًا"
 period_custom = "مخصّصة"
-period_last_days = "آخر {n} يوم"
 from = "من"
 to = "إلى"
 custom_help = "أيام كاملة بتوقيت UTC، بحد أقصى 400 يوم."
@@ -901,7 +898,7 @@ subtitle = "مرحبًا بعودتك. سجّل الدخول لعرض مشاري
 
 [setup]
 site_name_placeholder = "أخطاء Acme…"
-tz_after = "."
+tz_after = ". يمكن تغيير ذلك من الإعدادات."
 
 [users]
 roles_help = "المشاهدون يستطيعون الاطلاع دون تغيير أي شيء. المحررون يديرون المشاريع والمفاتيح والمشكلات والتنبيهات وقنوات الإشعارات. المسؤولون يستطيعون كل شيء، بما فيه المستخدمون."
@@ -916,3 +913,10 @@ setup_token_required = "يحتاج هذا التثبيت إلى رمز إعدا�
 
 [error]
 back = "العودة إلى المشاريع"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "كيف يسمّي هذا التثبيت نفسه، وأين يمكن الوصول إليه، وبأي منطقة زمنية يعرض الأوقات."
+base_url_help = "العنوان الذي تصل منه حِزم SDK والأشخاص إلى هذا التثبيت: يُستخدم في DSN وفي روابط التنبيهات. إذا كان KK_PUBLIC_URL مضبوطًا على الخادم، فإنه يحل محل هذه القيمة عند كل تشغيل."

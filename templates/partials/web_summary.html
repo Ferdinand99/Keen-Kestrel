@@ -17,20 +17,6 @@
       <h2 class="card-title" id="web-chart-title">{{ tr("web.chart_title") }}</h2>
       <p class="card-sub">{{ s.period_label }}</p>
     </div>
-    <div class="legend" aria-hidden="true">
-      <span class="legend-item"><span class="legend-swatch"></span>{{ tr("web.visitors") }}</span>
-      <span class="legend-item"><span class="legend-swatch" style="--status: var(--muted)"></span>{{ tr("web.pageviews") }}</span>
-    </div>
   </div>
-  <div class="chart">
-    <svg viewBox="0 0 600 120" preserveAspectRatio="none" role="img" aria-label="{{ s.chart.label }}">
-      <line class="chart-grid" x1="0" x2="600" y1="60" y2="60"></line>
-      <line class="chart-grid" x1="0" x2="600" y1="120" y2="120"></line>
-      <polyline class="chart-line" style="--chart: var(--muted)" points="{{ s.chart.pageviews_line }}"></polyline>
-      <polygon class="chart-area" points="{{ s.chart.visitors_area }}"></polygon>
-      <polyline class="chart-line" points="{{ s.chart.visitors_line }}"></polyline>
-    </svg>
-    <div class="chart-scale" aria-hidden="true"><span><bdi>{{ s.chart.max_label }}</bdi></span><span><bdi>{{ num(0) }}</bdi></span></div>
-  </div>
-  <div class="chart-axis" aria-hidden="true"><span>{{ s.chart.start_label }}</span><span>{{ s.chart.end_label }}</span></div>
+  {{ m::line_chart(s.chart) }}
 </section>

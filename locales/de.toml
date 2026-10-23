@@ -410,6 +410,9 @@ retention_releases = "Debug-Dateien aktueller Releases"
 retention_releases_unit = "Releases"
 retention_releases_help = "Debug-Dateien, die von so vielen der neuesten Releases verwendet werden, bleiben erhalten, egal wie alt sie sind."
 err_releases = "Gib eine ganze Zahl von 0 bis 1.000 ein."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Lesen und Debug-Dateien hochladen"
+scope_help = "Liest alles und lädt Debug-Dateien hoch, ändert aber sonst nichts"
 
 [releases]
 tab = "Releases"
@@ -564,11 +567,6 @@ rule_count.other = "Von {n} Alarmregeln verwendet"
 language = "Sprache der Nachrichten"
 language_help = "Alarme an diesen Kanal werden in dieser Sprache geschrieben."
 language_default = "Sprache der Instanz ({name})"
-kv_name = "Header-Name"
-kv_value = "Wert"
-kv_value_aria = "Header-Wert"
-kv_remove = "Header entfernen"
-kv_add = "Header hinzufügen"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -612,7 +610,6 @@ period_yesterday = "Gestern"
 period_7d = "7 Tage"
 period_30d = "30 Tage"
 period_custom = "Individuell"
-period_last_days = "Letzte {n} Tage"
 from = "Von"
 to = "Bis"
 custom_help = "Ganze Tage in UTC, höchstens 400."
@@ -805,7 +802,7 @@ subtitle = "Willkommen zurück. Melde dich an, um deine Projekte und ihre Proble
 
 [setup]
 site_name_placeholder = "Acme-Fehler …"
-tz_after = "."
+tz_after = ". Das lässt sich in den Einstellungen ändern."
 
 [users]
 roles_help = "Betrachter können nur ansehen, aber nichts ändern. Bearbeiter verwalten Projekte, Schlüssel, Probleme, Alarme und Benachrichtigungskanäle. Admins können alles, auch Benutzer."
@@ -820,3 +817,10 @@ setup_token_required = "Diese Instanz benötigt ein Setup-Token. Öffne /setup?t
 
 [error]
 back = "Zurück zu den Projekten"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "Wie diese Instanz heißt, wo sie erreichbar ist und in welcher Zeitzone sie Zeiten zeigt."
+base_url_help = "Unter dieser Adresse erreichen SDKs und Menschen diese Instanz: Sie steht in DSNs und in Links in Alarmen. Ist KK_PUBLIC_URL auf dem Server gesetzt, ersetzt es diesen Wert bei jedem Start."

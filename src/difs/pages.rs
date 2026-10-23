@@ -78,20 +78,6 @@ struct DebugFilesTemplate {
     tokens_href: &'static str,
 }
 
-/// `1.6 MB`, `840 KB`, `512 B`.
-pub fn size_label(bytes: i64) -> String {
-    let b = bytes.max(0) as f64;
-    if b >= 1024.0 * 1024.0 * 1024.0 {
-        format!("{} GB", i18n::fmt_dec(b / (1024.0 * 1024.0 * 1024.0), 1))
-    } else if b >= 1024.0 * 1024.0 {
-        format!("{} MB", i18n::fmt_dec(b / (1024.0 * 1024.0), 1))
-    } else if b >= 1024.0 {
-        format!("{} KB", i18n::fmt_dec(b / 1024.0, 0))
-    } else {
-        format!("{} B", i18n::fmt_int(bytes.max(0)))
-    }
-}
-
 /// The ways to upload, with this instance's address and the project.
 pub fn recipes(base: &str, project: &Project) -> Vec<Recipe> {
     let slug = &project.slug;
@@ -164,7 +150,7 @@ fn rows(files: Vec<db::DifFile>) -> Vec<DifRow> {
         .into_iter()
         .map(|d| DifRow {
             has_debug_info: d.has_debug_info(),
-            size: size_label(d.size),
+            size: i18n::fmt_bytes(u64::try_from(d.size).unwrap_or(0)),
             id: d.id,
             debug_id: d.debug_id,
             object_name: d.object_name,
@@ -235,8 +221,8 @@ struct TokenForm {
     name: String,
 }
 
-/// Makes an API token that may upload debug files (and only read
-/// otherwise), and shows it once.
+/// Makes an API token with the `difs:write` scope (it uploads debug files
+/// and only reads otherwise), and shows it once.
 async fn create_token(
     State(core): State<Core>,
     user: CurrentUser,
@@ -266,7 +252,7 @@ async fn create_token(
             TokenScope::Read,
             None,
         )?;
-        db::grant(&tx, token_id, db::DIFS_WRITE)?;
+        vole_kit::db::api_tokens::add_scope(&tx, token_id, crate::product::DIFS_WRITE)?;
         tx.commit()
     })
     .await?;

@@ -394,6 +394,9 @@ retention_releases = "최근 릴리스의 디버그 파일"
 retention_releases_unit = "릴리스"
 retention_releases_help = "최신 릴리스 중 이 수만큼의 릴리스에서 사용된 디버그 파일은 오래되었더라도 유지돼요."
 err_releases = "0~1,000 사이의 정수를 입력하세요."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "읽기 및 디버그 파일 업로드"
+scope_help = "모든 것을 읽고 디버그 파일을 업로드하지만 그 밖에는 아무것도 바꾸지 않아요"
 
 [releases]
 tab = "릴리스"
@@ -543,11 +546,6 @@ rule_count.other = "알림 규칙 {n}개에서 사용 중"
 language = "메시지 언어"
 language_help = "이 채널로 보내는 알림은 이 언어로 작성돼요."
 language_default = "인스턴스 언어({name})"
-kv_name = "헤더 이름"
-kv_value = "값"
-kv_value_aria = "헤더 값"
-kv_remove = "헤더 삭제"
-kv_add = "헤더 추가"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -589,7 +587,6 @@ period_yesterday = "어제"
 period_7d = "7일"
 period_30d = "30일"
 period_custom = "사용자 지정"
-period_last_days = "최근 {n}일"
 from = "시작일"
 to = "종료일"
 custom_help = "UTC 기준 하루 단위이며, 최대 400일이에요."
@@ -781,7 +778,7 @@ subtitle = "다시 오신 것을 환영해요. 로그인하고 프로젝트와 �
 
 [setup]
 site_name_placeholder = "Acme 오류…"
-tz_after = "."
+tz_after = ". 설정에서 변경할 수 있어요."
 
 [users]
 roles_help = "보기 전용은 확인만 할 수 있어요. 편집자는 프로젝트, 키, 이슈, 알림, 알림 채널을 관리해요. 관리자는 사용자를 포함해 모든 것을 할 수 있어요."
@@ -796,3 +793,10 @@ setup_token_required = "이 인스턴스에는 설정 토큰이 필요해요. �
 
 [error]
 back = "프로젝트로 돌아가기"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "이 인스턴스의 이름, 접속 주소, 시간을 표시하는 시간대예요."
+base_url_help = "SDK와 사용자가 이 인스턴스에 접속하는 주소예요. DSN과 알림 링크에 쓰여요. 서버에 KK_PUBLIC_URL이 설정되어 있으면 시작할 때마다 이 값을 대신해요."

@@ -412,6 +412,9 @@ retention_releases = "Debug files of recent releases"
 retention_releases_unit = "releases"
 retention_releases_help = "Debug files used by this many of the newest releases stay, however old they are."
 err_releases = "Enter a whole number from 0 to 1,000."
+# The difs:write API token scope (KitConfig::token_scopes).
+scope = "Read and upload debug files"
+scope_help = "Reads everything and uploads debug files, but changes nothing else"
 
 [releases]
 tab = "Releases"
@@ -566,11 +569,6 @@ rule_count.other = "Used by {n} alert rules"
 language = "Message language"
 language_help = "Alerts to this channel are written in this language."
 language_default = "The instance’s language ({name})"
-kv_name = "Header name"
-kv_value = "Value"
-kv_value_aria = "Header value"
-kv_remove = "Remove header"
-kv_add = "Add header"
 
 # Alert messages, written in the channel's language.
 [alert_msg]
@@ -614,7 +612,6 @@ period_yesterday = "Yesterday"
 period_7d = "7 days"
 period_30d = "30 days"
 period_custom = "Custom"
-period_last_days = "Last {n} days"
 from = "From"
 to = "To"
 custom_help = "Whole days in UTC, at most 400."
@@ -807,7 +804,7 @@ subtitle = "Welcome back. Log in to see your projects and their issues."
 
 [setup]
 site_name_placeholder = "Acme errors…"
-tz_after = "."
+tz_after = ". You can change this in Settings."
 
 [users]
 roles_help = "Viewers can look but not change anything. Editors manage projects, keys, issues, alerts and notification channels. Admins can do everything, including users."
@@ -822,3 +819,10 @@ setup_token_required = "This instance needs a setup token. Open /setup?token=…
 
 [error]
 back = "Back to projects"
+
+# Texts of the kit's General page
+# (vole_kit::i18n::catalog::GENERAL_PRODUCT_KEYS).
+
+[general]
+sub = "How this instance names itself, where it is reached and how it tells time."
+base_url_help = "Where SDKs and people reach this instance: used in DSNs and in links in alerts. If KK_PUBLIC_URL is set on the server, it replaces this at every start."

@@ -494,10 +494,116 @@ async fn the_public_url_makes_the_dsn() {
         keen_kestrel::dsn::dsn(&base, &key, id),
         format!("https://{key}@errors.example.com/{id}")
     );
-    // Without the setting, it is cleared again.
+    // Without KK_PUBLIC_URL, what was stored (by it or on the General page)
+    // stays.
     let core = keen_kestrel::start(&dir, None).await.unwrap().core;
-    assert_eq!(core.base_url().await, None);
+    assert_eq!(
+        core.base_url().await.as_deref(),
+        Some("https://errors.example.com")
+    );
+    // A new KK_PUBLIC_URL replaces it at start-up.
+    let core = keen_kestrel::start(&dir, Some("https://kestrel.example.org"))
+        .await
+        .unwrap()
+        .core;
+    assert_eq!(
+        core.base_url().await.as_deref(),
+        Some("https://kestrel.example.org")
+    );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The kit's General page (admins only) with Kestrel's texts: the site
+/// name, the time zone and the public URL the DSNs are made with.
+#[tokio::test]
+async fn the_general_page_sets_the_public_url_of_the_dsns() {
+    // The setup page says where the time zone can be changed.
+    let setup = App::fresh().await.get("/setup").await;
+    assert!(
+        setup.body.contains(". You can change this in Settings."),
+        "{}",
+        setup.body
+    );
+
+    let mut app = App::set_up().await;
+    let page = app.get("/settings/general").await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.body);
+    assert_kestrel_branded("/settings/general", &page.body);
+    for text in [
+        "How this instance names itself, where it is reached and how it tells time.",
+        "used in DSNs and in links in alerts",
+        r#"name="site_name""#,
+        r#"name="base_url""#,
+        r#"name="timezone""#,
+        r#"name="language""#,
+        "Acme errors…",
+    ] {
+        assert!(page.body.contains(text), "{text}\n{}", page.body);
+    }
+
+    let bad = app
+        .post(
+            "/settings/general",
+            &[
+                ("site_name", "Acme errors"),
+                ("base_url", "errors.example.com"),
+                ("timezone", "Europe/Oslo"),
+                ("language", "en"),
+            ],
+        )
+        .await;
+    assert_eq!(bad.status, StatusCode::UNPROCESSABLE_ENTITY, "{}", bad.body);
+    assert_eq!(app.core.base_url().await, None);
+
+    let ok = app
+        .post(
+            "/settings/general",
+            &[
+                ("site_name", "Acme errors"),
+                ("base_url", "https://errors.example.com/"),
+                ("timezone", "Europe/Oslo"),
+                ("language", "en"),
+            ],
+        )
+        .await;
+    assert_eq!(
+        (ok.status, ok.location()),
+        (StatusCode::SEE_OTHER, "/settings/general"),
+        "{}",
+        ok.body
+    );
+    let site = app
+        .core
+        .with_conn(|c| vole_kit::settings::SiteSettings::load(c))
+        .await
+        .unwrap();
+    assert_eq!(site.site_name.as_deref(), Some("Acme errors"));
+    assert_eq!(site.base_url.as_deref(), Some("https://errors.example.com"));
+    assert_eq!(site.timezone.as_deref(), Some("Europe/Oslo"));
+
+    // New DSNs use the public URL instead of the request's address.
+    app.post("/projects", &[("name", "Shop"), ("platform", "python")])
+        .await;
+    let id = app.project_ids().await[0];
+    let settings = app.get(&format!("/projects/{id}/settings")).await.body;
+    assert!(
+        settings.contains(&format!("@errors.example.com/{id}")),
+        "{settings}"
+    );
+    assert!(dsns_in(&settings).is_empty(), "no http:// DSN is left");
+
+    // Admins only.
+    app.user("eve", "editor").await;
+    app.sign_in("eve").await;
+    assert_eq!(
+        app.get("/settings/general").await.status,
+        StatusCode::FORBIDDEN
+    );
+    let res = app
+        .post("/settings/general", &[("site_name", "Theirs")])
+        .await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN);
+    assert_eq!(app.get("/settings").await.location(), "/settings/security");
 }
 
 #[tokio::test]
@@ -795,6 +901,7 @@ async fn every_page_is_branded_kestrel() {
         project.as_str(),
         project_settings.as_str(),
         issues.as_str(),
+        "/settings/general",
         "/settings/security",
         "/settings/users",
         "/settings/tokens",
@@ -815,17 +922,21 @@ async fn every_page_is_branded_kestrel() {
         login.body
     };
     assert!(!login.contains("monitors"));
-    assert_eq!(app.get("/settings").await.location(), "/settings/users");
+    assert_eq!(app.get("/settings").await.location(), "/settings/general");
 
     let docs = app.get("/api-docs").await.body;
     assert!(docs.contains(r#"download="kestrel-openapi.json""#));
     assert!(docs.contains("Bearer kk_…"));
     assert!(docs.contains("/api/v1/projects/{id}/keys"));
     let tabs = app.get("/settings/users").await.body;
-    for tab in ["/settings/users", "/settings/security", "/settings/tokens"] {
+    for tab in [
+        "/settings/general",
+        "/settings/users",
+        "/settings/security",
+        "/settings/tokens",
+    ] {
         assert!(tabs.contains(&format!("href=\"{tab}\"")), "{tab}");
     }
-    assert!(!tabs.contains("/settings/general"));
 
     // Tokens are made with Kestrel's prefix.
     let res = app
@@ -1022,6 +1133,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "analytics_breakdown",
             "analytics_days",
             "analytics_hours",
+            "api_token_scopes",
             "api_tokens",
             "dif_files",
             "environments",
@@ -1045,7 +1157,6 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "releases",
             "schema_migrations",
             "settings",
-            "token_grants",
             "users"
         ]
     );
@@ -1053,13 +1164,15 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
         applied,
         [
             "kit/0001_core.sql",
+            "kit/0002_token_scopes.sql",
             "0001_projects.sql",
             "0002_errors.sql",
             "0003_triage.sql",
             "0004_debug_files.sql",
             "0005_alerts_releases.sql",
             "0006_analytics.sql",
-            "0007_app_analytics.sql"
+            "0007_app_analytics.sql",
+            "0008_token_scopes.sql"
         ]
     );
     assert!(app.dir.join("store.sqlite").exists());

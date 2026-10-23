@@ -45,7 +45,7 @@
         <line class="chart-grid" x1="0" x2="600" y1="60" y2="60"></line>
         <line class="chart-grid" x1="0" x2="600" y1="120" y2="120"></line>
         {%- for l in c.lines.iter().rev() %}
-        <polyline class="chart-line" style="--chart: {{ l.color }}" points="{{ l.points }}"></polyline>
+        <polyline class="chart-line series-{{ l.series }}" points="{{ l.points }}"></polyline>
         {%- endfor %}
       </svg>
       <div class="chart-scale" aria-hidden="true"><span><bdi>{{ c.max_label }}</bdi></span><span><bdi>{{ c.min_label }}</bdi></span></div>
@@ -56,7 +56,7 @@
     <ul class="bars" role="list" aria-label="{{ tr("app.adoption_title") }}">
       {%- for r in a.rows %}
       <li class="bar-row" style="--share: {{ r.width }}">
-        <span class="bar-label"><span class="legend-swatch app-swatch" style="--status: {{ r.color }}" aria-hidden="true"></span>{{ r.label }}</span>
+        <span class="bar-label"><span class="legend-swatch app-swatch series-{{ r.series }}" aria-hidden="true"></span>{{ r.label }}</span>
         <span class="bar-num" aria-label="{{ tr("app.users") }}">{{ r.users }}</span>
         <span class="bar-num" aria-label="{{ tr("app.adoption_share") }}">{{ r.share }}</span>
       </li>

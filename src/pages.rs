@@ -45,7 +45,7 @@ async fn home() -> Redirect {
 /// The settings tab everyone can see.
 async fn settings_home(user: CurrentUser) -> Redirect {
     Redirect::to(if user.is_admin() {
-        "/settings/users"
+        "/settings/general"
     } else {
         "/settings/security"
     })
