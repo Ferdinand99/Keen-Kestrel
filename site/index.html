@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self' 'sha256-WZRJfWvsnNCPcxzZwvyhovnZGqhZaC+8gPGPRbx6wTk='; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'self'; form-action 'none'"
+      content="default-src 'none'; script-src 'self' 'sha256-WZRJfWvsnNCPcxzZwvyhovnZGqhZaC+8gPGPRbx6wTk=' https://kestrel.hedgerow.tools; style-src 'self'; img-src 'self'; font-src 'self'; connect-src https://kestrel.hedgerow.tools; base-uri 'self'; form-action 'none'"
     />
     <title>Keen Kestrel — self-hosted error tracking and privacy-friendly analytics</title>
     <meta
@@ -57,6 +57,7 @@
       }
     </script>
     <script src="app.js" defer></script>
+    <script defer src="https://kestrel.hedgerow.tools/js/k.js" data-key="90daafcccde19016b43c733b040b6863"></script>
   </head>
   <body>
     <svg width="0" height="0" class="vh" aria-hidden="true" focusable="false">
@@ -1068,7 +1069,8 @@ sentry-cli debug-files upload --org any --project notes build/</code></pre>
         </p>
         <p>
           Keen Kestrel is open source under the MIT license and not affiliated with Sentry. This site uses
-          no cookies or analytics and makes no requests to other sites.
+          no cookies. Visits are counted with Keen Kestrel itself, which keeps no IP addresses or lasting
+          identifiers and respects Global Privacy Control.
         </p>
       </div>
     </footer>
