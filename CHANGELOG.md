@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.6.1...v0.6.2) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** move Kestrel's own zip use to zip 9 ([b9bfbed](https://github.com/Ferdinand99/Keen-Kestrel/commit/b9bfbedf8d5a9f80fd824dfbec068ceb7de4c2a0))
+
 ## [0.6.1](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.6.0...v0.6.1) (2026-10-24)
 
 
