@@ -284,6 +284,10 @@ with Vigilant Vole come from vole-kit and follow Vigilant Vole's glossaries. DSN
 - Passkeys (WebAuthn, from vole-kit 0.4) sign in without a password or code; each user adds them under
   **Settings → Security**. They need an HTTPS public URL (`KK_PUBLIC_URL`, or `http://localhost`), which
   sets their relying party; the password (with 2FA) remains the fallback.
+- Notification channel secrets are sealed at rest (vole-kit 0.5, from Kestrel 0.6) with the instance key
+  (`session.key` in the data folder) and opened only to send, test and edit. Older plaintext channels are sealed
+  at the first start. A database copied without `session.key` loses the channel secrets: their edit page asks
+  for them again and nothing is sent until then.
 
 ## 8. Performance targets (2 vCPU / 2 GB)
 

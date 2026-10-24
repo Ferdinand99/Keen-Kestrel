@@ -101,6 +101,15 @@ pub async fn start_with(
         http,
         &product::KIT,
     );
+    // Channels saved before secrets were sealed (vole-kit 0.5) get sealed
+    // now, once; sealed values are left as they are.
+    let key = core.session_key.clone();
+    if let Err(err) = core
+        .with_conn(move |c| vole_kit::notify::sealed::seal_stored(c, &key))
+        .await
+    {
+        tracing::warn!(?err, "couldn't seal the secrets of notification channels");
+    }
     if let Some(url) = public_url.map(str::to_string) {
         core.with_conn(move |c| settings::set(c, settings::BASE_URL, &url))
             .await?;

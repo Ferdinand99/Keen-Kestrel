@@ -6,7 +6,10 @@
 //! Secrets never leave the server: saved secrets render as empty inputs
 //! with a "••••••" placeholder, an empty secret on save keeps the stored
 //! value, and a changed destination needs the secrets typed again (the
-//! kit's `merge_secrets_checked`). The provider picker and form are the
+//! kit's `merge_secrets_checked`). Secrets are stored sealed with the
+//! instance key (`vole_kit::notify::sealed`) and opened to edit and test;
+//! one that no longer opens asks to be entered again. The provider picker
+//! and form are the
 //! kit's (`vole_kit::notify::form` and its `kit/partials/notification_*`
 //! templates); the channel list, its language and the toggles are
 //! Kestrel's.
@@ -26,6 +29,7 @@ use vole_kit::http::{ApiError, ApiResult, HtmlTemplate};
 use vole_kit::i18n::{self, Tr as _};
 use vole_kit::notify::form::{FieldView, OptionView, ProviderGroup, field_views, provider_groups};
 use vole_kit::notify::schema::{self, FieldError, ProviderSchema};
+use vole_kit::notify::sealed::{self, Opened};
 use vole_kit::page::{PageCtx, SettingsTab, TabAccess, flash};
 use vole_kit::state::Core;
 
@@ -386,7 +390,7 @@ async fn create(
         return Ok(HtmlTemplate(FormPartial { form }).into_response());
     }
 
-    let config = parsed.config.to_string();
+    let config = sealed::seal_config(&core.session_key, schema.kind, &parsed.config).to_string();
     let kind = schema.kind;
     let saved_name = name.clone();
     core.with_conn(move |c| db::insert_channel(c, &saved_name, kind, &config, &language))
@@ -423,19 +427,26 @@ async fn show(user: CurrentUser, Path(id): Path<i64>) -> ApiResult<Redirect> {
     Ok(Redirect::to(&format!("/settings/notifications/{id}/edit")))
 }
 
-fn stored_config(channel: &Channel) -> Value {
-    serde_json::from_str(&channel.config).unwrap_or_else(|_| json!({}))
+/// The stored config with its secrets opened; the ones that don't open (the
+/// instance key changed) are left out and named.
+fn opened_config(core: &Core, channel: &Channel) -> Opened {
+    let stored = serde_json::from_str(&channel.config).unwrap_or_else(|_| json!({}));
+    sealed::open_config(&core.session_key, &channel.kind, &stored)
 }
 
-fn edit_form(channel: &Channel, schema: &'static ProviderSchema, rules: i64) -> ChannelForm {
-    let stored = stored_config(channel);
-    let shown = schema::redact(Some(schema), &stored);
+fn edit_form(
+    channel: &Channel,
+    schema: &'static ProviderSchema,
+    rules: i64,
+    opened: &Opened,
+) -> ChannelForm {
+    let shown = schema::redact(Some(schema), &opened.config);
     ChannelForm {
         id: channel.id,
         name: channel.name.clone(),
         active: channel.active,
         rules_label: rules_label(rules),
-        fields: field_views(schema, &shown, &stored, &[], false),
+        fields: field_views(schema, &shown, &opened.config, &opened.errors(), false),
         ..blank_form(schema, &channel.language)
     }
 }
@@ -496,8 +507,24 @@ async fn edit_page(
         return Ok((jar, Redirect::to("/settings/notifications")).into_response());
     };
     let rules = rules_using(&core, id).await?;
-    let form = edit_form(&channel, schema, rules);
+    let form = edit_form(&channel, schema, rules, &opened_config(&core, &channel));
     Ok(render_edit(&core, &user, &jar, form).await.into_response())
+}
+
+/// Secrets that can't be opened and weren't typed again, then the merge's
+/// own re-entry errors (a changed destination).
+fn merge_errors(
+    opened: &Opened,
+    parsed: &schema::ParsedForm,
+    merge: Option<Vec<FieldError>>,
+) -> Option<Vec<FieldError>> {
+    let mut errors = opened.reentry_errors(&parsed.config, &parsed.clear);
+    for (key, msg) in merge.unwrap_or_default() {
+        if !errors.iter().any(|(k, _)| *k == key) {
+            errors.push((key, msg));
+        }
+    }
+    (!errors.is_empty()).then_some(errors)
 }
 
 /// Secret re-entry errors first, then validation errors for other fields.
@@ -528,28 +555,32 @@ async fn update(
     let name = pair(&pairs, "name").unwrap_or_default().trim().to_string();
     let language = language_of(&pairs);
     let parsed = schema::parse_form(schema, &pairs);
-    let stored = stored_config(&channel);
+    let opened = opened_config(&core, &channel);
+    let stored = &opened.config;
     let mut config = parsed.config.clone();
-    let secret_errors =
-        schema::merge_secrets_checked(schema, &mut config, &stored, &parsed.clear).err();
+    let secret_errors = merge_errors(
+        &opened,
+        &parsed,
+        schema::merge_secrets_checked(schema, &mut config, stored, &parsed.clear).err(),
+    );
     let active = pair_flag(&pairs, "active");
 
     let name_error = validate_name(&name);
     let field_errors = combine_errors(secret_errors, schema::validate(schema, &config).err());
     if name_error.is_some() || !field_errors.is_empty() {
         let rules = rules_using(&core, id).await?;
-        let mut form = edit_form(&channel, schema, rules);
+        let mut form = edit_form(&channel, schema, rules, &opened);
         form.name = name;
         form.name_error = name_error.unwrap_or_default();
         form.active = active;
         form.languages = language_options(&language);
         form.language = language;
-        form.fields = field_views(schema, &parsed.config, &stored, &field_errors, false);
+        form.fields = field_views(schema, &parsed.config, stored, &field_errors, false);
         let (jar, page) = render_edit(&core, &user, &jar, form).await;
         return Ok((StatusCode::UNPROCESSABLE_ENTITY, jar, page).into_response());
     }
 
-    let config = config.to_string();
+    let config = sealed::seal_config(&core.session_key, schema.kind, &config).to_string();
     let saved_name = name.clone();
     core.with_conn(move |c| db::update_channel(c, id, &saved_name, &config, active, &language))
         .await?;
@@ -679,19 +710,28 @@ async fn test_saved(
         let msg = i18n::tf("notif.cant_send", &[("label", &label)]);
         return Ok(([toast(&msg, "error")], StatusCode::OK).into_response());
     };
-    let stored = stored_config(&channel);
+    let opened = opened_config(&core, &channel);
     let (config, language) = if pair(&pairs, "kind").is_some() {
         let parsed = schema::parse_form(schema, &pairs);
-        let mut config = parsed.config;
-        let secret_errors =
-            schema::merge_secrets_checked(schema, &mut config, &stored, &parsed.clear).err();
+        let mut config = parsed.config.clone();
+        let secret_errors = merge_errors(
+            &opened,
+            &parsed,
+            schema::merge_secrets_checked(schema, &mut config, &opened.config, &parsed.clear).err(),
+        );
         let errors = combine_errors(secret_errors, schema::validate(schema, &config).err());
         if !errors.is_empty() {
             return Ok(first_error_toast(schema, &errors));
         }
         (config, language_of(&pairs))
+    } else if !opened.is_readable() {
+        tracing::info!(
+            channel_id = id,
+            "test notification not sent: a secret can't be opened"
+        );
+        return Ok(first_error_toast(schema, &opened.errors()));
     } else {
-        (stored, channel.language.clone())
+        (opened.config, channel.language.clone())
     };
     Ok(run_test(&alerts, schema.kind, &config, &language, &label).await)
 }

@@ -720,7 +720,9 @@ async fn send_one(alerts: &Alerts, o: &Outgoing, base: Option<&str>) -> Result<(
     let core = &alerts.inner.core;
     let lang = channel_lang(core, &channel.language).await;
     let http = core.http.clone();
-    let kit = channel.kit();
+    // Secrets are stored sealed; one that doesn't open (another
+    // `session.key`) fails the delivery with "enter it again".
+    let kit = vole_kit::notify::sealed::open_channel(&core.session_key, &channel.kit())?;
     let entries: Vec<(String, Value)> = o
         .entries
         .iter()
