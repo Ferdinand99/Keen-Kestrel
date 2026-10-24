@@ -4,4 +4,11 @@ ignore = [
     # basic-toml is unmaintained. askama's derive macro uses it at build time to
     # read askama.toml; it never sees untrusted input. Drop when askama moves off it.
     { id = "RUSTSEC-2026-0374", reason = "build-time only, via askama_derive; no untrusted input" },
+    # zip < 9: ZipArchive::extract / ZipStreamReader::extract mishandle symlinks
+    # and SUID bits. Kestrel's own code uses zip 9. zip 7 remains only through
+    # symbolic-debuginfo 13.9 (the newest), which reads source-bundle entries in
+    # memory and never calls extract(). Drop these when symbolic moves to zip 9.
+    { id = "RUSTSEC-2026-0367", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
+    { id = "RUSTSEC-2026-0368", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
+    { id = "RUSTSEC-2026-0369", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
 ]
