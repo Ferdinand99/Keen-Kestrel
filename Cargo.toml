@@ -42,7 +42,7 @@ url = "2.5.8"
 futures-util = "0.3.34"
 # Ingest: request bodies arrive gzip-, deflate-, br- or zstd-compressed;
 # event payloads are kept zstd-compressed in store.sqlite.
-brotli = { version = "8.0.2", default-features = false, features = ["std"] }
+brotli = { version = "9.0.0", default-features = false, features = ["std"] }
 flate2 = "1.1.10"
 zstd = { version = "0.13.3", default-features = false }
 # Grouping: hashes, value normalisation and Swift demangling (the C++
