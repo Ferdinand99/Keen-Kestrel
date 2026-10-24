@@ -44,7 +44,7 @@ futures-util = "0.3.34"
 # event payloads are kept zstd-compressed in store.sqlite.
 brotli = { version = "8.0.2", default-features = false, features = ["std"] }
 flate2 = "1.1.10"
-zstd = { version = "0.13.3", default-features = false }
+zstd = { version = "0.14.3", default-features = false }
 # Grouping: hashes, value normalisation and Swift demangling (the C++
 # demangler builds with the C toolchain the bundled SQLite needs anyway).
 hex = "0.4.3"
