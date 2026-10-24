@@ -8,6 +8,7 @@ mod common;
 use std::time::{Duration, Instant};
 
 use axum::http::StatusCode;
+use axum_extra::extract::cookie::Key;
 use common::{App, Hook, Web, envelope_request, envelope_with, new_id};
 use keen_kestrel::db::alerts::{self as db, RuleInput, RuleKind};
 use serde_json::{Value, json};
@@ -542,7 +543,15 @@ async fn channels_are_managed_with_their_secrets_kept() {
         })
         .await
         .unwrap();
-    assert!(config.contains(&hook.url), "kept: {config}");
+    // Kept, and sealed at rest (vole-kit 0.5).
+    let config: Value = serde_json::from_str(&config).unwrap();
+    assert!(
+        config["url"].as_str().unwrap().starts_with("sealed:v1:"),
+        "{config}"
+    );
+    let key = &app.kestrel.core.session_key;
+    let opened = vole_kit::notify::sealed::open_config(key, "webhook", &config);
+    assert_eq!(opened.config["url"], hook.url.as_str());
 
     // Viewers can't test or delete; editors delete.
     assert_eq!(
@@ -558,6 +567,78 @@ async fn channels_are_managed_with_their_secrets_kept() {
         app.count("SELECT COUNT(*) FROM notification_channels")
             .await,
         0
+    );
+}
+
+/// Channel `id`'s config as stored.
+async fn stored_config(app: &App, id: i64) -> Value {
+    let raw: String = app
+        .kestrel
+        .core
+        .with_conn(move |c| {
+            c.query_row(
+                "SELECT config FROM notification_channels WHERE id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+        })
+        .await
+        .unwrap();
+    serde_json::from_str(&raw).unwrap()
+}
+
+/// vole-kit 0.5: plaintext from an older Kestrel is sealed at the next
+/// start, once; alerts still reach the real URL; a secret sealed with
+/// another instance key asks to be entered again and sends nothing.
+#[tokio::test]
+async fn channel_secrets_are_sealed_at_start_and_opened_to_send() {
+    let app = app().await;
+    let hook = Hook::start().await;
+    let ch = channel(&app, &hook, "Ops hook", "").await;
+    rule(&app, RuleKind::NewIssue, vec![ch], |_| {}).await;
+    drop(keen_kestrel::start(&app.dir, None).await.unwrap());
+    let sealed = stored_config(&app, ch).await;
+    assert!(
+        sealed["url"].as_str().unwrap().starts_with("sealed:v1:"),
+        "{sealed}"
+    );
+    assert_eq!(sealed["method"], "POST", "other settings stay readable");
+    drop(keen_kestrel::start(&app.dir, None).await.unwrap());
+    assert_eq!(
+        stored_config(&app, ch).await,
+        sealed,
+        "a second start changes nothing"
+    );
+
+    send(&app, &event("SealedError")).await;
+    app.flush().await;
+    app.kestrel.alerts.deliver_now().await;
+    let delivered = hook.wait_for(1, 10).await.len();
+    assert!(delivered >= 1);
+
+    // session.key lost: the secret was sealed with a key that is gone.
+    let plain = json!({"url": hook.url, "method": "POST", "content_type": "json"});
+    let lost = vole_kit::notify::sealed::seal_config(&Key::from(&[7u8; 64]), "webhook", &plain);
+    app.exec(format!(
+        "UPDATE notification_channels SET config = '{lost}' WHERE id = {ch}"
+    ))
+    .await;
+    let mut ed = Web::new(&app, "edda", "editor").await;
+    let edit = ed.get(&format!("/settings/notifications/{ch}/edit")).await;
+    assert_eq!(edit.status, StatusCode::OK);
+    assert!(edit.body.contains("instance key changed"), "{}", edit.body);
+    let res = ed
+        .post_with(&format!("/settings/notifications/{ch}/test"), &[], true)
+        .await;
+    assert!(res.header("hx-trigger").contains("instance key changed"));
+    send(&app, &event("LostKeyError")).await;
+    app.flush().await;
+    app.kestrel.alerts.deliver_now().await;
+    assert_eq!(hook.received().len(), delivered, "nothing sent");
+    assert!(
+        app.count("SELECT COUNT(*) FROM alert_log WHERE error LIKE '%instance key changed%'")
+            .await
+            >= 1
     );
 }
 

@@ -58,6 +58,10 @@ Set the address your apps use under **Settings → General** (public URL), or as
 behind HTTPS with `KK_TRUST_PROXY=1` when it's reachable from the internet. Images
 are on GHCR for amd64 and arm64: `ghcr.io/ferdinand99/keen-kestrel:<version>` or `:latest`.
 
+Back up the data folder as a whole. Notification channel secrets are sealed with the instance key in it
+(`session.key`, since 0.6); a copy of the database without that file loses them, and they must be entered again.
+Upgrading to 0.6 seals existing channels at the first start, after a plaintext copy in `backups/`.
+
 ## Planned for v1
 
 | Errors | Analytics |
