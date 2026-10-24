@@ -62,7 +62,7 @@ sha1_smol = "1.0.1"
 # Streams the REST API's multipart uploads to disk (axum's own multipart
 # parser, used directly).
 multer = "3.1.0"
-zip = { version = "7.4.0", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9.1.0", default-features = false, features = ["deflate-flate2"] }
 
 [build-dependencies]
 # Copies the kit's templates into templates/kit/ for askama (build.rs).

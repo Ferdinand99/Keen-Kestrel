@@ -310,7 +310,10 @@ pub fn unpack_zip(zip: &Path, tmp: &Path) -> Result<(Vec<Unpacked>, Vec<String>)
         if !entry.is_file() {
             continue;
         }
-        let name = entry.name().to_string();
+        let name = entry
+            .name()
+            .map_err(|e| DifError::Invalid(format!("a broken zip entry name: {e}")))?
+            .to_string();
         let base = name.rsplit('/').next().unwrap_or(&name);
         if name.starts_with("__MACOSX/") || base.starts_with("._") {
             continue;
