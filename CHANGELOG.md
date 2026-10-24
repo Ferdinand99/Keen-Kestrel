@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.5.0...v0.5.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* passkey button after in-app navigation (vole-kit 0.4.1) ([#22](https://github.com/Ferdinand99/Keen-Kestrel/issues/22)) ([5f13c98](https://github.com/Ferdinand99/Keen-Kestrel/commit/5f13c98db11b6e9db2cffdf92d01091cb5b7e203))
+
 ## [0.5.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.4.0...v0.5.0) (2026-10-23)
 
 
