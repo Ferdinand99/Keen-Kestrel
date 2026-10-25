@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.6.2...v0.7.0) (2026-10-25)
+
+
+### Features
+
+* project groups ([#38](https://github.com/Ferdinand99/Keen-Kestrel/issues/38)) ([5450428](https://github.com/Ferdinand99/Keen-Kestrel/commit/5450428c4a35f1d15cfd99351fa6ce43386ca2bd))
+
 ## [0.6.2](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.6.1...v0.6.2) (2026-10-24)
 
 
