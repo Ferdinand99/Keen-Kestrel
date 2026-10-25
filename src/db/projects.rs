@@ -11,6 +11,8 @@ pub struct Project {
     pub slug: String,
     pub platform: Platform,
     pub created_at: String,
+    /// `project_groups.id`; `None`: not in a group.
+    pub group_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,7 +38,7 @@ pub struct KeyChanges {
     pub allowed_origins: Option<Vec<String>>,
 }
 
-const PROJECT_COLUMNS: &str = "id, name, slug, platform, created_at";
+const PROJECT_COLUMNS: &str = "id, name, slug, platform, created_at, group_id";
 const KEY_COLUMNS: &str =
     "id, project_id, name, public_key, enabled, rate_limit_per_minute, allowed_origins, created_at";
 
@@ -48,6 +50,7 @@ fn project(row: &Row<'_>) -> rusqlite::Result<Project> {
         slug: row.get(2)?,
         platform: Platform::parse(&platform).unwrap_or(Platform::Other),
         created_at: row.get(4)?,
+        group_id: row.get(5)?,
     })
 }
 
@@ -153,6 +156,24 @@ pub fn update(
         "UPDATE projects SET name = ?2, slug = ?3, platform = ?4 WHERE id = ?1",
         params![id, name, slug, platform.as_str()],
     )? > 0)
+}
+
+/// Puts a project in a group (`None`: in none). `false` when there is no
+/// such project. The caller checks that the group exists.
+pub fn set_group(conn: &Connection, id: i64, group_id: Option<i64>) -> rusqlite::Result<bool> {
+    Ok(conn.execute(
+        "UPDATE projects SET group_id = ?2 WHERE id = ?1",
+        params![id, group_id],
+    )? > 0)
+}
+
+/// Unresolved issues per project, for the group summaries: `(project id, count)`.
+pub fn unresolved_counts(conn: &Connection) -> rusqlite::Result<Vec<(i64, i64)>> {
+    conn.prepare(
+        "SELECT project_id, COUNT(*) FROM issues WHERE status = 'unresolved' GROUP BY project_id",
+    )?
+    .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+    .collect()
 }
 
 /// Deletes a project and its keys. `false` when there is no such project.
@@ -298,10 +319,10 @@ mod tests {
     use super::*;
 
     fn conn() -> Connection {
-        let c = Connection::open_in_memory().unwrap();
+        crate::product::install();
+        let mut c = Connection::open_in_memory().unwrap();
         c.execute_batch(vole_kit::db::CONNECTION_PRAGMAS).unwrap();
-        c.execute_batch(include_str!("../../migrations/0001_projects.sql"))
-            .unwrap();
+        vole_kit::db::apply_migrations(&mut c).unwrap();
         c
     }
 

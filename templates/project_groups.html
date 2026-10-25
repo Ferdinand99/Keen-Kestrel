@@ -1,0 +1,101 @@
+{% extends "kit/layout.html" %}
+{% import "kit/macros.html" as m %}
+
+{% block content %}
+{% call m::page_header(tr("groups.title"), tr("groups.sub"), "/projects", tr("projects.title")) %}
+  {%- if ctx.can_edit() && !groups.is_empty() %}
+  <button type="button" class="btn btn-primary" data-sheet-open="#new-group" commandfor="new-group" command="show-modal">{{ m::icon("plus") }}<span>{{ tr("groups.new") }}</span></button>
+  {%- endif %}
+{% endcall %}
+
+{%- if groups.is_empty() %}
+{%- if ctx.can_edit() %}
+<form class="form form-narrow" method="post" action="/projects/groups">
+  <section class="form-section" aria-labelledby="sec-group">
+    <h2 class="form-section-title" id="sec-group">{{ tr("groups.new") }}</h2>
+    <p class="form-section-sub">{{ tr("groups.empty_text") }}</p>
+    <div class="card">
+      {{ m::field_text("name", tr("projects.name"), value=&self.name, placeholder=tr("groups.name_placeholder"), required=true, error=&self.name_error) }}
+    </div>
+  </section>
+  <div class="form-actions">
+    {{ m::button(tr("groups.create")) }}
+  </div>
+</form>
+{%- else %}
+<div class="empty-card">
+  {{ m::empty_state("dashboard", tr("groups.empty_title"), tr("groups.empty_viewer")) }}
+</div>
+{%- endif %}
+{%- else %}
+{%- if !name_error.is_empty() %}
+{{ m::callout("danger", &self.name_error, tr("groups.not_created")) }}
+{%- endif %}
+<ul class="list" role="list">
+  {%- for g in groups %}
+  <li class="list-row list-row-wrap" id="group-{{ g.id }}">
+    <span class="list-icon">{{ m::icon("dashboard") }}</span>
+    <span class="list-main">
+      <span class="list-title list-title-wrap">{{ g.name }}</span>
+      <span class="list-sub">{{ trn("groups.project_count", g.projects) }}</span>
+    </span>
+    {%- if ctx.can_edit() %}
+    <span class="list-trail toolbar">
+      <form method="post" action="/projects/groups/{{ g.id }}/move">
+        <input type="hidden" name="direction" value="up">
+        <button type="submit" class="btn btn-icon btn-plain btn-sm" aria-label="{{ tr1("groups.move_up_named", "name", g.name) }}" data-tip="{{ tr("groups.move_up") }}"{% if g.first %} disabled{% endif %}>{{ m::icon("chevron-up") }}</button>
+      </form>
+      <form method="post" action="/projects/groups/{{ g.id }}/move">
+        <input type="hidden" name="direction" value="down">
+        <button type="submit" class="btn btn-icon btn-plain btn-sm" aria-label="{{ tr1("groups.move_down_named", "name", g.name) }}" data-tip="{{ tr("groups.move_down") }}"{% if g.last %} disabled{% endif %}>{{ m::icon("chevron-down") }}</button>
+      </form>
+      <button type="button" class="btn btn-icon btn-plain btn-sm" data-sheet-open="#rename-group-{{ g.id }}" commandfor="rename-group-{{ g.id }}" command="show-modal" aria-label="{{ tr1("groups.rename_named", "name", g.name) }}" data-tip="{{ tr("groups.rename") }}">{{ m::icon("pencil") }}</button>
+      <form method="post" action="/projects/groups/{{ g.id }}/delete" data-confirm="{{ tr1("groups.delete_q", "name", g.name) }}" data-confirm-message="{{ tr("groups.delete_msg") }}" data-confirm-label="{{ tr("common.delete") }}">
+        <button type="submit" class="btn btn-icon btn-plain btn-sm" aria-label="{{ tr1("groups.delete_named", "name", g.name) }}" data-tip="{{ tr("common.delete") }}">{{ m::icon("trash") }}</button>
+      </form>
+    </span>
+    {%- endif %}
+  </li>
+  {%- endfor %}
+</ul>
+<p class="section-foot">{{ tr("groups.foot") }}</p>
+{%- endif %}
+
+{%- if ctx.can_edit() && !groups.is_empty() %}
+<dialog class="sheet" id="new-group" aria-labelledby="new-group-title">
+  <div class="sheet-grabber" aria-hidden="true"></div>
+  <header class="sheet-head">
+    <h2 class="sheet-title" id="new-group-title">{{ tr("groups.new") }}</h2>
+    <button type="button" class="btn btn-icon btn-plain btn-sm" data-sheet-close commandfor="new-group" command="close" aria-label="{{ tr("common.close") }}">{{ m::icon("x") }}</button>
+  </header>
+  <div class="sheet-body">
+    <form id="new-group-form" class="form" method="post" action="/projects/groups">
+      {{ m::field_text("name", tr("projects.name"), value=&self.name, placeholder=tr("groups.name_placeholder"), required=true, sfx="-new-group") }}
+    </form>
+  </div>
+  <footer class="sheet-foot">
+    <button type="button" class="btn btn-secondary" data-sheet-close commandfor="new-group" command="close">{{ tr("common.cancel") }}</button>
+    <button type="submit" class="btn btn-primary" form="new-group-form">{{ tr("groups.create") }}</button>
+  </footer>
+</dialog>
+
+{%- for g in groups %}
+<dialog class="sheet" id="rename-group-{{ g.id }}" aria-labelledby="rename-group-{{ g.id }}-title">
+  <div class="sheet-grabber" aria-hidden="true"></div>
+  <header class="sheet-head">
+    <h2 class="sheet-title" id="rename-group-{{ g.id }}-title">{{ tr1("groups.rename_named", "name", g.name) }}</h2>
+    <button type="button" class="btn btn-icon btn-plain btn-sm" data-sheet-close commandfor="rename-group-{{ g.id }}" command="close" aria-label="{{ tr("common.close") }}">{{ m::icon("x") }}</button>
+  </header>
+  <div class="sheet-body">
+    <form id="rename-group-{{ g.id }}-form" class="form" method="post" action="/projects/groups/{{ g.id }}">
+      {{ m::field_text("name", tr("projects.name"), value=&g.name, required=true, sfx=&g.dom_sfx) }}
+    </form>
+  </div>
+  <footer class="sheet-foot">
+    <button type="button" class="btn btn-secondary" data-sheet-close commandfor="rename-group-{{ g.id }}" command="close">{{ tr("common.cancel") }}</button>
+    <button type="submit" class="btn btn-primary" form="rename-group-{{ g.id }}-form">{{ tr("groups.save") }}</button>
+  </footer>
+</dialog>
+{%- endfor %}
+{%- endif %}
+{% endblock %}

@@ -37,6 +37,7 @@ use crate::project::{self, Platform};
 
 pub mod analytics;
 pub mod app;
+pub mod groups;
 pub mod issues;
 pub mod releases;
 pub mod rules;
@@ -53,6 +54,15 @@ const PROJECT_EXAMPLE: &str = r#"{
   "name": "Sylo for iOS",
   "slug": "sylo-ios",
   "platform": "apple",
+  "group_id": 2,
+  "created_at": "2026-10-22 08:00:00"
+}"#;
+
+const GROUP_EXAMPLE: &str = r#"{
+  "id": 2,
+  "name": "Sylo",
+  "sort_order": 0,
+  "projects": 3,
   "created_at": "2026-10-22 08:00:00"
 }"#;
 
@@ -254,14 +264,28 @@ pub static ROUTES: &[RouteDoc] = &[
     r("GET", "/api/v1/projects", "viewer", "Projects", "List projects, oldest first.")
         .q(&[LIMIT_Q, CURSOR_Q])
         .res(r#"{"data": [ …project… ], "next_cursor": null}"#),
-    r("POST", "/api/v1/projects", "editor", "Projects", "Create a project. It gets one enabled key (\"Default\"). The slug is made from the name when you leave it out; platform is apple, javascript, rust, python or other (default).")
-        .req(r#"{"name": "Sylo for iOS", "platform": "apple"}"#)
+    r("POST", "/api/v1/projects", "editor", "Projects", "Create a project. It gets one enabled key (\"Default\"). The slug is made from the name when you leave it out; platform is apple, javascript, rust, python or other (default); group_id puts it in a project group (default none).")
+        .req(r#"{"name": "Sylo for iOS", "platform": "apple", "group_id": 2}"#)
         .res(PROJECT_EXAMPLE),
     r("GET", "/api/v1/projects/{id}", "viewer", "Projects", "Get one project.").res(PROJECT_EXAMPLE),
-    r("PATCH", "/api/v1/projects/{id}", "editor", "Projects", "Change a project's name, slug or platform; fields you leave out stay.")
+    r("PATCH", "/api/v1/projects/{id}", "editor", "Projects", "Change a project's name, slug, platform or group (group_id; null takes it out of its group); fields you leave out stay.")
         .req(r#"{"name": "Sylo", "slug": "sylo"}"#)
         .res(PROJECT_EXAMPLE),
     r("DELETE", "/api/v1/projects/{id}", "editor", "Projects", "Delete a project and its keys. Its id is never reused."),
+    // -- Project groups --
+    r("GET", "/api/v1/project-groups", "viewer", "Project groups", "List the project groups in the project list's order (sort_order, then name), each with how many projects it has.")
+        .res(r#"{"data": [ …group… ], "next_cursor": null}"#),
+    r("POST", "/api/v1/project-groups", "editor", "Project groups", "Create a group after the others. Names are 1–80 characters and unique regardless of case; an instance has at most 100 groups.")
+        .req(r#"{"name": "Sylo"}"#)
+        .res(GROUP_EXAMPLE),
+    r("PUT", "/api/v1/project-groups/order", "editor", "Project groups", "Put the groups in this order: ids lists every group exactly once. Answers the groups in their new order.")
+        .req(r#"{"ids": [4, 2, 7]}"#)
+        .res(r#"{"data": [ …group… ], "next_cursor": null}"#),
+    r("GET", "/api/v1/project-groups/{id}", "viewer", "Project groups", "Get one group.").res(GROUP_EXAMPLE),
+    r("PATCH", "/api/v1/project-groups/{id}", "editor", "Project groups", "Rename a group.")
+        .req(r#"{"name": "Sylo apps"}"#)
+        .res(GROUP_EXAMPLE),
+    r("DELETE", "/api/v1/project-groups/{id}", "editor", "Project groups", "Delete a group. Its projects stay, in no group."),
     // -- Keys --
     r("GET", "/api/v1/projects/{id}/keys", "viewer", "Keys", "List a project's DSN keys, oldest first, each with its DSN.")
         .res(r#"{"data": [ …key… ], "next_cursor": null}"#),
@@ -474,6 +498,8 @@ fn markdown_middle(out: &mut String) {
          - A project is one app or website. Its integer `id` is part of every DSN and is never reused.\n\
          - `slug`: lowercase letters, digits and dashes (at most 50), unique; `sentry-cli` can use it as the project.\n\
          - `platform`: `apple`, `javascript`, `rust`, `python` or `other`. It only picks the setup guide shown first.\n\
+         - `group_id`: the project group it's in (`null`: none). Groups are sections of the project list, in their `sort_order` \
+         (then name); a project is in at most one, groups don't nest, and deleting a group leaves its projects in none.\n\
          - A key has a random 32-character hex `public_key` and a `dsn` built from the instance's public URL.\n\
          - `enabled: false` makes the key's DSN refused; `rate_limit_per_minute` (1–1,000,000 or `null`) caps the events it may send; \
          `allowed_origins` lists the browser origins (`https://example.com`, or `*`) that may use it, and an empty list allows any.\n\n\
@@ -568,7 +594,7 @@ pub static DOCS: DocsSpec = DocsSpec {
 const ERROR_CODES: &[ErrorCode] = &[ErrorCode {
     code: "conflict",
     status: 409,
-    when: "another project already uses the slug, or the project already has 20 keys",
+    when: "another project already uses the slug, the project already has 20 keys, another project group has the name, or there are already 100 groups",
     on_page: true,
 }];
 
@@ -585,6 +611,14 @@ pub fn router() -> Router<Core> {
             get(show_project)
                 .patch(update_project)
                 .delete(delete_project),
+        )
+        .route("/project-groups", get(groups::list).post(groups::create))
+        .route("/project-groups/order", axum::routing::put(groups::reorder))
+        .route(
+            "/project-groups/{id}",
+            get(groups::show)
+                .patch(groups::rename)
+                .delete(groups::delete),
         )
         .route("/projects/{id}/keys", get(list_keys).post(create_key))
         .route(
@@ -670,7 +704,7 @@ async fn fallback() -> V1Error {
     V1Error::not_found()
 }
 
-fn require_editor(user: &CurrentUser) -> V1Result<()> {
+pub(crate) fn require_editor(user: &CurrentUser) -> V1Result<()> {
     user.require_editor().map_err(V1Error::from)
 }
 
@@ -685,6 +719,7 @@ pub fn project_json(p: &Project) -> Value {
         "name": p.name,
         "slug": p.slug,
         "platform": p.platform.as_str(),
+        "group_id": p.group_id,
         "created_at": p.created_at,
     })
 }
@@ -758,6 +793,9 @@ struct ProjectInput {
     name: Option<String>,
     slug: Option<String>,
     platform: Option<String>,
+    /// `null` takes the project out of its group; missing keeps it.
+    #[serde(default, deserialize_with = "double_option")]
+    group_id: Option<Option<i64>>,
 }
 
 fn parse_platform(raw: Option<&str>) -> V1Result<Option<Platform>> {
@@ -786,6 +824,7 @@ async fn create_project(
         .as_deref()
         .map(|s| project::check_slug(s).map_err(|k| invalid("slug", k)))
         .transpose()?;
+    let group_id = groups::check_group(&core, input.group_id.flatten()).await?;
     let key_name = i18n::t("keys.default_name");
     let stored = name.clone();
     let created_project = core
@@ -796,6 +835,7 @@ async fn create_project(
                 None => db::free_slug(c, &project::slugify(&stored))?,
             };
             let id = db::insert(c, &stored, &slug, platform, key_name)?;
+            db::set_group(c, id, group_id)?;
             db::get(c, id)
         })
         .await?;
@@ -826,12 +866,17 @@ async fn update_project(
         None => current.slug,
     };
     let platform = parse_platform(input.platform.as_deref())?.unwrap_or(current.platform);
+    let group_id = match input.group_id {
+        Some(g) => groups::check_group(&core, g).await?,
+        None => current.group_id,
+    };
     let updated = core
         .with_conn(move |c| {
             if db::slug_taken(c, &slug, Some(id))? {
                 return Ok(None);
             }
             db::update(c, id, &name, &slug, platform)?;
+            db::set_group(c, id, group_id)?;
             db::get(c, id)
         })
         .await?;

@@ -2,7 +2,7 @@
 //! read and triage errors with an API token. The kit does the protocol,
 //! authentication and rate limit; Kestrel supplies the tools:
 //!
-//! * `list_projects`;
+//! * `list_projects` (with the project groups) and `list_project_groups`;
 //! * `list_issues`: the issue list's search syntax;
 //! * `get_issue`: the issue and its latest event, the stack trace formatted
 //!   for a language model (in-app frames with file:line, the exception
@@ -13,8 +13,10 @@
 //!   values of one dimension) or app analytics (daily, weekly and monthly
 //!   active users, sessions, signals, top signal types, versions and
 //!   devices), never a visitor id or user hash;
-//! * `resolve_issue` and `ignore_issue`, offered only to a read-and-write
-//!   token of an editor or admin.
+//! * `resolve_issue` and `ignore_issue`, and the project groups'
+//!   `create_project_group`, `rename_project_group`, `delete_project_group`,
+//!   `reorder_project_groups` and `set_project_group`, offered only to a
+//!   read-and-write token of an editor or admin.
 //!
 //! Nothing a tool returns holds a secret or user data: event payloads were
 //! scrubbed at ingest, and the user section (keyed hashes) is left out.
@@ -261,6 +263,133 @@ impl Kestrel {
         {
             Ok(after) => text_result(&json!({ "issue": issue_json(&after) })),
             Err(e) => tool_error(format!("Could not change the issue: {e}")),
+        }
+    }
+
+    /// The project group tools that change something.
+    async fn group_change(&self, name: &str, args: Map<String, Value>) -> Value {
+        use crate::api::groups::list_json;
+        use crate::db::groups as db_groups;
+        use crate::groups::{self as groups, GroupError};
+        if !self.can_write {
+            return tool_error(
+                "This token can only read. Changing project groups needs a read-and-write token of an editor or admin.",
+            );
+        }
+        let say = |e: GroupError| tool_error(vole_kit::i18n::t(e.key()));
+        let read_error =
+            |e: vole_kit::http::ApiError| tool_error(format!("Could not change the groups: {e}"));
+        match name {
+            "create_project_group" => {
+                let Some(group_name) = str_arg(&args, "name").map(str::to_string) else {
+                    return tool_error("Give the group a name.");
+                };
+                match self
+                    .core
+                    .with_conn(move |c| groups::create(c, &group_name))
+                    .await
+                {
+                    Ok(Ok(g)) => {
+                        text_result(&json!({ "group": crate::api::groups::group_json(&g, 0) }))
+                    }
+                    Ok(Err(e)) => say(e),
+                    Err(e) => read_error(e),
+                }
+            }
+            "rename_project_group" => {
+                let (Some(id), Some(group_name)) = (
+                    int_arg(&args, "group_id"),
+                    str_arg(&args, "name").map(str::to_string),
+                ) else {
+                    return tool_error(
+                        "Give group_id (from list_project_groups) and the new name.",
+                    );
+                };
+                match self
+                    .core
+                    .with_conn(move |c| groups::rename(c, id, &group_name))
+                    .await
+                {
+                    Ok(Some(Ok(g))) => text_result(
+                        &json!({ "group": {"id": g.id, "name": g.name, "sort_order": g.sort_order} }),
+                    ),
+                    Ok(Some(Err(e))) => say(e),
+                    Ok(None) => {
+                        tool_error(format!("No project group {id}. Use list_project_groups."))
+                    }
+                    Err(e) => read_error(e),
+                }
+            }
+            "delete_project_group" => {
+                let Some(id) = int_arg(&args, "group_id") else {
+                    return tool_error("Give group_id (from list_project_groups).");
+                };
+                match self.core.with_conn(move |c| db_groups::delete(c, id)).await {
+                    Ok(true) => text_result(
+                        &json!({ "deleted": id, "note": "Its projects stay, in no group." }),
+                    ),
+                    Ok(false) => {
+                        tool_error(format!("No project group {id}. Use list_project_groups."))
+                    }
+                    Err(e) => read_error(e),
+                }
+            }
+            "reorder_project_groups" => {
+                let ids: Option<Vec<i64>> = args
+                    .get("ids")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_i64).collect());
+                let Some(ids) = ids else {
+                    return tool_error("Give ids: every group's id, in the new order.");
+                };
+                match self
+                    .core
+                    .with_conn(move |c| {
+                        if !db_groups::set_order(c, &ids)? {
+                            return Ok(None);
+                        }
+                        list_json(c).map(Some)
+                    })
+                    .await
+                {
+                    Ok(Some(list)) => text_result(&json!({ "groups": list })),
+                    Ok(None) => tool_error(vole_kit::i18n::t("groups.err_order")),
+                    Err(e) => read_error(e),
+                }
+            }
+            "set_project_group" => {
+                let project = match self.project(&args).await {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                let group_id = match args.get("group_id") {
+                    None => {
+                        return tool_error("Give group_id: a group's id, or null for no group.");
+                    }
+                    Some(Value::Null) => None,
+                    Some(_) => match int_arg(&args, "group_id") {
+                        Some(id) => Some(id),
+                        None => return tool_error("group_id is a group's id or null."),
+                    },
+                };
+                let pid = project.id;
+                match self
+                    .core
+                    .with_conn(move |c| {
+                        if !groups::exists(c, group_id)? {
+                            return Ok(None);
+                        }
+                        db::set_group(c, pid, group_id)?;
+                        db::get(c, pid)
+                    })
+                    .await
+                {
+                    Ok(Some(p)) => text_result(&json!({ "project": crate::api::project_json(&p) })),
+                    Ok(None) => tool_error(vole_kit::i18n::t("groups.err_unknown")),
+                    Err(e) => read_error(e),
+                }
+            }
+            other => tool_error(format!("Unknown tool {other}.")),
         }
     }
 
@@ -958,7 +1087,8 @@ impl Handler for Kestrel {
     fn instructions(&self) -> String {
         let mut s = String::from(
             "Keen Kestrel is a self-hosted, Sentry-compatible error tracker. Each project is one app or \
-             website with its own DSN. Use list_projects to find a project, list_issues to search its \
+             website with its own DSN. Projects can be in project groups (sections of the \
+             project list; list_project_groups). Use list_projects to find a project, list_issues to search its \
              issues (search syntax: is:unresolved|resolved|ignored|all|new|regressed, level:error, \
              release:1.4, env:production, os:iOS, any tag key:value, free text), get_issue for an \
              issue's latest event with its stack trace (in-app frames, file:line, the exception chain, \
@@ -972,7 +1102,8 @@ impl Handler for Kestrel {
         );
         if self.can_write {
             s.push_str(
-                " resolve_issue and ignore_issue change an issue's status; tell the user what you changed.",
+                " resolve_issue and ignore_issue change an issue's status; create_project_group, rename_project_group, \
+                 delete_project_group, reorder_project_groups and set_project_group manage the project groups. Tell the user what you changed.",
             );
         }
         s
@@ -983,7 +1114,14 @@ impl Handler for Kestrel {
             json!({
                 "name": "list_projects",
                 "title": "List projects",
-                "description": "List every project: id (the number in its DSN), name, slug (for sentry-cli), platform and when it was created.",
+                "description": "List every project: id (the number in its DSN), name, slug (for sentry-cli), platform, group_id (its project group, or null) and when it was created; and the project groups (id, name, sort_order, projects).",
+                "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                "annotations": { "readOnlyHint": true, "openWorldHint": false },
+            }),
+            json!({
+                "name": "list_project_groups",
+                "title": "List project groups",
+                "description": "The project groups (sections of the project list) in their order: id, name, sort_order and how many projects each has. A project is in at most one group; projects without one are \"Not in a group\".",
                 "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
                 "annotations": { "readOnlyHint": true, "openWorldHint": false },
             }),
@@ -1112,6 +1250,70 @@ impl Handler for Kestrel {
                 },
                 "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
             }));
+            let group_id = json!({"type": "integer", "description": "The group's id (from list_project_groups)."});
+            tools.push(json!({
+                "name": "create_project_group",
+                "title": "Create a project group",
+                "description": "Create a project group after the others. Names are 1–80 characters and unique regardless of case.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "name": {"type": "string", "description": "e.g. \"Sylo\"."} },
+                    "required": ["name"],
+                    "additionalProperties": false
+                },
+                "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+            }));
+            tools.push(json!({
+                "name": "rename_project_group",
+                "title": "Rename a project group",
+                "description": "Give a project group a new name.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "group_id": group_id, "name": {"type": "string"} },
+                    "required": ["group_id", "name"],
+                    "additionalProperties": false
+                },
+                "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+            }));
+            tools.push(json!({
+                "name": "delete_project_group",
+                "title": "Delete a project group",
+                "description": "Delete a project group. Its projects are not deleted: they stay, in no group.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "group_id": group_id },
+                    "required": ["group_id"],
+                    "additionalProperties": false
+                },
+                "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false },
+            }));
+            tools.push(json!({
+                "name": "reorder_project_groups",
+                "title": "Reorder project groups",
+                "description": "Put the project groups in a new order on the project list. ids lists every group exactly once.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "ids": {"type": "array", "items": {"type": "integer"}, "description": "Every group's id, first to last."} },
+                    "required": ["ids"],
+                    "additionalProperties": false
+                },
+                "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+            }));
+            tools.push(json!({
+                "name": "set_project_group",
+                "title": "Put a project in a group",
+                "description": "Put a project in a project group, or take it out of its group with group_id null.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "project": project_arg(),
+                        "group_id": {"type": ["integer", "null"], "description": "The group's id (from list_project_groups), or null for no group."}
+                    },
+                    "required": ["project", "group_id"],
+                    "additionalProperties": false
+                },
+                "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+            }));
         }
         tools
     }
@@ -1119,14 +1321,27 @@ impl Handler for Kestrel {
     async fn call_tool(&self, name: &str, args: Map<String, Value>) -> RpcResult {
         match name {
             "list_projects" => {
-                let projects = self
+                let (projects, groups) = self
                     .core
-                    .with_conn(|c| db::list(c))
+                    .with_conn(|c| Ok((db::list(c)?, crate::api::groups::list_json(c)?)))
                     .await
                     .map_err(|e| (-32603, format!("Could not read the projects: {e}")))?;
                 let list: Vec<Value> = projects.iter().map(crate::api::project_json).collect();
-                Ok(text_result(&json!({ "projects": list })))
+                Ok(text_result(&json!({ "projects": list, "groups": groups })))
             }
+            "list_project_groups" => {
+                let groups = self
+                    .core
+                    .with_conn(|c| crate::api::groups::list_json(c))
+                    .await
+                    .map_err(|e| (-32603, format!("Could not read the project groups: {e}")))?;
+                Ok(text_result(&json!({ "groups": groups })))
+            }
+            "create_project_group"
+            | "rename_project_group"
+            | "delete_project_group"
+            | "reorder_project_groups"
+            | "set_project_group" => Ok(self.group_change(name, args).await),
             "list_issues" => Ok(self.list_issues(args).await),
             "get_issue" => Ok(self.get_issue(args).await),
             "release_health" => Ok(self.release_health(args).await),

@@ -3,10 +3,15 @@
 
 {% block content %}
 {% call m::page_header(tr("projects.title"), tr("projects.sub")) %}
-  {%- if ctx.can_edit() && !projects.is_empty() %}{{ m::link_button("/projects/new", tr("projects.new"), "primary", "plus") }}{% endif %}
+  {%- if ctx.can_edit() && !self.is_empty() %}
+  {{ m::link_button("/projects/groups", tr("groups.manage"), "secondary", "dashboard") }}
+  {{ m::link_button("/projects/new", tr("projects.new"), "primary", "plus") }}
+  {%- else if !groups.is_empty() %}
+  {{ m::link_button("/projects/groups", tr("groups.manage"), "secondary", "dashboard") }}
+  {%- endif %}
 {% endcall %}
 
-{% if projects.is_empty() -%}
+{% if self.is_empty() -%}
 <div class="empty-card">
   {%- if ctx.can_edit() %}
   {{ m::empty_state("box", tr("projects.empty_title"), tr("projects.empty_text"), "/projects/new", tr("projects.create_first")) }}
@@ -14,23 +19,56 @@
   {{ m::empty_state("box", tr("projects.empty_title"), tr("projects.empty_viewer")) }}
   {%- endif %}
 </div>
-{%- else -%}
+{%- else if groups.is_empty() -%}
 <ul class="list" role="list">
   {%- for p in projects %}
-  <li>
-    <a class="list-row" href="/projects/{{ p.id }}">
-      <span class="list-icon">{{ m::icon(p.icon) }}</span>
-      <span class="list-main">
-        <span class="list-title list-title-wrap">{{ p.name }}</span>
-        <span class="list-sub">{{ p.platform }} · <span class="mono">{{ p.slug }}</span></span>
-      </span>
-      <span class="list-trail">
-        {%- if p.enabled_keys == 0 %}<span class="pill status-paused hide-sm">{{ tr("keys.none_enabled") }}</span>{% else %}<span class="badge hide-sm">{{ trn("projects.key_count", p.enabled_keys) }}</span>{% endif -%}
-        {{ m::icon("chevron-right", "list-chevron") }}
-      </span>
-    </a>
-  </li>
+  {% include "partials/project_row.html" %}
   {%- endfor %}
 </ul>
+{%- else -%}
+{%- for g in groups %}
+<section class="section" aria-labelledby="group-{{ g.id }}-title" data-project-group="{{ g.id }}">
+  <div class="section-head">
+    <div>
+      <h2 class="section-title" id="group-{{ g.id }}-title">{{ g.name }}</h2>
+      <p class="section-sub">{{ g.summary }}</p>
+    </div>
+    <div class="toolbar">
+      <button type="button" class="btn btn-icon btn-plain btn-sm" data-group-toggle aria-expanded="true" aria-controls="group-{{ g.id }}-list"
+        aria-label="{{ tr1("groups.hide_in", "name", g.name) }}" data-tip="{{ tr("groups.hide") }}"
+        data-label-show="{{ tr1("groups.show_in", "name", g.name) }}" data-label-hide="{{ tr1("groups.hide_in", "name", g.name) }}"
+        data-tip-show="{{ tr("groups.show") }}" data-tip-hide="{{ tr("groups.hide") }}">{{ m::icon("chevron-up") }}</button>
+    </div>
+  </div>
+  <ul class="list" role="list" id="group-{{ g.id }}-list">
+    {%- for p in g.rows %}
+    {% include "partials/project_row.html" %}
+    {%- else %}
+    <li class="list-empty">{{ tr("groups.empty_group") }}</li>
+    {%- endfor %}
+  </ul>
+</section>
+{%- endfor %}
+{%- if !projects.is_empty() %}
+<section class="section" aria-labelledby="ungrouped-title">
+  <div class="section-head">
+    <div>
+      <h2 class="section-title" id="ungrouped-title">{{ tr("groups.not_in_group") }}</h2>
+      <p class="section-sub">{{ trn("groups.project_count", projects.len() as i64) }}</p>
+    </div>
+  </div>
+  <ul class="list" role="list">
+    {%- for p in projects %}
+    {% include "partials/project_row.html" %}
+    {%- endfor %}
+  </ul>
+</section>
+{%- endif %}
+{%- endif %}
+{% endblock %}
+
+{% block scripts %}
+{%- if !groups.is_empty() %}
+<script src="/static/project-groups.js" defer></script>
 {%- endif %}
 {% endblock %}

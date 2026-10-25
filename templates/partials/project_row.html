@@ -1,0 +1,14 @@
+{#- One row of the project list. Expects `p` (pages::ProjectRow). -#}
+  <li>
+    <a class="list-row" href="/projects/{{ p.id }}">
+      <span class="list-icon">{{ m::icon(p.icon) }}</span>
+      <span class="list-main">
+        <span class="list-title list-title-wrap">{{ p.name }}</span>
+        <span class="list-sub">{{ p.platform }} · <span class="mono">{{ p.slug }}</span></span>
+      </span>
+      <span class="list-trail">
+        {%- if p.enabled_keys == 0 %}<span class="pill status-paused hide-sm">{{ tr("keys.none_enabled") }}</span>{% else %}<span class="badge hide-sm">{{ trn("projects.key_count", p.enabled_keys) }}</span>{% endif -%}
+        {{ m::icon("chevron-right", "list-chevron") }}
+      </span>
+    </a>
+  </li>
