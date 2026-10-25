@@ -146,11 +146,36 @@ impl KeyView {
     }
 }
 
+/// A group's section on the project list.
+struct GroupSection {
+    id: i64,
+    name: String,
+    /// "3 projects · 12 unresolved issues".
+    summary: String,
+    rows: Vec<ProjectRow>,
+}
+
 #[derive(Template)]
 #[template(path = "projects.html")]
 struct ListTemplate {
     ctx: PageCtx,
+    /// Projects in no group (every project when there are no groups).
     projects: Vec<ProjectRow>,
+    /// One section per group, in the groups' order; empty without groups.
+    groups: Vec<GroupSection>,
+}
+
+impl ListTemplate {
+    fn is_empty(&self) -> bool {
+        self.projects.is_empty() && self.groups.iter().all(|g| g.rows.is_empty())
+    }
+}
+
+/// The "Group" select of the project settings.
+struct GroupChoice {
+    value: String,
+    label: String,
+    selected: bool,
 }
 
 #[derive(Template)]
@@ -213,6 +238,11 @@ struct SettingsTemplate {
     name_error: String,
     slug_error: String,
     platforms: Vec<PlatformChoice>,
+    /// "None" first, then every group; empty when there are no groups.
+    group_choices: Vec<GroupChoice>,
+    /// The project's group's name, for viewers.
+    group_name: String,
+    group_error: String,
     keys: Vec<KeyView>,
     retention: RetentionView,
     web_enabled: bool,
@@ -253,12 +283,38 @@ async fn list(
     user: CurrentUser,
     jar: SignedCookieJar,
 ) -> ApiResult<Response> {
-    let (projects, counts) = core
-        .with_conn(|c| Ok((db::list(c)?, db::key_counts(c)?)))
+    let (projects, counts, groups, unresolved) = core
+        .with_conn(|c| {
+            Ok((
+                db::list(c)?,
+                db::key_counts(c)?,
+                crate::db::groups::list(c)?,
+                db::unresolved_counts(c)?,
+            ))
+        })
         .await?;
-    let mut rows: Vec<ProjectRow> = projects
+    let mut projects = projects;
+    projects.sort_by_key(|p| (p.name.to_lowercase(), p.id));
+    let mut sections: Vec<(GroupSection, i64)> = groups
         .into_iter()
-        .map(|p| ProjectRow {
+        .map(|g| {
+            let section = GroupSection {
+                id: g.id,
+                name: g.name,
+                summary: String::new(),
+                rows: Vec::new(),
+            };
+            (section, 0)
+        })
+        .collect();
+    let mut rows: Vec<ProjectRow> = Vec::new();
+    for p in projects {
+        let open = unresolved
+            .iter()
+            .find(|(id, _)| *id == p.id)
+            .map_or(0, |(_, n)| *n);
+        let group_id = p.group_id;
+        let row = ProjectRow {
             enabled_keys: counts
                 .iter()
                 .find(|(id, _, _)| *id == p.id)
@@ -268,9 +324,30 @@ async fn list(
             id: p.id,
             name: p.name,
             slug: p.slug,
+        };
+        match sections.iter_mut().find(|(g, _)| Some(g.id) == group_id) {
+            Some((section, issues)) => {
+                section.rows.push(row);
+                *issues += open;
+            }
+            None => rows.push(row),
+        }
+    }
+    let groups: Vec<GroupSection> = sections
+        .into_iter()
+        .map(|(mut g, issues)| {
+            let issues = if issues == 0 {
+                i18n::t("groups.no_unresolved").to_string()
+            } else {
+                i18n::tn("groups.unresolved", issues)
+            };
+            g.summary = format!(
+                "{} · {issues}",
+                i18n::tn("groups.project_count", g.rows.len() as i64)
+            );
+            g
         })
         .collect();
-    rows.sort_by_key(|r| r.name.to_lowercase());
     let (ctx, jar) = PageCtx::build(
         &core,
         Some(&user),
@@ -285,6 +362,7 @@ async fn list(
         HtmlTemplate(ListTemplate {
             ctx,
             projects: rows,
+            groups,
         }),
     )
         .into_response())
@@ -487,8 +565,11 @@ struct Attempt {
     name: String,
     slug: String,
     platform: Option<Platform>,
+    /// `Some(None)`: "None" chosen; `None`: the project's group.
+    group_id: Option<Option<i64>>,
     name_error: String,
     slug_error: String,
+    group_error: String,
 }
 
 async fn render_settings(
@@ -500,13 +581,14 @@ async fn render_settings(
     attempt: Option<Attempt>,
 ) -> ApiResult<Response> {
     let id = project.id;
-    let (keys, retention, web_enabled, (app_enabled, app_strict)) = core
+    let (keys, retention, web_enabled, (app_enabled, app_strict), groups) = core
         .with_conn(move |c| {
             Ok((
                 db::keys(c, id)?,
                 triage::retention(c, id)?.unwrap_or_default(),
                 db::web_analytics(c, id)?.unwrap_or(true),
                 db::app_analytics(c, id)?.unwrap_or((true, false)),
+                crate::db::groups::list(c)?,
             ))
         })
         .await?;
@@ -517,6 +599,27 @@ async fn render_settings(
         slug: project.slug.clone(),
         ..Attempt::default()
     });
+    let chosen = attempt.group_id.unwrap_or(project.group_id);
+    let group_name = groups
+        .iter()
+        .find(|g| Some(g.id) == project.group_id)
+        .map(|g| g.name.clone())
+        .unwrap_or_default();
+    let group_choices: Vec<GroupChoice> = if groups.is_empty() {
+        Vec::new()
+    } else {
+        std::iter::once(GroupChoice {
+            value: String::new(),
+            label: i18n::t("groups.none").to_string(),
+            selected: chosen.is_none(),
+        })
+        .chain(groups.into_iter().map(|g| GroupChoice {
+            value: g.id.to_string(),
+            selected: chosen == Some(g.id),
+            label: g.name,
+        }))
+        .collect()
+    };
     let title = i18n::tf("project.settings_title", &[("name", &project.name)]);
     let (ctx, jar) = PageCtx::build(core, Some(user), &jar, title, "projects", "").await;
     let page = SettingsTemplate {
@@ -527,6 +630,9 @@ async fn render_settings(
         name_error: attempt.name_error,
         slug_error: attempt.slug_error,
         platforms: platform_choices(attempt.platform.unwrap_or(project.platform)),
+        group_choices,
+        group_name,
+        group_error: attempt.group_error,
         keys: keys.into_iter().map(|k| KeyView::new(k, &base)).collect(),
         project: ProjectView::from(&project),
         retention: RetentionView {
@@ -571,6 +677,8 @@ struct SettingsForm {
     slug: String,
     #[serde(default)]
     platform: String,
+    /// The group's id, "" for none. Left out (older forms): the group stays.
+    group_id: Option<String>,
 }
 
 async fn save_settings(
@@ -584,6 +692,20 @@ async fn save_settings(
     user.require_editor()?;
     let project = load(&core, id).await?;
     let platform = Platform::parse(&form.platform).unwrap_or(project.platform);
+    let group: Result<Option<i64>, &'static str> = match form.group_id.as_deref().map(str::trim) {
+        None => Ok(project.group_id),
+        Some("") => Ok(None),
+        Some(raw) => match raw.parse::<i64>() {
+            Ok(gid)
+                if core
+                    .with_conn(move |c| crate::groups::exists(c, Some(gid)))
+                    .await? =>
+            {
+                Ok(Some(gid))
+            }
+            _ => Err("groups.err_unknown"),
+        },
+    };
     let name = project::check_name(&form.name);
     let mut slug = project::check_slug(&form.slug);
     if let Ok(s) = &slug {
@@ -595,21 +717,26 @@ async fn save_settings(
             slug = Err("projects.err_slug_taken");
         }
     }
-    let (name, slug) = match (name, slug) {
-        (Ok(name), Ok(slug)) => (name, slug),
-        (name, slug) => {
+    let (name, slug, group) = match (name, slug, group) {
+        (Ok(name), Ok(slug), Ok(group)) => (name, slug, group),
+        (name, slug, group) => {
             let attempt = Attempt {
                 name: form.name,
                 slug: form.slug,
                 platform: Some(platform),
+                group_id: group.ok(),
                 name_error: name.err().map(i18n::t).unwrap_or_default().to_string(),
                 slug_error: slug.err().map(i18n::t).unwrap_or_default().to_string(),
+                group_error: group.err().map(i18n::t).unwrap_or_default().to_string(),
             };
             return render_settings(&core, &user, jar, &headers, project, Some(attempt)).await;
         }
     };
-    core.with_conn(move |c| db::update(c, id, &name, &slug, platform))
-        .await?;
+    core.with_conn(move |c| {
+        db::update(c, id, &name, &slug, platform)?;
+        db::set_group(c, id, group)
+    })
+    .await?;
     tracing::info!(user = %user.username, id, "project updated");
     Ok(back_to(
         jar,

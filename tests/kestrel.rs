@@ -1166,6 +1166,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "notification_channels",
             "passkey_challenges",
             "passkeys",
+            "project_groups",
             "project_keys",
             "projects",
             "release_health",
@@ -1190,7 +1191,8 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "0005_alerts_releases.sql",
             "0006_analytics.sql",
             "0007_app_analytics.sql",
-            "0008_token_scopes.sql"
+            "0008_token_scopes.sql",
+            "0009_project_groups.sql"
         ]
     );
     assert!(app.dir.join("store.sqlite").exists());

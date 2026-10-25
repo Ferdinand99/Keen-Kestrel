@@ -11,6 +11,18 @@
     {{ m::field_text("name", tr("projects.name"), value=&self.form_name, required=true, error=&self.name_error) }}
     {{ m::field_text("slug", tr("project.slug"), value=&self.form_slug, help=tr("project.slug_help"), required=true, error=&self.slug_error) }}
     {% include "partials/platform_choices.html" %}
+    {%- if !group_choices.is_empty() %}
+    <div class="field{% if !group_error.is_empty() %} is-invalid{% endif %}">
+      <label class="label" for="f-group">{{ tr("groups.group") }}</label>
+      <select id="f-group" name="group_id" aria-describedby="f-group-help{% if !group_error.is_empty() %} f-group-error{% endif %}"{% if !group_error.is_empty() %} aria-invalid="true"{% endif %}>
+        {%- for c in group_choices %}
+        <option value="{{ c.value }}"{% if c.selected %} selected{% endif %}>{{ c.label }}</option>
+        {%- endfor %}
+      </select>
+      <p class="help" id="f-group-help">{{ tr("groups.group_help") }}</p>
+      {%- if !group_error.is_empty() %}<p class="field-error" id="f-group-error">{{ m::icon("alert-circle") }}{{ group_error }}</p>{% endif %}
+    </div>
+    {%- endif %}
     <div class="form-actions">
       {{ m::button(tr("project.save")) }}
     </div>
@@ -21,6 +33,9 @@
       <div class="dl-row"><dt>{{ tr("projects.name") }}</dt><dd>{{ project.name }}</dd></div>
       <div class="dl-row"><dt>{{ tr("project.slug") }}</dt><dd class="mono">{{ project.slug }}</dd></div>
       <div class="dl-row"><dt>{{ tr("projects.platform") }}</dt><dd>{{ project.platform }}</dd></div>
+      {%- if !group_name.is_empty() %}
+      <div class="dl-row"><dt>{{ tr("groups.group") }}</dt><dd>{{ group_name }}</dd></div>
+      {%- endif %}
     </dl>
   </div>
   {%- endif %}

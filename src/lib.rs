@@ -21,6 +21,7 @@ pub mod db;
 pub mod difs;
 pub mod dsn;
 pub mod event;
+pub mod groups;
 pub mod ingest;
 pub mod issues;
 pub mod mcp;
@@ -132,6 +133,7 @@ pub fn router(app: Kestrel) -> Router {
     let core = app.core;
     let protected = Router::new()
         .merge(pages::router())
+        .merge(groups::router())
         .merge(issues::router())
         .merge(releases::router())
         .merge(releases::cli::router())

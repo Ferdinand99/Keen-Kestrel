@@ -6,6 +6,7 @@
 
 pub mod alerts;
 pub mod difs;
+pub mod groups;
 pub mod issues;
 pub mod projects;
 pub mod releases;
@@ -47,6 +48,10 @@ const MIGRATION_FILES: &[(&str, &str)] = &[
     (
         "0008_token_scopes.sql",
         include_str!("../../migrations/0008_token_scopes.sql"),
+    ),
+    (
+        "0009_project_groups.sql",
+        include_str!("../../migrations/0009_project_groups.sql"),
     ),
 ];
 
