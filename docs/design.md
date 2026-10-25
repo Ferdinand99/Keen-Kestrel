@@ -82,8 +82,9 @@ KestrelKit (Swift), k.js (web)                          ──►  /ingest/v1/�
 ## 4. Errors module
 
 ### 4.1 Data model (`kestrel.sqlite`, app migrations)
-- `projects` (integer id – SDK DSNs need a numeric project id), `project_keys` (public key, enabled,
-  per-minute rate limit, allowed origins).
+- `projects` (integer id – SDK DSNs need a numeric project id; `group_id`), `project_keys` (public key, enabled,
+  per-minute rate limit, allowed origins), `project_groups` (sections of the project list: name unique regardless
+  of case, sort order; one group per project, no nesting; deleting a group leaves its projects in none).
 - `environments`, `releases` (version string, first/last seen, adoption from analytics).
 - `issues`: project, title, culprit, level, platform, status `unresolved | resolved | ignored`, substatus
   `new | regressed | ongoing`, first/last seen, times seen, first/last release, `resolved_in_release`,
@@ -248,19 +249,24 @@ which also hosts vole-kit): dark-first, Inter, pill buttons, glass navigation, A
 and dark themes, keyboard and screen reader support, WCAG AA contrast. Brand accent: amber `#ff9f0a` (logo
 in `assets/brand/`), used sparingly.
 
-Pages: sign-in, setup, 2FA, users, API tokens, settings (vole-kit); projects; project overview (errors +
+Pages: sign-in, setup, 2FA, users, API tokens, settings (vole-kit); projects (one collapsible section per
+project group, as on Vigilant Vole's dashboard, and "Not in a group" last; which sections are collapsed is
+remembered per browser) and the project groups (create, rename, reorder, delete); project overview (errors +
 analytics); issues (search, bulk actions); issue (stack trace with an in-app toggle, breadcrumbs, tags,
 events, why grouped, raw JSON, activity); event; releases and release detail (health and adoption); app
 analytics; web analytics; signal explorer; debug files; alerts; project settings (DSN and copy-paste
 setup snippets for Swift, JavaScript, Rust and Python, allowed origins, scrubbing, retention, rate
 limits). Live updates with SSE and htmx.
 
-**REST API v1** (documented with OpenAPI, `/api-docs.md` and `/llms.txt`): projects, keys, issues (list,
+**REST API v1** (documented with OpenAPI, `/api-docs.md` and `/llms.txt`): projects (with their `group_id`), project
+groups (list, create, rename, delete, reorder), keys, issues (list,
 get, update status, merge, delete), issue events, events, releases and health, debug files, alert rules,
 analytics time series, breakdowns and signal types.
 
-**MCP tools:** `list_projects`, `list_issues`, `get_issue` (latest event with the stack trace formatted for
-an LLM), `resolve_issue`, `ignore_issue`, `release_health`, `analytics_summary`, `analytics_breakdown`.
+**MCP tools:** `list_projects` (with the groups), `list_project_groups`, `list_issues`, `get_issue` (latest event with the stack trace formatted for
+an LLM), `resolve_issue`, `ignore_issue`, `release_health`, `analytics_summary`, `analytics_breakdown`, and for
+read-and-write tokens of editors the project group tools (`create_project_group`, `rename_project_group`,
+`delete_project_group`, `reorder_project_groups`, `set_project_group`).
 
 **Languages:** 26, with a test that keeps every language at 100 %; core strings come from vole-kit. Terms
 are fixed per language in `locales/glossary/` (see Glossary below).
