@@ -621,6 +621,7 @@ async fn mcp_tools_read_and_triage_errors() {
         list(&t.viewer).await,
         [
             "list_projects",
+            "list_project_groups",
             "list_issues",
             "get_issue",
             "release_health",
@@ -632,13 +633,19 @@ async fn mcp_tools_read_and_triage_errors() {
         list(&t.editor_write).await,
         [
             "list_projects",
+            "list_project_groups",
             "list_issues",
             "get_issue",
             "release_health",
             "analytics_summary",
             "analytics_breakdown",
             "resolve_issue",
-            "ignore_issue"
+            "ignore_issue",
+            "create_project_group",
+            "rename_project_group",
+            "delete_project_group",
+            "reorder_project_groups",
+            "set_project_group"
         ]
     );
 
