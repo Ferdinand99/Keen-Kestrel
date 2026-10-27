@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.8.0...v0.8.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* clean before scrubbing app-signal payloads and drop sensitive keys ([#45](https://github.com/Ferdinand99/Keen-Kestrel/issues/45)) ([fc36e28](https://github.com/Ferdinand99/Keen-Kestrel/commit/fc36e28be0aa20e899886abac979e47fa6f2938b))
+
 ## [0.8.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.7.0...v0.8.0) (2026-10-27)
 
 
