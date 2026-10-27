@@ -88,6 +88,14 @@ pub fn short(text: &str, max: usize) -> String {
         .collect()
 }
 
+/// [`short`] of `text` after scrubbing. Control characters are removed
+/// first: scrubbing `john@exa<TAB>mple.com` as it is misses the address,
+/// and `short` would join it again afterwards.
+pub fn scrubbed_short(text: &str, max: usize) -> String {
+    let stripped: String = text.chars().filter(|c| !c.is_control()).collect();
+    short(&scrub(&stripped), max)
+}
+
 /// The page as the dashboards see it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Page {
@@ -125,7 +133,7 @@ pub fn page(raw: &str, hash: bool) -> Option<Page> {
         path.push('#');
         path.push_str(&percent_decode(route));
     }
-    let path = short(&scrub(&path), MAX_PATH);
+    let path = scrubbed_short(&path, MAX_PATH);
     let mut page = Page {
         hostname: short(&hostname, 253),
         path: if path.is_empty() { "/".into() } else { path },
@@ -141,7 +149,7 @@ pub fn page(raw: &str, hash: bool) -> Option<Page> {
             _ => continue,
         };
         if slot.is_empty() {
-            *slot = short(&scrub(&v), MAX_VALUE);
+            *slot = scrubbed_short(&v, MAX_VALUE);
         }
     }
     Some(page)
@@ -232,7 +240,7 @@ pub fn screen_bucket(width: Option<u64>) -> &'static str {
 /// The name of a custom event, or `None` when it has none (or is called
 /// `pageview`, which only k.js's page views may be).
 pub fn event_name(raw: &str) -> Option<String> {
-    let name = short(&scrub(raw), MAX_NAME);
+    let name = scrubbed_short(raw, MAX_NAME);
     (!name.is_empty() && !name.eq_ignore_ascii_case("pageview")).then_some(name)
 }
 
@@ -264,7 +272,7 @@ pub fn props(raw: Option<&Value>) -> Option<String> {
             Value::Bool(b) => b.to_string(),
             _ => continue,
         };
-        out.insert(key, Value::from(short(&scrub(&text), MAX_VALUE)));
+        out.insert(key, Value::from(scrubbed_short(&text, MAX_VALUE)));
     }
     (!out.is_empty()).then(|| Value::Object(out).to_string())
 }
@@ -274,6 +282,25 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn control_characters_go_before_scrubbing() {
+        assert_eq!(
+            event_name("sign up john@exa\tmple.com").as_deref(),
+            Some("sign up [Filtered]")
+        );
+        let p = props(Some(
+            &json!({"who": "john@exa\tmple.com", "card": "4111\n1111 1111 1111"}),
+        ))
+        .unwrap();
+        assert_eq!(p, r#"{"who":"[Filtered]"}"#);
+        assert_eq!(
+            page("https://a.example/u/john@exa%09mple.com", false)
+                .unwrap()
+                .path,
+            "/u/[Filtered]"
+        );
+    }
 
     #[test]
     fn the_query_goes_except_utm() {

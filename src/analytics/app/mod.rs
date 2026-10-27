@@ -434,10 +434,24 @@ fn payload_text(v: &Value) -> Option<String> {
     }
 }
 
+/// Whether a payload key looks like it holds a secret: the list for web
+/// event properties (`pass`, `secret`, `token`, `auth`, `key`, `card`,
+/// `cookie`) plus `cvv`, and `ssn` as a word of its own (not as in
+/// `classname`). KestrelKit drops such keys on the device as well.
+fn is_secret_key(key: &str) -> bool {
+    scrub::is_sensitive_key(key)
+        || key.to_ascii_lowercase().contains("cvv")
+        || key
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|word| word.eq_ignore_ascii_case("ssn"))
+}
+
 /// A payload as stored: at most [`MAX_PAYLOAD_KEYS`] keys (cut to 40
 /// characters, without control characters) with text values cut to 200 and
-/// scrubbed. Keys that name an IP address or a user agent are dropped.
-/// `None` when nothing is left.
+/// scrubbed (control characters go first, so they can't split an address
+/// past the scrubbing). Keys that name an IP address or a user agent, or look
+/// like they hold a secret, are dropped with their values. `None` when
+/// nothing is left.
 pub fn payload(raw: Option<&Value>) -> Option<String> {
     let Some(Value::Object(map)) = raw else {
         return None;
@@ -452,13 +466,14 @@ pub fn payload(raw: Option<&Value>) -> Option<String> {
             || out.contains_key(&key)
             || scrub::is_ip_key(&key)
             || scrub::is_user_agent_key(&key)
+            || is_secret_key(&key)
         {
             continue;
         }
         let Some(value) = payload_text(v) else {
             continue;
         };
-        out.insert(key, Value::from(short(&clean::scrub(&value), MAX_VALUE)));
+        out.insert(key, Value::from(clean::scrubbed_short(&value, MAX_VALUE)));
     }
     (!out.is_empty()).then(|| Value::Object(out).to_string())
 }
@@ -719,8 +734,8 @@ mod tests {
         let p = payload(Some(&json!({
             "email": "jane.doe@example.com",
             "phone": "+47 912 34 567",
-            "card": "4111 1111 1111 1111",
-            "auth": "Authorization: Bearer abc.def-123",
+            "payment": "4111 1111 1111 1111",
+            "header": "Authorization: Bearer abc.def-123",
             "note": "order 123456789",
             "pages": 12,
             "pdf": true,
@@ -734,8 +749,8 @@ mod tests {
         let v: Value = serde_json::from_str(&p).unwrap();
         assert_eq!(v["email"], "[Filtered]");
         assert_eq!(v["phone"], "[Filtered]");
-        assert_eq!(v["card"], "[Filtered]");
-        assert_eq!(v["auth"], "Authorization: Bearer [Filtered]");
+        assert_eq!(v["payment"], "[Filtered]");
+        assert_eq!(v["header"], "Authorization: Bearer [Filtered]");
         assert_eq!(v["note"], "order 123456789");
         assert_eq!(
             (v["pages"].as_str(), v["pdf"].as_str()),
@@ -752,8 +767,79 @@ mod tests {
     }
 
     #[test]
+    fn control_characters_cannot_split_personal_data() {
+        let p = payload(Some(&json!({
+            "email": "john@exa\tmple.com",
+            "note": "4111 1111 11\n11 1111",
+            "where": "from 203.0.\r113.7",
+            "plain": "a\u{0}b\u{7}c",
+        })))
+        .unwrap();
+        let v: Value = serde_json::from_str(&p).unwrap();
+        assert_eq!(v["email"], "[Filtered]");
+        assert_eq!(v["note"], "[Filtered]");
+        assert_eq!(v["where"], "from [Filtered]");
+        assert_eq!(v["plain"], "abc");
+        assert_eq!(
+            clean::scrubbed_short("john@exa\tmple.com", MAX_VALUE),
+            "[Filtered]"
+        );
+        assert_eq!(
+            clean::scrubbed_short("  4111\n1111 1111 1111 ", MAX_VALUE),
+            "[Filtered]"
+        );
+    }
+
+    #[test]
+    fn keys_that_look_like_secrets_are_dropped() {
+        for key in [
+            "password",
+            "Password",
+            "passwd",
+            "user_pass",
+            "secret",
+            "client_secret",
+            "token",
+            "apiToken",
+            "auth",
+            "Authorization",
+            "key",
+            "api_key",
+            "apiKey",
+            "card",
+            "cardNumber",
+            "cvv",
+            "CVV2",
+            "ssn",
+            "SSN",
+            "user_ssn",
+            "ssn-last4",
+            "cookie",
+        ] {
+            assert!(is_secret_key(key), "{key}");
+            assert_eq!(payload(Some(&json!({ key: "hunter2" }))), None, "{key}");
+            let kept = payload(Some(&json!({ key: "hunter2", "plan": "pro" }))).unwrap();
+            assert_eq!(kept, r#"{"plan":"pro"}"#, "{key}");
+        }
+        for key in [
+            "plan",
+            "className",
+            "classname",
+            "screen",
+            "count",
+            "name",
+            "email",
+        ] {
+            assert!(!is_secret_key(key), "{key}");
+            assert!(payload(Some(&json!({ key: "x" }))).is_some(), "{key}");
+        }
+    }
+
+    #[test]
     fn scrubbing_agrees_with_kestrelkit() {
-        // KestrelKit's LimitsTests: the same inputs and outputs.
+        // KestrelKit's LimitsTests: the same inputs and outputs. (KestrelKit also
+        // scrubs shortened IPv6 and card numbers grouped by dots or non-breaking
+        // spaces; the server doesn't yet.)
         for (input, expected) in [
             ("jane.doe@example.com", "[Filtered]"),
             ("Contact jane@example.co.uk now", "Contact [Filtered] now"),
