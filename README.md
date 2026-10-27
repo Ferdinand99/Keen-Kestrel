@@ -84,6 +84,10 @@ reset and deleting a passkey now ask for your password.
 Not in v1: performance tracing, session replay, JavaScript source maps (planned for v1.1), funnels and
 cohorts. See [`docs/design.md`](docs/design.md) for the full scope and the phases.
 
+## Security
+
+The October 2026 security review (what was found, fixed and left open) is in [`docs/security-review-2026-10.md`](docs/security-review-2026-10.md).
+
 ## License
 
 [GNU AGPL-3.0-only](LICENSE), except the web analytics snippet
