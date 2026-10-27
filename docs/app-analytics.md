@@ -75,7 +75,7 @@ Kestrel sets no cookies and never stores IP addresses, user agents or the instal
 
 | Kept | How |
 |---|---|
-| The type and payload | What your app passed: at most 20 keys of 40 characters, values of 200. Email addresses, phone numbers, card numbers, `Bearer`/`Basic` credentials and IP addresses in values become `[Filtered]` (KestrelKit does this on the device already; Kestrel does it again). Keys that name an IP address or a user agent are dropped. |
+| The type and payload | What your app passed: at most 20 keys of 40 characters, values of 200. Email addresses, phone numbers, card numbers, `Bearer`/`Basic` credentials and IP addresses in values become `[Filtered]` (KestrelKit does this on the device already; Kestrel does it again). Control characters are removed before scrubbing. Keys that name an IP address or a user agent, or that look like they hold a secret (they contain `pass`, `secret`, `token`, `auth`, `key`, `card`, `cookie` or `cvv`, or have `ssn` as a word of its own), are dropped with their values. |
 | The app | Bundle id, version, build. |
 | The device | Platform, OS version, hardware model (such as `iPhone16,2`), locale (such as `nb_NO`), and the debug/TestFlight/simulator flags. Never the device's name. |
 | A user | `HMAC-SHA256(project secret, install id)`, cut to 64 bits. KestrelKit's install id is a random UUID it makes once (never the IDFA or IDFV); the project's secret is random, made with the project and never shown, so the hash can't be turned back into the install id or matched across projects. |

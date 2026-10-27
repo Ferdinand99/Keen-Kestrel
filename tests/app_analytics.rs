@@ -533,7 +533,9 @@ async fn nothing_personal_is_stored_from_signals() {
     s.payload = json!({
         "email": EMAIL,
         "note": format!("write to {EMAIL} or call +47 912 34 567"),
+        "payment": "4111 1111 1111 1111",
         "card": "4111 1111 1111 1111",
+        "api_token": "hunter2-probe",
         "ip": CLIENT_IP,
         "from": format!("from {CLIENT_IP}"),
         "plan": "pro",
@@ -558,7 +560,9 @@ async fn nothing_personal_is_stored_from_signals() {
     let payload: Value = serde_json::from_str(rows[0]["payload"].as_str().unwrap()).unwrap();
     assert_eq!(payload["email"], "[Filtered]");
     assert_eq!(payload["note"], "write to [Filtered] or call [Filtered]");
-    assert_eq!(payload["card"], "[Filtered]");
+    assert_eq!(payload["payment"], "[Filtered]");
+    // Keys that look like they hold a secret are dropped with their values.
+    assert!(payload.get("card").is_none() && payload.get("api_token").is_none());
     assert_eq!(payload["from"], "from [Filtered]");
     assert_eq!(payload["plan"], "pro");
     assert!(payload.get("ip").is_none());
@@ -574,6 +578,7 @@ async fn nothing_personal_is_stored_from_signals() {
         "ada.lovelace",
         "912 34 567",
         "4111 1111 1111 1111",
+        "hunter2-probe",
     ];
     let mut scanned = 0;
     for file in ["kestrel.sqlite", "store.sqlite"] {
