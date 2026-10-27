@@ -111,6 +111,8 @@ struct KeyView {
     dsn: String,
     enabled: bool,
     rate_limit: Option<i64>,
+    /// What a key without a limit of its own gets (items per minute).
+    default_limit: i64,
     rate_limit_value: String,
     origins: Vec<String>,
     origins_text: String,
@@ -140,6 +142,7 @@ impl KeyView {
             public_key: k.public_key,
             enabled: k.enabled,
             rate_limit: k.rate_limit_per_minute,
+            default_limit: i64::from(crate::ingest::DEFAULT_KEY_RATE_LIMIT),
             origins: k.allowed_origins,
             created_at: k.created_at,
         }

@@ -11,7 +11,7 @@
     {%- endif %}
   {% endcall %}
   {%- if !has_channels %}
-  {%- if ctx.can_edit() %}
+  {%- if ctx.is_admin() %}
   {{ m::callout("info", tr("alerts.no_channels_text"), tr("alerts.no_channels_title")) }}
   <p><a class="btn btn-secondary btn-sm" href="/settings/notifications">{{ m::icon("bell") }}<span>{{ tr("alerts.add_channel") }}</span></a></p>
   {%- else %}

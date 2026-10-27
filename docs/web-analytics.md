@@ -39,6 +39,10 @@ To leave your own visits out, open your site, then the browser's console, and ru
 `localStorage.kestrel_ignore = 'true'` (and `localStorage.removeItem('kestrel_ignore')` to count them again). Browsers
 driven by automation (`navigator.webdriver`) and browsers with Global Privacy Control on never send.
 
+A key accepts 1000 pageviews and events a minute unless it has its own limit (**Settings → Keys**, up to 1,000,000);
+over it Kestrel answers 429 and `k.js` simply drops the event. A client address (an IPv6 prefix counts as one) may send
+6000 a minute, and when the server's disk is nearly full the endpoint answers 429 for a while.
+
 ## 2. Single-page apps
 
 Nothing to do: `k.js` sends a pageview whenever the path changes through `history.pushState`, `replaceState` or the

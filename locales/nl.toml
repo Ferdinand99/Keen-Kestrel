@@ -116,8 +116,8 @@ enabled_help = "Gebeurtenissen die met een uitgeschakelde sleutel worden verstuu
 none_enabled = "Geen ingeschakelde sleutels"
 rate_limit = "Ratelimiet"
 rate_limit_unit = "per minuut"
-rate_limit_help = "Het maximale aantal gebeurtenissen per minuut dat deze sleutel accepteert. Laat leeg voor geen limiet."
-no_limit = "Geen limiet"
+rate_limit_help = "Het maximale aantal gebeurtenissen per minuut dat deze sleutel accepteert. Laat leeg voor de standaardlimiet."
+no_limit = "Standaard"
 per_minute = "{n} per minuut"
 origins = "Toegestane origins"
 origins_help = "Voor browser-SDK’s: één origin per regel, zoals https://example.com. Laat leeg om elke origin toe te staan."
@@ -528,7 +528,7 @@ empty_viewer = "Een bewerker of beheerder kan meldingsregels toevoegen."
 no_channels = "Geen kanaal"
 no_channels_title = "Nog geen meldingskanalen"
 no_channels_text = "Meldingen gaan naar de meldingskanalen van deze instantie: Slack, Discord, Teams, Telegram, ntfy, e-mail, webhooks en meer. Voeg er eerst een toe."
-no_channels_viewer = "Er zijn nog geen meldingskanalen. Een bewerker of beheerder kan ze toevoegen onder Instellingen → Meldingen."
+no_channels_viewer = "Er zijn nog geen meldingskanalen. Een beheerder kan ze toevoegen onder Instellingen → Meldingen."
 add_channel = "Kanaal toevoegen"
 manage_channels = "Meldingskanalen beheren"
 history_title = "Verstuurde meldingen"
@@ -850,7 +850,7 @@ site_name_placeholder = "Acme-fouten…"
 tz_after = ". Dit is aan te passen in Instellingen."
 
 [users]
-roles_help = "Kijkers kunnen alles zien maar niets wijzigen. Bewerkers beheren projecten, sleutels, problemen, meldingen en meldingskanalen. Beheerders kunnen alles, inclusief gebruikers."
+roles_help = "Kijkers kunnen alles zien maar niets wijzigen. Bewerkers beheren projecten, sleutels, problemen en meldingen. Beheerders kunnen alles, inclusief meldingskanalen en gebruikers."
 
 [tokens]
 sub = "Laat scripts, buildmachines en AI-assistenten je projecten, problemen, releases en meldingsregels lezen of wijzigen."

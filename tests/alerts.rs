@@ -109,6 +109,71 @@ fn summary(v: &Value) -> String {
     v["summary"].as_str().unwrap_or_default().to_string()
 }
 
+/// Anyone with the public key can make new issues (KK-03): a rule sends its
+/// first few alerts, holds the rest back and says how many in one message
+/// when its window is over. Held-back alerts don't start the cooldown.
+#[tokio::test]
+async fn a_flood_of_new_issues_is_capped_and_summarised() {
+    let mut settings = keen_kestrel::ingest::Settings::default();
+    settings.alerts.spike_check_every = Duration::ZERO;
+    settings.alerts.rule_cap = 3;
+    settings.alerts.rule_window = Duration::from_millis(1500);
+    settings.key_rate_limit_per_minute = 0;
+    let app = App::with(settings).await;
+    let hook = Hook::start().await;
+    let ch = channel(&app, &hook, "Ops hook", "").await;
+    rule(&app, RuleKind::NewIssue, vec![ch], |_| {}).await;
+    // A second rule of another kind has a window of its own.
+    rule(&app, RuleKind::Regression, vec![ch], |r| {
+        r.cooldown_minutes = 0
+    })
+    .await;
+    for n in 0..8 {
+        send(&app, &event(&format!("Flood{n}"))).await;
+    }
+    app.flush().await;
+    app.kestrel.alerts.deliver_now().await;
+    let got = hook.received();
+    assert_eq!(got.len(), 3, "three go out, five are held back: {got:?}");
+    assert!(got.iter().all(|m| m["event"] == "new_issue"));
+    assert!(
+        !summary_text(&got).contains("more"),
+        "no summary while the window is open"
+    );
+
+    // When the window is over, one message says how many.
+    tokio::time::sleep(Duration::from_millis(1600)).await;
+    app.kestrel.alerts.deliver_now().await;
+    let got = hook.received();
+    assert_eq!(got.len(), 4, "{got:?}");
+    let last = summary(&got[3]);
+    assert!(
+        last.contains("New issue in Fixtures") && last.contains("and 5 more"),
+        "{last}"
+    );
+    // Said once.
+    tokio::time::sleep(Duration::from_millis(1600)).await;
+    app.kestrel.alerts.deliver_now().await;
+    assert_eq!(hook.received().len(), 4);
+
+    // The history lists it, and the page words it.
+    let alerts = log(&app).await;
+    assert_eq!(alerts.len(), 4);
+    let mut admin = Web::new(&app, "ada", "admin").await;
+    let page = admin
+        .get(&format!("/projects/{}/alerts", app.project_id))
+        .await;
+    assert!(page.body.contains("and 5 more"), "{}", page.body);
+
+    // Held back, an alert doesn't start the issue's cooldown: only the three
+    // that were sent have one.
+    assert_eq!(app.count("SELECT COUNT(*) FROM alert_cooldowns").await, 3);
+}
+
+fn summary_text(got: &[Value]) -> String {
+    got.iter().map(summary).collect::<Vec<_>>().join("\n")
+}
+
 #[tokio::test]
 async fn new_issues_and_regressions_alert() {
     let app = app().await;
@@ -437,8 +502,9 @@ async fn paused_channels_are_skipped() {
     );
 }
 
-/// The channel pages: editors and admins only; the provider form, secrets
-/// never shown again, test messages in the channel's language.
+/// The channel pages: admins only (a channel makes the server send requests
+/// to an address of the admin's choosing); the provider form, secrets never
+/// shown again, test messages in the channel's language.
 #[tokio::test]
 async fn channels_are_managed_with_their_secrets_kept() {
     let app = app().await;
@@ -448,7 +514,7 @@ async fn channels_are_managed_with_their_secrets_kept() {
         viewer.get("/settings/notifications").await.status,
         StatusCode::FORBIDDEN
     );
-    let mut ed = Web::new(&app, "edda", "editor").await;
+    let mut ed = Web::new(&app, "ada", "admin").await;
     let page = ed.get("/settings/notifications").await;
     assert_eq!(page.status, StatusCode::OK);
     assert!(page.body.contains("No channels yet"), "{}", page.body);
@@ -553,13 +619,49 @@ async fn channels_are_managed_with_their_secrets_kept() {
     let opened = vole_kit::notify::sealed::open_config(key, "webhook", &config);
     assert_eq!(opened.config["url"], hook.url.as_str());
 
-    // Viewers can't test or delete; editors delete.
+    // Viewers and editors can't see, add, change, test or delete channels
+    // (KK-09): only admins. Editors still pick among them for their rules.
+    let mut editor = Web::new(&app, "edda", "editor").await;
+    for who in [&mut viewer, &mut editor] {
+        for path in [
+            "/settings/notifications".to_string(),
+            "/settings/notifications/providers".to_string(),
+            "/settings/notifications/form?kind=webhook".to_string(),
+            format!("/settings/notifications/{id}"),
+            format!("/settings/notifications/{id}/edit"),
+        ] {
+            assert_eq!(who.get(&path).await.status, StatusCode::FORBIDDEN, "{path}");
+        }
+        assert_eq!(
+            who.post_with("/settings/notifications", &fields, true)
+                .await
+                .status,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            who.post_with("/settings/notifications/test", &fields, true)
+                .await
+                .status,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            who.post_with(&format!("/settings/notifications/{id}/test"), &[], true)
+                .await
+                .status,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            who.delete(&format!("/settings/notifications/{id}"))
+                .await
+                .status,
+            StatusCode::FORBIDDEN
+        );
+    }
     assert_eq!(
-        viewer
-            .post_with(&format!("/settings/notifications/{id}/test"), &[], true)
-            .await
-            .status,
-        StatusCode::FORBIDDEN
+        app.count("SELECT COUNT(*) FROM notification_channels")
+            .await,
+        1,
+        "nothing changed"
     );
     let res = ed.delete(&format!("/settings/notifications/{id}")).await;
     assert_eq!(res.status, StatusCode::OK);
@@ -623,7 +725,7 @@ async fn channel_secrets_are_sealed_at_start_and_opened_to_send() {
         "UPDATE notification_channels SET config = '{lost}' WHERE id = {ch}"
     ))
     .await;
-    let mut ed = Web::new(&app, "edda", "editor").await;
+    let mut ed = Web::new(&app, "ada", "admin").await;
     let edit = ed.get(&format!("/settings/notifications/{ch}/edit")).await;
     assert_eq!(edit.status, StatusCode::OK);
     assert!(edit.body.contains("instance key changed"), "{}", edit.body);
@@ -651,7 +753,13 @@ async fn the_alerts_tab_shows_rules_and_history() {
     let mut ed = Web::new(&app, "edda", "editor").await;
     let page = ed.get(&format!("/projects/{p}/alerts")).await;
     assert_eq!(page.status, StatusCode::OK);
+    // Editors can't add channels, so they are told who can; admins get the way.
+    assert!(page.body.contains("An admin can add them"), "{}", page.body);
+    assert!(!page.body.contains("href=\"/settings/notifications\""));
+    let mut admin = Web::new(&app, "ada", "admin").await;
+    let page = admin.get(&format!("/projects/{p}/alerts")).await;
     assert!(page.body.contains("No notification channels yet"));
+    assert!(page.body.contains("href=\"/settings/notifications\""));
     let ch = channel(&app, &hook, "Ops hook", "").await;
     let new = ed
         .get(&format!("/projects/{p}/alerts/new?kind=spike"))
@@ -738,7 +846,11 @@ async fn project_pages_have_the_releases_and_alerts_tabs() {
             "{tab}"
         );
     }
+    // The Notifications tab is for admins.
     let settings = ed.get("/settings/security").await;
+    assert!(!settings.body.contains("href=\"/settings/notifications\""));
+    let mut admin = Web::new(&app, "ada", "admin").await;
+    let settings = admin.get("/settings/security").await;
     assert!(settings.body.contains("href=\"/settings/notifications\""));
     let mut viewer = Web::new(&app, "vera", "viewer").await;
     let settings = viewer.get("/settings/security").await;

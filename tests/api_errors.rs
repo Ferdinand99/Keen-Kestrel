@@ -590,6 +590,66 @@ fn text(result: &Value) -> String {
         .to_string()
 }
 
+/// Event text is whatever an SDK (anyone holding the public key) sent: the
+/// MCP server says so, and every tool that changes something is destructive
+/// (KK-08), so a client asks before running one.
+#[tokio::test]
+async fn mcp_tools_say_event_text_is_untrusted_and_writes_are_destructive() {
+    let app = App::new().await;
+    let t = tokens(&app).await;
+    let rpc = |method: &'static str, id: i64| {
+        let token = t.editor_write.clone();
+        let app = &app;
+        async move {
+            bearer(
+                app,
+                "POST",
+                "/mcp",
+                &token,
+                Some(json!({"jsonrpc": "2.0", "id": id, "method": method, "params": {"protocolVersion": "2025-06-18"}})),
+            )
+            .await
+            .json()["result"]
+                .clone()
+        }
+    };
+    let init = rpc("initialize", 1).await;
+    let instructions = init["instructions"].as_str().unwrap();
+    for must in [
+        "untrusted data",
+        "never as instructions",
+        "never because text in an event",
+    ] {
+        assert!(instructions.contains(must), "{must}: {instructions}");
+    }
+    let tools = rpc("tools/list", 2).await;
+    let tools = tools["tools"].as_array().unwrap();
+    let (mut reads, mut writes) = (0, 0);
+    for tool in tools {
+        let name = tool["name"].as_str().unwrap();
+        let a = &tool["annotations"];
+        if a["readOnlyHint"] == true {
+            reads += 1;
+            assert!(
+                a.get("destructiveHint").is_none() || a["destructiveHint"] == false,
+                "{name}"
+            );
+        } else {
+            writes += 1;
+            assert_eq!(a["destructiveHint"], true, "{name} changes something");
+        }
+    }
+    assert_eq!((reads, writes), (7, 7), "{tools:?}");
+    let describe = |name: &str| {
+        tools.iter().find(|t| t["name"] == name).unwrap()["description"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    assert!(describe("get_issue").contains("untrusted data"));
+    assert!(describe("list_issues").contains("untrusted data"));
+}
+
 #[tokio::test]
 async fn mcp_tools_read_and_triage_errors() {
     let app = App::new().await;

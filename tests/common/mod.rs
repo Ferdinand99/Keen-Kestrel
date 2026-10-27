@@ -55,7 +55,7 @@ impl Fixture {
         .unwrap()
     }
 
-    pub fn envelope(&self) -> envelope::Envelope {
+    pub fn envelope(&self) -> envelope::Envelope<'_> {
         envelope::parse(&self.decoded()).unwrap()
     }
 
@@ -66,7 +66,7 @@ impl Fixture {
         env.items
             .iter()
             .filter(|i| i.ty() == "event")
-            .map(|i| (i.payload.clone(), id.clone()))
+            .map(|i| (i.payload.to_vec(), id.clone()))
             .collect()
     }
 

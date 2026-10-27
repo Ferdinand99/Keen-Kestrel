@@ -4,17 +4,22 @@
 //! app signals ([`signals`]: `POST /ingest/v1/signals`).
 //!
 //! A request is checked in this order: the per-IP bucket, the project id,
-//! the body size, the DSN key (`X-Sentry-Auth`, `?sentry_key=` or the
-//! envelope's `dsn`) and its project, the origin, the key's own bucket. Then
-//! the body is decoded (bounded), the items are normalised and grouped, and
-//! the jobs go to the writer's queue; the answer is `{"id": "<event_id>"}`
-//! without waiting for the write.
+//! the writer's queue (a full one answers 429 before anything is read), the
+//! DSN key (`X-Sentry-Auth` or `?sentry_key=`, else the `dsn` in the
+//! envelope's header, read from the first 64 KiB of the body alone) with its
+//! project, origin and bucket, and only then the body: read, decoded
+//! (bounded) and scanned item by item ([`envelope::Scanner`]). The IP and key
+//! buckets are charged for every item of the envelope. The items are
+//! normalised and grouped, and the jobs go to the writer's queue; the answer
+//! is `{"id": "<event_id>"}` without waiting for the write.
 //!
 //! Envelope items: `event` is kept; `session` / `sessions` and
-//! `user_report` / `feedback` are kept for later phases; `attachment` is kept
-//! when its event is; `transaction`, `span`, `profile`, `replay_*`,
+//! `user_report` / `feedback` are kept for later phases (up to 4 KiB each,
+//! larger ones are dropped); `attachment` is kept when its event is (up to 5
+//! of 1 MiB each); `transaction`, `span`, `profile`, `replay_*`,
 //! `check_in`, `statsd`, `metrics`, `log`, `client_report`, minidumps and
-//! unknown types are accepted and dropped.
+//! unknown types are accepted and dropped. An envelope with more than 100
+//! items or 20 events is refused with 413 (docs/design.md §7).
 
 pub mod auth;
 pub mod body;
@@ -23,19 +28,21 @@ pub mod envelope;
 pub mod signals;
 pub mod web;
 
-use std::net::{IpAddr, SocketAddr};
+use std::borrow::Cow;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
 use axum::Router;
-use axum::body::Body;
+use axum::body::{Body, HttpBody as _};
 use axum::extract::{Path as UrlPath, RawQuery, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri, header};
 use axum::middleware::map_response;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use deadpool_sqlite::Pool;
+use futures_util::StreamExt as _;
 use serde_json::{Map, Value, json};
 use vole_kit::auth::guard::PeerAddr;
 use vole_kit::auth::session;
@@ -50,9 +57,25 @@ use crate::event::{self, Context, normalize, scrub};
 use crate::writer::{AttachmentItem, FeedbackItem, Job, SessionItem, Writer, WriterSettings};
 use auth::KeyInfo;
 use body::{BodyError, MAX_ATTACHMENT, MAX_ENVELOPE, MAX_EVENT};
+use envelope::EnvelopeError;
 
 /// The setting that holds the instance's key for user hashes.
 const HASH_KEY_SETTING: &str = "ingest_hash_key";
+
+/// Items per minute a key without a limit of its own may send, per DSN key
+/// (`rate_limit_per_minute` NULL): events, sessions, pageviews or signals,
+/// one token each. A project that sends more sets a limit on its key.
+pub const DEFAULT_KEY_RATE_LIMIT: u32 = 1000;
+/// Attachments kept per event at most (more are accepted and dropped).
+pub const MAX_ATTACHMENTS: usize = 5;
+/// A session, session aggregate, user report or feedback item's size at
+/// most (larger ones are accepted and dropped).
+pub const MAX_SMALL_ITEM: usize = 4 * 1024;
+
+/// A release name's length at most, in characters (as for events).
+const MAX_RELEASE: usize = 200;
+/// An environment name's length at most, in characters (as for events).
+const MAX_ENVIRONMENT: usize = 64;
 
 /// Headers a browser SDK may send (CORS preflight).
 const ALLOW_HEADERS: &str =
@@ -65,8 +88,12 @@ const EXPOSE_HEADERS: &str = "x-sentry-error, x-sentry-rate-limits, retry-after"
 pub struct Settings {
     /// `KESTREL_CAPTURE_DIR`: write every request there.
     pub capture_dir: Option<PathBuf>,
-    /// Requests per minute from one IP address; 0 turns the limit off.
+    /// Items per minute from one IP address; 0 turns the limit off. An IPv6
+    /// address stands for its /64.
     pub ip_rate_limit_per_minute: u32,
+    /// Items per minute a key without a limit of its own may send (0: no
+    /// limit for those keys).
+    pub key_rate_limit_per_minute: u32,
     pub writer: WriterSettings,
     /// The symbolication queue (docs/design.md §4.8).
     pub symbolication: WorkerSettings,
@@ -79,6 +106,7 @@ impl Default for Settings {
         Settings {
             capture_dir: None,
             ip_rate_limit_per_minute: 6000,
+            key_rate_limit_per_minute: DEFAULT_KEY_RATE_LIMIT,
             writer: WriterSettings::default(),
             symbolication: WorkerSettings::default(),
             alerts: crate::alerts::Settings::default(),
@@ -100,9 +128,11 @@ struct Inner {
     store: Pool,
     settings: Settings,
     hash_key: [u8; 32],
-    /// Requests per DSN key (its `rate_limit_per_minute`), in memory.
-    key_buckets: TokenBuckets<i64>,
-    /// Requests per client IP address (`ip_rate_limit_per_minute`).
+    /// Items per DSN key and limit (its `rate_limit_per_minute`, else the
+    /// default), in memory. A changed limit starts a full bucket.
+    key_buckets: TokenBuckets<(i64, u32)>,
+    /// Items per client (`ip_rate_limit_per_minute`): an IPv4 address or an
+    /// IPv6 /64.
     ip_buckets: TokenBuckets<IpAddr>,
     /// The web visitor ids' salt (memory only, docs/design.md §5.2).
     salt: crate::analytics::DailySalt,
@@ -110,15 +140,38 @@ struct Inner {
     dropped_signals: std::sync::atomic::AtomicU64,
 }
 
+/// The address a client's budget is kept under: an IPv6 client owns a whole
+/// /64 (one customer's prefix), so its addresses can't be used to dodge the
+/// limit; an IPv4-mapped address counts as the IPv4 one.
+pub fn bucket_ip(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V4(_) => ip,
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => IpAddr::V4(v4),
+            None => {
+                let mut octets = v6.octets();
+                octets[8..].fill(0);
+                IpAddr::V6(Ipv6Addr::from(octets))
+            }
+        },
+    }
+}
+
 impl Inner {
-    /// Takes one request from `ip`'s budget (`ip_rate_limit_per_minute`, 0
-    /// for none); `scope` names it in `X-Sentry-Rate-Limits`.
-    fn take_ip(&self, ip: Option<IpAddr>, scope: &'static str, now: Instant) -> Result<(), Reject> {
+    /// Takes `n` items from `ip`'s budget (`ip_rate_limit_per_minute`, 0 for
+    /// none); `scope` names it in `X-Sentry-Rate-Limits`.
+    fn take_ip(
+        &self,
+        ip: Option<IpAddr>,
+        n: u32,
+        scope: &'static str,
+        now: Instant,
+    ) -> Result<(), Reject> {
         let per_ip = self.settings.ip_rate_limit_per_minute;
         match ip {
             Some(ip) if per_ip > 0 => self
                 .ip_buckets
-                .take(&ip, Rate::per_minute(per_ip), now)
+                .take_n(&bucket_ip(ip), n.min(per_ip), Rate::per_minute(per_ip), now)
                 .map_err(|wait| Reject::RateLimited {
                     secs: retry_after_secs(wait),
                     scope,
@@ -127,18 +180,41 @@ impl Inner {
         }
     }
 
-    /// Takes one request from DSN key `key_id`'s budget, if it has one.
-    fn take_key(&self, key_id: i64, per_minute: Option<i64>, now: Instant) -> Result<(), Reject> {
-        let Some(limit) = per_minute else {
-            return Ok(());
+    /// Takes `n` items from DSN key `key_id`'s budget: its own limit, else
+    /// the default (`key_rate_limit_per_minute`).
+    fn take_key(
+        &self,
+        key_id: i64,
+        per_minute: Option<i64>,
+        n: u32,
+        now: Instant,
+    ) -> Result<(), Reject> {
+        let limit = match per_minute {
+            Some(limit) => u32::try_from(limit).unwrap_or(u32::MAX),
+            None => self.settings.key_rate_limit_per_minute,
         };
-        let rate = Rate::per_minute(u32::try_from(limit).unwrap_or(u32::MAX));
+        if limit == 0 {
+            return Ok(());
+        }
         self.key_buckets
-            .take(&key_id, rate, now)
+            .take_n(&(key_id, limit), n.min(limit), Rate::per_minute(limit), now)
             .map_err(|wait| Reject::RateLimited {
                 secs: retry_after_secs(wait),
                 scope: "key",
             })
+    }
+
+    /// Takes `n` items from both budgets of a request.
+    fn charge(
+        &self,
+        ip: Option<IpAddr>,
+        key: &KeyInfo,
+        n: u32,
+        scope: &'static str,
+        now: Instant,
+    ) -> Result<(), Reject> {
+        self.take_ip(ip, n, scope, now)?;
+        self.take_key(key.id, key.rate_limit_per_minute, n, now)
     }
 }
 
@@ -217,6 +293,15 @@ impl IntoResponse for Reject {
     }
 }
 
+impl From<EnvelopeError> for Reject {
+    fn from(e: EnvelopeError) -> Self {
+        match e {
+            EnvelopeError::Limit(why) => Reject::TooLarge(why),
+            invalid @ EnvelopeError::Invalid(_) => Reject::BadRequest(invalid.to_string()),
+        }
+    }
+}
+
 impl From<BodyError> for Reject {
     fn from(e: BodyError) -> Self {
         match e {
@@ -233,10 +318,22 @@ enum Cors {
     Echo,
 }
 
-/// The decoded body.
-enum Parsed {
-    Envelope(envelope::Envelope),
-    Event(Vec<u8>),
+/// What a request that was accepted answers.
+struct Done {
+    /// The event id (`{"id": …}`), if there is one.
+    id: Option<String>,
+    /// `X-Sentry-Rate-Limits` for the SDK on a 200: it should stop sending
+    /// these categories for a while.
+    limits: Option<&'static str>,
+}
+
+/// What an envelope turned into.
+struct Built {
+    work: Vec<Work>,
+    id: Option<String>,
+    /// The event payloads' size, for the symbolication queue's byte budget.
+    bytes: usize,
+    limits: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -398,8 +495,17 @@ impl Ingest {
         let mut cors = Cors::Any;
         let result = self.process(req, origin.as_deref(), &mut cors).await;
         let mut res = match result {
-            Ok(Some(id)) => axum::Json(json!({ "id": id })).into_response(),
-            Ok(None) => axum::Json(json!({})).into_response(),
+            Ok(Done { id, limits }) => {
+                let mut res = match id {
+                    Some(id) => axum::Json(json!({ "id": id })).into_response(),
+                    None => axum::Json(json!({})).into_response(),
+                };
+                if let Some(limits) = limits {
+                    res.headers_mut()
+                        .insert("x-sentry-rate-limits", HeaderValue::from_static(limits));
+                }
+                res
+            }
             Err(reject) => reject.into_response(),
         };
         if let Some(origin) = origin {
@@ -413,7 +519,7 @@ impl Ingest {
         req: Incoming,
         origin: Option<&str>,
         cors: &mut Cors,
-    ) -> Result<Option<String>, Reject> {
+    ) -> Result<Done, Reject> {
         let Incoming {
             endpoint,
             project,
@@ -426,98 +532,133 @@ impl Ingest {
         let headers = &headers;
         let inner = &self.inner;
         let now = Instant::now();
-        inner.take_ip(
-            session::client_ip(headers, peer, session::trust_proxy()),
-            "organization",
-            now,
-        )?;
+        let ip = session::client_ip(headers, peer, session::trust_proxy());
+        inner.take_ip(ip, 1, "organization", now)?;
         let project_id: i64 = project
             .parse::<i64>()
             .ok()
             .filter(|id| *id > 0)
             .ok_or_else(|| Reject::BadRequest("invalid project id".into()))?;
-        let raw = axum::body::to_bytes(body, MAX_ENVELOPE)
-            .await
-            .map_err(|_| Reject::TooLarge("the request body is too large"))?;
+        let limit = match endpoint {
+            Endpoint::Envelope => MAX_ENVELOPE,
+            Endpoint::Store => MAX_EVENT + STORE_SLACK,
+        };
+        if body.size_hint().upper().is_some_and(|n| n > limit as u64) {
+            return Err(Reject::TooLarge("the request body is too large"));
+        }
+        // A full queue is answered before anything is read or decoded.
+        if !inner.writer.has_room() {
+            return Err(queue_full());
+        }
 
+        // Who is sending comes before what: the key in a header or the query
+        // is checked before the body is read at all.
         let mut key = match auth::from_request(headers, query.as_deref()) {
             Some(Ok(k)) => Some(self.check_key(&k, project_id, origin, cors).await?),
             Some(Err(())) => return Err(Reject::Unauthorized("invalid sentry_key")),
             None => None,
         };
-
+        if let Some(key) = &key {
+            inner.take_key(key.id, key.rate_limit_per_minute, 1, now)?;
+        }
         let encoding = headers
             .get(header::CONTENT_ENCODING)
             .and_then(|v| v.to_str().ok())
             .map(str::to_string);
+        let mut stream = body.into_data_stream();
+        let mut raw: Vec<u8> = Vec::new();
+        if key.is_none() {
+            // Only the envelope's own `dsn` can name the key now. Read just
+            // enough of the body to see the envelope header, and check the
+            // key before the rest is read or decoded.
+            if endpoint == Endpoint::Store {
+                return Err(Reject::Unauthorized("missing or invalid authentication"));
+            }
+            read_into(&mut stream, &mut raw, PEEK, limit).await?;
+            let head = body::decode_prefix(encoding.as_deref(), &raw, PEEK)?;
+            let line = match head.iter().position(|b| *b == b'\n') {
+                Some(end) => &head[..end],
+                None if head.len() <= envelope::MAX_HEADER => &head[..],
+                None => return Err(Reject::TooLarge("the envelope header is too large")),
+            };
+            let (header, _) = envelope::header(line).map_err(Reject::from)?;
+            let public_key = header
+                .get("dsn")
+                .and_then(Value::as_str)
+                .and_then(auth::from_dsn)
+                .and_then(|(k, _)| auth::checked(&k))
+                .ok_or(Reject::Unauthorized("missing or invalid authentication"))?;
+            let found = self
+                .check_key(&public_key, project_id, origin, cors)
+                .await?;
+            inner.take_key(found.id, found.rate_limit_per_minute, 1, now)?;
+            key = Some(found);
+        }
+        let Some(key) = key else {
+            return Err(Reject::Unauthorized("missing authentication"));
+        };
+        read_into(&mut stream, &mut raw, usize::MAX, limit).await?;
+        drop(stream);
+
         let capture = inner
             .settings
             .capture_dir
             .clone()
             .map(|dir| (dir, uri.to_string(), headers.clone()));
-        let parsed = tokio::task::spawn_blocking(move || -> Result<Parsed, Reject> {
+        let decoded = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, Reject> {
             if let Some((dir, uri, headers)) = capture
                 && let Err(err) = capture::write(&dir, "POST", &uri, &headers, &raw)
             {
                 tracing::warn!(%err, "can't write the capture file");
             }
-            match endpoint {
-                Endpoint::Envelope => {
-                    let data = body::decode(encoding.as_deref(), &raw, MAX_ENVELOPE)?;
-                    envelope::parse(&data)
-                        .map(Parsed::Envelope)
-                        .map_err(|e| Reject::BadRequest(e.to_string()))
-                }
-                Endpoint::Store => Ok(Parsed::Event(body::decode(
-                    encoding.as_deref(),
-                    &raw,
-                    MAX_EVENT,
-                )?)),
-            }
+            let decoded_limit = match endpoint {
+                Endpoint::Envelope => MAX_ENVELOPE,
+                Endpoint::Store => MAX_EVENT,
+            };
+            // A body without an encoding is used as it is, not copied.
+            let owned = match body::decode_cow(encoding.as_deref(), &raw, decoded_limit)? {
+                Cow::Owned(data) => Some(data),
+                Cow::Borrowed(_) => None,
+            };
+            Ok(owned.unwrap_or(raw))
         })
         .await
         .map_err(|_| Reject::Unavailable("ingest failed"))??;
 
-        if key.is_none() {
-            let dsn = match &parsed {
-                Parsed::Envelope(env) => env.header_str("dsn"),
-                Parsed::Event(_) => None,
-            };
-            let public_key = dsn
-                .and_then(auth::from_dsn)
-                .and_then(|(k, _)| auth::checked(&k))
-                .ok_or(Reject::Unauthorized("missing or invalid authentication"))?;
-            key = Some(
-                self.check_key(&public_key, project_id, origin, cors)
-                    .await?,
-            );
+        // The queues may have filled while the body came in; a project with
+        // debug files also needs room in the symbolication queue.
+        if !inner.writer.has_room()
+            || (inner.difs.has_any(key.project_id) && !inner.symbolicator.has_room())
+        {
+            return Err(queue_full());
         }
-        let Some(key) = key else {
-            return Err(Reject::Unauthorized("missing authentication"));
-        };
-        inner.take_key(key.id, key.rate_limit_per_minute, now)?;
-
         let this = self.clone();
-        let (items, id) = tokio::task::spawn_blocking(move || this.jobs(parsed, &key))
-            .await
-            .map_err(|_| Reject::Unavailable("ingest failed"))??;
-        let full = Reject::RateLimited {
-            secs: 1,
-            scope: "organization",
-        };
-        if items.iter().any(|w| matches!(w, Work::Event(_))) {
-            inner.symbolicator.submit(items).map_err(|_| full)?;
+        let built =
+            tokio::task::spawn_blocking(move || this.build(endpoint, &decoded, &key, ip, now))
+                .await
+                .map_err(|_| Reject::Unavailable("ingest failed"))??;
+        let Built {
+            work,
+            id,
+            bytes,
+            limits,
+        } = built;
+        if work.iter().any(|w| matches!(w, Work::Event(_))) {
+            inner
+                .symbolicator
+                .submit(work, bytes)
+                .map_err(|_| queue_full())?;
         } else {
-            let jobs = items
+            let jobs = work
                 .into_iter()
                 .filter_map(|w| match w {
                     Work::Job(j) => Some(j),
                     Work::Event(_) => None,
                 })
                 .collect();
-            inner.writer.submit(jobs).map_err(|_| full)?;
+            inner.writer.submit(jobs).map_err(|_| queue_full())?;
         }
-        Ok(id)
+        Ok(Done { id, limits })
     }
 
     /// Finds the key and checks it may send to `project_id` from `origin`.
@@ -569,9 +710,18 @@ impl Ingest {
         }
     }
 
-    /// Turns the body into writer jobs (some through the symbolication
-    /// queue). Returns the event id to answer with.
-    fn jobs(&self, parsed: Parsed, key: &KeyInfo) -> Result<(Vec<Work>, Option<String>), Reject> {
+    /// Turns a decoded body into writer jobs (some through the symbolication
+    /// queue). An envelope is scanned for its items first, which reads their
+    /// headers only, and the IP and key budgets are charged for all of them
+    /// before any payload is looked at. Returns the event id to answer with.
+    fn build(
+        &self,
+        endpoint: Endpoint,
+        data: &[u8],
+        key: &KeyInfo,
+        ip: Option<IpAddr>,
+        now: Instant,
+    ) -> Result<Built, Reject> {
         let received = jiff::Timestamp::now();
         let received_at = normalize::sql_time(normalize::ts_seconds(received));
         let ctx = Context {
@@ -581,39 +731,68 @@ impl Ingest {
             received,
         };
         let bad = |e: event::EventError| Reject::BadRequest(e.to_string());
-        let env = match parsed {
-            Parsed::Event(data) => {
-                let prepared = event::parse(&data, &ctx, None).map_err(bad)?;
-                let id = prepared.event_id.clone();
-                return Ok((vec![self.event_work(prepared)], Some(id)));
-            }
-            Parsed::Envelope(env) => env,
-        };
-        let header_id = env.header_str("event_id").and_then(normalize::event_id);
+        if endpoint == Endpoint::Store {
+            let prepared = event::parse(data, &ctx, None).map_err(bad)?;
+            let id = prepared.event_id.clone();
+            return Ok(Built {
+                work: vec![self.event_work(prepared)],
+                id: Some(id),
+                bytes: data.len(),
+                limits: None,
+            });
+        }
+        let (env_header, rest) = envelope::header(data).map_err(Reject::from)?;
+        let mut scanner = envelope::Scanner::new(rest);
+        let mut items = Vec::new();
+        while let Some(item) = scanner.next_item().map_err(Reject::from)? {
+            items.push(item);
+        }
+        // One item has been paid for (the request); the others now.
+        if let Some(more) = u32::try_from(items.len().saturating_sub(1))
+            .ok()
+            .filter(|n| *n > 0)
+        {
+            self.inner.charge(ip, key, more, "organization", now)?;
+        }
+        let store_full = self.inner.writer.store_full();
+        let mut limits = None;
+        let header_id = env_header
+            .get("event_id")
+            .and_then(Value::as_str)
+            .and_then(normalize::event_id);
         let mut answer = header_id.clone();
-        let mut jobs = Vec::new();
+        let mut work = Vec::new();
         let mut attachments = Vec::new();
-        for item in env.items {
+        let mut bytes = 0;
+        for item in items {
             match item.ty() {
                 "event" => {
                     if item.payload.len() > MAX_EVENT {
                         return Err(Reject::TooLarge("the event is too large"));
                     }
+                    bytes += item.payload.len();
                     let prepared =
                         event::parse(&item.payload, &ctx, header_id.as_deref()).map_err(bad)?;
                     answer.get_or_insert_with(|| prepared.event_id.clone());
-                    jobs.push(self.event_work(prepared));
+                    work.push(self.event_work(prepared));
                 }
-                "session" => jobs.extend(
+                // The small ones: a larger one is not what an SDK sends.
+                "session" | "sessions" | "user_report" | "feedback"
+                    if item.payload.len() > MAX_SMALL_ITEM =>
+                {
+                    tracing::debug!(size = item.payload.len(), "dropped an oversized small item");
+                }
+                "session" => work.extend(
                     self.session(&item.payload, &ctx, &received_at, false)
                         .map(|s| Work::Job(Job::Session(s))),
                 ),
-                "sessions" => jobs.extend(
+                "sessions" => work.extend(
                     self.session(&item.payload, &ctx, &received_at, true)
                         .map(|s| Work::Job(Job::Session(s))),
                 ),
+                "user_report" | "feedback" if store_full => {}
                 "user_report" | "feedback" => {
-                    jobs.extend(
+                    work.extend(
                         feedback(&item, &ctx, &received_at, header_id.as_deref())
                             .map(|f| Work::Job(Job::Feedback(f))),
                     );
@@ -626,6 +805,7 @@ impl Ingest {
                 _ => {}
             }
         }
+        let mut kept = 0;
         for item in attachments {
             let kind = item
                 .header_str("attachment_type")
@@ -638,14 +818,25 @@ impl Ingest {
             {
                 continue;
             }
+            if store_full {
+                // Tell the SDK to leave attachments out for a while.
+                limits = Some("300:attachment:organization");
+                continue;
+            }
+            if kept >= MAX_ATTACHMENTS {
+                tracing::debug!("dropped an attachment: more than {MAX_ATTACHMENTS} for the event");
+                continue;
+            }
             if item.payload.len() > MAX_ATTACHMENT {
-                tracing::info!(
+                tracing::debug!(
                     size = item.payload.len(),
-                    "dropped an attachment over 10 MB"
+                    "dropped an attachment over 1 MiB"
                 );
                 continue;
             }
-            jobs.push(Work::Job(Job::Attachment(Box::new(AttachmentItem {
+            kept += 1;
+            bytes += item.payload.len();
+            work.push(Work::Job(Job::Attachment(Box::new(AttachmentItem {
                 project_id: key.project_id,
                 event_id,
                 received_at: received_at.clone(),
@@ -661,7 +852,12 @@ impl Ingest {
                 data: crate::store::compress(&item.payload),
             }))));
         }
-        Ok((jobs, answer))
+        Ok(Built {
+            work,
+            id: answer,
+            bytes,
+            limits,
+        })
     }
 
     /// A session update (or aggregate) without IP address or user agent and
@@ -678,15 +874,27 @@ impl Ingest {
         };
         let attrs = s.get_mut("attrs")?.as_object_mut()?;
         attrs.retain(|k, _| !scrub::is_ip_key(k) && k != "user_agent");
-        let release = attrs.get("release")?.as_str()?.trim().to_string();
+        // Cut like an event's release and environment: they end up in the
+        // releases list for good.
+        let release: String = attrs
+            .get("release")?
+            .as_str()?
+            .trim()
+            .chars()
+            .take(MAX_RELEASE)
+            .collect();
         if release.is_empty() {
             return None;
         }
-        let environment = attrs
+        let environment: String = attrs
             .get("environment")
             .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|e| !e.is_empty() && !e.contains(['\n', '/']))
             .unwrap_or("production")
-            .to_string();
+            .chars()
+            .take(MAX_ENVIRONMENT)
+            .collect();
         let day = format!("did:{}", &received_at[..10]);
         let hash_did = |obj: &mut Map<String, Value>| {
             if let Some(did) = obj.get("did").and_then(Value::as_str).map(str::to_string) {
@@ -717,7 +925,7 @@ impl Ingest {
 /// (an event with a feedback context), reduced to what the issue page will
 /// show, with the email hashed unless the project keeps user details.
 fn feedback(
-    item: &envelope::Item,
+    item: &envelope::Item<'_>,
     ctx: &Context<'_>,
     received_at: &str,
     header_id: Option<&str>,
@@ -770,6 +978,55 @@ fn feedback(
         received_at: received_at.to_string(),
         data: data.to_string(),
     })
+}
+
+/// The data volume is low on space or the store is over its limit
+/// (`KK_MAX_STORE_MB`): web events and app signals, which are only raw rows,
+/// get 429 with a minute's wait. Errors are still counted
+/// (docs/design.md §7).
+fn store_full() -> Reject {
+    Reject::RateLimited {
+        secs: 60,
+        scope: "organization",
+    }
+}
+
+/// The writer (or the symbolication queue) is full: 429 with a short wait.
+fn queue_full() -> Reject {
+    Reject::RateLimited {
+        secs: 1,
+        scope: "organization",
+    }
+}
+
+/// The compressed bytes of an envelope's start that are read before its key
+/// is known (the envelope header decoded from them is at most
+/// [`envelope::MAX_HEADER`]).
+const PEEK: usize = envelope::MAX_HEADER + 1;
+/// What a `/store/` body may be besides its event, compressed.
+const STORE_SLACK: usize = 64 * 1024;
+
+/// Reads `stream` into `raw` until `raw` holds `until` bytes or the stream
+/// ends, but never more than `limit` bytes in all.
+async fn read_into(
+    stream: &mut axum::body::BodyDataStream,
+    raw: &mut Vec<u8>,
+    until: usize,
+    limit: usize,
+) -> Result<(), Reject> {
+    while raw.len() < until {
+        match stream.next().await {
+            None => return Ok(()),
+            Some(Err(_)) => return Err(Reject::BadRequest("can't read the request body".into())),
+            Some(Ok(chunk)) => {
+                if raw.len() + chunk.len() > limit {
+                    return Err(Reject::TooLarge("the request body is too large"));
+                }
+                raw.extend_from_slice(&chunk);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn cors_headers(h: &mut HeaderMap, cors: Cors, origin: &str) {
@@ -854,4 +1111,28 @@ async fn preflight() -> Response {
         HeaderValue::from_static("3600"),
     );
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_ipv6_client_is_its_64_and_a_mapped_address_is_ipv4() {
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        assert_eq!(bucket_ip(ip("203.0.113.7")), ip("203.0.113.7"));
+        assert_eq!(
+            bucket_ip(ip("2001:db8:1:2:aaaa:bbbb:cccc:dddd")),
+            ip("2001:db8:1:2::")
+        );
+        assert_eq!(
+            bucket_ip(ip("2001:db8:1:2::1")),
+            bucket_ip(ip("2001:db8:1:2::2"))
+        );
+        assert_ne!(
+            bucket_ip(ip("2001:db8:1:2::1")),
+            bucket_ip(ip("2001:db8:1:3::1"))
+        );
+        assert_eq!(bucket_ip(ip("::ffff:203.0.113.7")), ip("203.0.113.7"));
+    }
 }

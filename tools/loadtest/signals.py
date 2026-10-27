@@ -12,8 +12,10 @@ versions, with sessions, 20 signal types, payloads on a third of them and
 (start Kestrel with KK_TRUST_PROXY=1 and KK_INGEST_IP_RATE_LIMIT=0). `--rate`
 counts signals per second.
 
-`--setup` makes the admin account and a project on a fresh instance and uses
-its key (otherwise pass `--key`); afterwards, once the rollup has run, it
+`--setup` makes the admin account and a project on a fresh instance, lifts the
+key's rate limit to its maximum (a key without a limit gets 1,000 items a
+minute, signals counting one each) and uses it (otherwise pass `--key` of a key
+with a high limit); afterwards, once the rollup has run, it
 prints what the App tab counts, to compare with what was accepted. Python
 standard library only; HTTP/1.1 keep-alive connections over several
 processes.
@@ -163,7 +165,10 @@ def setup(url: str) -> tuple[Browser, int, str]:
     b.post("/projects", {"name": "Load app", "platform": "apple"})
     projects = b.get("/projects")
     pid = int(re.findall(r"/projects/(\d+)", projects)[-1])
-    key = re.search(r"\b([0-9a-f]{32})\b", b.get(f"/projects/{pid}/settings")).group(1)
+    settings = b.get(f"/projects/{pid}/settings")
+    key = re.search(r"\b([0-9a-f]{32})\b", settings).group(1)
+    key_id = re.search(rf"/projects/{pid}/keys/(\d+)", settings).group(1)
+    b.post(f"/projects/{pid}/keys/{key_id}", {"name": "Load", "enabled": "true", "rate_limit": "1000000"})
     return b, pid, key
 
 

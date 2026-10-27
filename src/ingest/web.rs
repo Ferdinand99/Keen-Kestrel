@@ -148,7 +148,7 @@ impl Ingest {
         let inner = &self.inner;
         let now = Instant::now();
         let ip = session::client_ip(headers, peer, session::trust_proxy());
-        inner.take_ip(ip, "ip", now)?;
+        inner.take_ip(ip, 1, "ip", now)?;
         if gpc(headers) {
             return Ok(());
         }
@@ -216,7 +216,10 @@ impl Ingest {
                 }
             }
         }
-        inner.take_key(key.id, key.rate_limit_per_minute, now)?;
+        inner.take_key(key.id, key.rate_limit_per_minute, 1, now)?;
+        if inner.writer.store_full() {
+            return Err(super::store_full());
+        }
 
         let name = match str_field(&fields, "n", "name").map(str::trim) {
             None | Some(PAGEVIEW) | Some("") => PAGEVIEW.to_string(),

@@ -82,7 +82,13 @@ Kestrel sets no cookies and never stores IP addresses, user agents or the instal
 | A session | The same keyed hash of KestrelKit's random session id. |
 | The time | When the signal happened, corrected for the device's clock with the batch's `sent_at`, and never in the future. |
 
-The IP address only feeds the per-IP rate limit in memory; the user agent isn't read at all.
+The IP address only feeds the per-IP rate limit in memory (an IPv6 address counts as its /64); the user agent isn't
+read at all.
+
+A signal's time is the device's word, so Kestrel keeps it only if it is at most 48 hours old once corrected with
+`sent_at` (a device that was offline longer loses the signals older than that; later times count as now). Each
+signal counts against the key's rate limit (1000 a minute unless the key has its own limit under **Settings →
+Keys**), and when the server's disk is nearly full the endpoint answers 429 with `Retry-After: 60`.
 
 **Strict mode** (Settings → App analytics) keys the hash with a key that changes every UTC day. A user then gets an
 unrelated id every day, so nobody can be followed from one day to the next, and nor can anyone who gets hold of the

@@ -113,8 +113,8 @@ enabled_help = "비활성화된 키로 보낸 이벤트는 거부돼요."
 none_enabled = "활성화된 키 없음"
 rate_limit = "속도 제한"
 rate_limit_unit = "분당"
-rate_limit_help = "이 키가 1분에 받는 최대 이벤트 수예요. 비워 두면 제한이 없어요."
-no_limit = "제한 없음"
+rate_limit_help = "이 키가 1분에 받는 최대 이벤트 수예요. 비워 두면 기본 한도가 적용돼요."
+no_limit = "기본값"
 per_minute = "분당 {n}개"
 origins = "허용된 출처"
 origins_help = "브라우저 SDK용이에요. 한 줄에 출처 하나씩 입력하세요. 예: https://example.com. 비워 두면 모든 출처를 허용해요."
@@ -507,7 +507,7 @@ empty_viewer = "편집자나 관리자가 알림 규칙을 추가할 수 있어�
 no_channels = "채널 없음"
 no_channels_title = "아직 알림 채널이 없어요"
 no_channels_text = "알림은 이 인스턴스의 알림 채널(Slack, Discord, Teams, Telegram, ntfy, 이메일, 웹훅 등)로 전송돼요. 먼저 채널을 추가하세요."
-no_channels_viewer = "아직 알림 채널이 없어요. 편집자나 관리자가 설정 → 알림에서 추가할 수 있어요."
+no_channels_viewer = "아직 알림 채널이 없어요. 관리자가 설정 → 알림에서 추가할 수 있어요."
 add_channel = "채널 추가"
 manage_channels = "알림 채널 관리"
 history_title = "보낸 알림"
@@ -824,7 +824,7 @@ site_name_placeholder = "Acme 오류…"
 tz_after = ". 설정에서 변경할 수 있어요."
 
 [users]
-roles_help = "보기 전용은 확인만 할 수 있어요. 편집자는 프로젝트, 키, 이슈, 알림, 알림 채널을 관리해요. 관리자는 사용자를 포함해 모든 것을 할 수 있어요."
+roles_help = "보기 전용은 확인만 할 수 있어요. 편집자는 프로젝트, 키, 이슈, 알림을 관리해요. 관리자는 알림 채널과 사용자를 포함해 모든 것을 할 수 있어요."
 
 [tokens]
 sub = "스크립트, 빌드 머신, AI 어시스턴트가 프로젝트, 이슈, 릴리스, 알림 규칙을 읽거나 변경할 수 있게 해요."

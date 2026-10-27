@@ -522,6 +522,7 @@ async fn the_writer_loses_nothing_under_a_burst() {
     let app = std::sync::Arc::new(
         App::with(Settings {
             ip_rate_limit_per_minute: 0,
+            key_rate_limit_per_minute: 0,
             ..Settings::default()
         })
         .await,

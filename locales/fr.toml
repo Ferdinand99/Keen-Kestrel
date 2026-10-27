@@ -119,8 +119,8 @@ enabled_help = "Les événements envoyés avec une clé désactivée sont refus�
 none_enabled = "Aucune clé activée"
 rate_limit = "Limite de débit"
 rate_limit_unit = "par minute"
-rate_limit_help = "Nombre maximal d’événements par minute acceptés par cette clé. Laisser vide pour n’imposer aucune limite."
-no_limit = "Sans limite"
+rate_limit_help = "Nombre maximal d’événements par minute acceptés par cette clé. Laisser vide pour la limite par défaut."
+no_limit = "Par défaut"
 per_minute = "{n} par minute"
 origins = "Origines autorisées"
 origins_help = "Pour les SDK de navigateur : une origine par ligne, par exemple https://example.com. Laisser vide pour autoriser toutes les origines."
@@ -549,7 +549,7 @@ empty_viewer = "Un éditeur ou un admin peut ajouter des règles d’alerte."
 no_channels = "Aucun canal"
 no_channels_title = "Aucun canal de notification"
 no_channels_text = "Les alertes sont envoyées aux canaux de notification de cette instance : Slack, Discord, Teams, Telegram, ntfy, e-mail, webhooks et plus encore. Commencer par en ajouter un."
-no_channels_viewer = "Aucun canal de notification pour l’instant. Un éditeur ou un admin peut en ajouter dans Réglages → Notifications."
+no_channels_viewer = "Aucun canal de notification pour l’instant. Un admin peut en ajouter dans Réglages → Notifications."
 add_channel = "Ajouter un canal"
 manage_channels = "Gérer les canaux de notification"
 history_title = "Alertes envoyées"
@@ -876,7 +876,7 @@ site_name_placeholder = "Erreurs d’Acme…"
 tz_after = ". Modifiable dans les Réglages."
 
 [users]
-roles_help = "Les lecteurs consultent sans rien modifier. Les éditeurs gèrent les projets, clés, problèmes, alertes et canaux de notification. Les admins peuvent tout faire, y compris gérer les utilisateurs."
+roles_help = "Les lecteurs consultent sans rien modifier. Les éditeurs gèrent les projets, clés, problèmes et alertes. Les admins peuvent tout faire, y compris gérer les canaux de notification et les utilisateurs."
 
 [tokens]
 sub = "Permettre à des scripts, machines de build et assistants IA de lire ou modifier les projets, problèmes, versions et règles d’alerte."

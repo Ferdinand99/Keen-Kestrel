@@ -9,7 +9,8 @@ generator. Each request is a k.js-style text/plain pageview (now and then a
 custom event) with one of 400 paths, 10 referrers, 12 user agents and a
 random client address in X-Forwarded-For (start Kestrel with
 KK_TRUST_PROXY=1 and KK_INGEST_IP_RATE_LIMIT=0 so they count as many
-visitors). Python standard library only; HTTP/1.1 keep-alive connections,
+visitors, and give the key a high rate limit, 1000000 a minute: a key
+without a limit gets 1,000 pageviews a minute). Python standard library only; HTTP/1.1 keep-alive connections,
 spread over several processes.
 """
 

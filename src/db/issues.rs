@@ -249,6 +249,16 @@ fn find_or_adopt(c: &Connection, e: &EventRecord) -> rusqlite::Result<Option<Iss
 /// project's daily cap ([`MAX_PAYLOADS_PER_DAY`] by default) today, the
 /// event row and its payload. A crash notes its release's first crash.
 pub fn write_event_full(c: &Connection, e: &EventRecord) -> rusqlite::Result<Written> {
+    write_event_with(c, e, true)
+}
+
+/// [`write_event_full`], and with `keep_payload` false the event only counts
+/// (the store is full, docs/design.md §7): no event row, no payload.
+pub fn write_event_with(
+    c: &Connection,
+    e: &EventRecord,
+    keep_payload: bool,
+) -> rusqlite::Result<Written> {
     let duplicate: bool = c
         .prepare_cached(
             "SELECT EXISTS (SELECT 1 FROM events WHERE project_id = ?1 AND event_id = ?2)",
@@ -408,7 +418,7 @@ pub fn write_event_full(c: &Connection, e: &EventRecord) -> rusqlite::Result<Wri
         }
     }
 
-    if store_payload {
+    if store_payload && keep_payload {
         c.prepare_cached(
             "INSERT INTO store.payloads (project_id, event_id, received_at, data) VALUES (?1, ?2, ?3, ?4)",
         )?

@@ -11,6 +11,10 @@
 //!
 //! * **Cooldown**: a rule alerts for an issue at most once per
 //!   `cooldown_minutes`.
+//! * **Cap**: anyone with a DSN can make new issues, so a new-issue or
+//!   regression rule sends at most [`Settings::rule_cap`] alerts per
+//!   [`Settings::rule_window`] (10 per 10 minutes); the ones held back come
+//!   as one "and N more" alert when the window is over ([`Throttle`]).
 //! * **Digest**: with `digest_minutes`, a channel gets one message with
 //!   everything that came up in that many minutes.
 //! * **Spike**: events in the last hour (this hour's plus the share of the
@@ -84,6 +88,11 @@ pub struct Settings {
     pub spike_check_every: Duration,
     /// Messages sent at once.
     pub concurrency: usize,
+    /// New-issue and regression alerts one rule sends per window (0: no
+    /// cap).
+    pub rule_cap: u32,
+    /// The window of `rule_cap`.
+    pub rule_window: Duration,
 }
 
 impl Default for Settings {
@@ -97,6 +106,8 @@ impl Default for Settings {
             tick: Duration::from_secs(15),
             spike_check_every: Duration::from_secs(60),
             concurrency: 8,
+            rule_cap: 10,
+            rule_window: Duration::from_secs(10 * 60),
         }
     }
 }
@@ -156,6 +167,7 @@ pub struct Alerts {
 struct Inner {
     core: Core,
     settings: Settings,
+    throttle: Throttle,
     wake: Notify,
     /// One delivery round at a time, so nothing is sent twice.
     deliver: tokio::sync::Mutex<()>,
@@ -170,6 +182,7 @@ impl Alerts {
         let alerts = Alerts {
             inner: Arc::new(Inner {
                 core,
+                throttle: Throttle::new(settings.rule_cap, settings.rule_window),
                 settings,
                 wake: Notify::new(),
                 deliver: tokio::sync::Mutex::new(()),
@@ -232,14 +245,41 @@ impl Alerts {
         .await
     }
 
+    /// Queues the "and N more" alerts of the windows that are over.
+    async fn flush_overflow(&self) {
+        let due = self.inner.throttle.take_due(Instant::now());
+        if due.is_empty() {
+            return;
+        }
+        let now = crate::issues::now();
+        match self
+            .inner
+            .core
+            .with_conn(move |c| queue_overflow(c, &due, &now))
+            .await
+        {
+            Ok(0) => {}
+            Ok(queued) => {
+                self.inner
+                    .stats
+                    .queued
+                    .fetch_add(queued as u64, Ordering::Relaxed);
+                self.wake();
+            }
+            Err(err) => tracing::warn!(%err, "can't queue the alerts held back"),
+        }
+    }
+
     async fn evaluate(&self, batch: Vec<Trigger>) {
+        self.flush_overflow().await;
         let n = batch.len() as u64;
         let spikes_due = self.spikes_due(&batch);
         let now = crate::issues::now();
+        let inner = self.inner.clone();
         let result = self
             .inner
             .core
-            .with_conn(move |c| evaluate_batch(c, &batch, &spikes_due, &now))
+            .with_conn(move |c| evaluate_batch(c, &batch, &spikes_due, &now, &inner.throttle))
             .await;
         self.inner.stats.evaluated.fetch_add(n, Ordering::Relaxed);
         match result {
@@ -421,6 +461,165 @@ fn issue_data(c: &Connection, issue_id: i64) -> rusqlite::Result<Option<(Value, 
     .optional()
 }
 
+/// How many alerts of a rule went out in the current window, and how many
+/// were held back, for the cap on new-issue and regression alerts (anyone
+/// with the public key can make new issues, so this is what keeps a flood
+/// of them from becoming a flood of messages). Memory only.
+pub struct Throttle {
+    cap: u32,
+    window: Duration,
+    rules: Mutex<HashMap<i64, Window>>,
+}
+
+struct Window {
+    start: Instant,
+    project_id: i64,
+    /// Sent in this window.
+    sent: u32,
+    /// Held back in this window.
+    held: u32,
+    /// Held back in windows that are over, not yet announced.
+    overflow: u32,
+}
+
+impl Throttle {
+    pub fn new(cap: u32, window: Duration) -> Self {
+        Throttle {
+            cap,
+            window,
+            rules: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Whether `rule_id` (of `project_id`) may send one more alert now; if
+    /// not, the alert is counted for the "and N more" message.
+    pub fn admit(&self, rule_id: i64, project_id: i64) -> bool {
+        if self.cap == 0 {
+            return true;
+        }
+        let now = Instant::now();
+        let mut rules = self.rules.lock().unwrap_or_else(|e| e.into_inner());
+        let w = rules.entry(rule_id).or_insert(Window {
+            start: now,
+            project_id,
+            sent: 0,
+            held: 0,
+            overflow: 0,
+        });
+        w.roll(now, self.window);
+        if w.sent < self.cap {
+            w.sent += 1;
+            true
+        } else {
+            w.held += 1;
+            false
+        }
+    }
+
+    /// The held-back alerts of windows that are over, as `(rule id, project
+    /// id, count)`; each is announced once.
+    pub fn take_due(&self, now: Instant) -> Vec<(i64, i64, u32)> {
+        let mut rules = self.rules.lock().unwrap_or_else(|e| e.into_inner());
+        let mut due = Vec::new();
+        for (rule_id, w) in rules.iter_mut() {
+            w.roll(now, self.window);
+            if w.overflow > 0 {
+                due.push((*rule_id, w.project_id, std::mem::take(&mut w.overflow)));
+            }
+        }
+        // A window that is over and has nothing to say is forgotten.
+        rules.retain(|_, w| now.duration_since(w.start) < self.window || w.sent > 0 || w.held > 0);
+        due
+    }
+}
+
+impl Window {
+    /// Starts a new window when the old one is over; what it held back
+    /// waits to be announced.
+    fn roll(&mut self, now: Instant, window: Duration) {
+        if now.duration_since(self.start) >= window {
+            self.start = now;
+            self.sent = 0;
+            self.overflow += std::mem::take(&mut self.held);
+        }
+    }
+}
+
+/// Queues one "and N more" alert per rule in `due` for the rule's channels.
+fn queue_overflow(
+    c: &mut Connection,
+    due: &[(i64, i64, u32)],
+    now: &str,
+) -> rusqlite::Result<usize> {
+    let tx = c.transaction()?;
+    let mut queued = 0;
+    for (rule_id, project_id, count) in due {
+        let Some(rule) = db::rule(&tx, *project_id, *rule_id)? else {
+            continue;
+        };
+        if !rule.enabled {
+            continue;
+        }
+        let name: Option<String> = tx
+            .prepare_cached("SELECT name FROM projects WHERE id = ?1")?
+            .query_row([project_id], |r| r.get(0))
+            .optional()?;
+        let Some(name) = name else { continue };
+        let data = json!({
+            "kind": rule.kind.as_str(),
+            "project": {"id": project_id, "name": name},
+            "overflow": count,
+            "path": format!("/projects/{project_id}/alerts"),
+        });
+        queued += queue_for_channels(&tx, &rule, None, &data, now)?;
+    }
+    tx.commit()?;
+    Ok(queued)
+}
+
+/// One log entry per active channel of `rule` for an alert, and a digest
+/// slot where the rule has a digest. Returns how many it made.
+fn queue_for_channels(
+    tx: &Connection,
+    rule: &Rule,
+    issue_id: Option<i64>,
+    data: &Value,
+    now: &str,
+) -> rusqlite::Result<usize> {
+    let mut queued = 0;
+    for channel_id in &rule.channel_ids {
+        let Some(channel) = db::channel(tx, *channel_id)? else {
+            continue;
+        };
+        if !channel.active {
+            continue;
+        }
+        let due = match rule.digest_minutes {
+            Some(minutes) => {
+                Some(db::digest_due(tx, channel.id)?.unwrap_or_else(|| shift(now, minutes * 60)))
+            }
+            None => None,
+        };
+        db::insert_log(
+            tx,
+            &db::NewEntry {
+                project_id: rule.project_id,
+                rule_id: rule.id,
+                rule_name: &rule.name,
+                channel_id: channel.id,
+                channel_name: &channel.name,
+                issue_id,
+                kind: rule.kind.as_str(),
+                data,
+                now,
+                digest_due: due.as_deref(),
+            },
+        )?;
+        queued += 1;
+    }
+    Ok(queued)
+}
+
 fn env_matches(rule: &Rule, environment: &str) -> bool {
     rule.environment.is_empty() || rule.environment == environment
 }
@@ -432,6 +631,7 @@ fn evaluate_batch(
     batch: &[Trigger],
     spikes_due: &[(i64, i64)],
     now: &str,
+    throttle: &Throttle,
 ) -> rusqlite::Result<usize> {
     let tx = c.transaction()?;
     let mut rules_of: HashMap<i64, Vec<Rule>> = HashMap::new();
@@ -536,6 +736,12 @@ fn evaluate_batch(
         if rule.kind == RuleKind::Spike && status != "unresolved" {
             continue;
         }
+        // Held back, an alert doesn't start the issue's cooldown.
+        if matches!(rule.kind, RuleKind::NewIssue | RuleKind::Regression)
+            && !throttle.admit(rule.id, rule.project_id)
+        {
+            continue;
+        }
         data["kind"] = Value::from(rule.kind.as_str());
         if let (Some(extra), Some(obj)) = (extra.as_object(), data.as_object_mut()) {
             for (k, v) in extra {
@@ -543,36 +749,7 @@ fn evaluate_batch(
             }
         }
         db::set_fired(&tx, rule.id, issue_id, now)?;
-        for channel_id in &rule.channel_ids {
-            let Some(channel) = db::channel(&tx, *channel_id)? else {
-                continue;
-            };
-            if !channel.active {
-                continue;
-            }
-            let due = match rule.digest_minutes {
-                Some(minutes) => Some(
-                    db::digest_due(&tx, channel.id)?.unwrap_or_else(|| shift(now, minutes * 60)),
-                ),
-                None => None,
-            };
-            db::insert_log(
-                &tx,
-                &db::NewEntry {
-                    project_id: rule.project_id,
-                    rule_id: rule.id,
-                    rule_name: &rule.name,
-                    channel_id: channel.id,
-                    channel_name: &channel.name,
-                    issue_id: Some(issue_id),
-                    kind: rule.kind.as_str(),
-                    data: &data,
-                    now,
-                    digest_due: due.as_deref(),
-                },
-            )?;
-            queued += 1;
-        }
+        queued += queue_for_channels(&tx, &rule, Some(issue_id), &data, now)?;
     }
     tx.commit()?;
     Ok(queued)
@@ -603,6 +780,7 @@ struct Outgoing {
 }
 
 async fn deliver_due(alerts: &Alerts) -> usize {
+    alerts.flush_overflow().await;
     let inner = &alerts.inner;
     let _round = inner.deliver.lock().await;
     let now = crate::issues::now();
@@ -781,5 +959,35 @@ mod tests {
         assert_eq!(shift("2026-10-22 12:00:00", -3600), "2026-10-22 11:00:00");
         assert_eq!(shift("2026-10-22 00:10:00", -1200), "2026-10-21 23:50:00");
         assert_eq!(minute_of("2026-10-22 12:34:56"), 34);
+    }
+
+    #[test]
+    fn a_rule_sends_its_cap_per_window_and_announces_the_rest_once() {
+        let window = Duration::from_millis(60);
+        let t = Throttle::new(3, window);
+        // Rule 7 sends three; the others are held back and counted.
+        let sent = (0..8).filter(|_| t.admit(7, 1)).count();
+        assert_eq!(sent, 3);
+        // Another rule has a window of its own.
+        assert!(t.admit(8, 1));
+        // Nothing to announce while the window is open.
+        assert!(t.take_due(Instant::now()).is_empty());
+        std::thread::sleep(window * 2);
+        let mut due = t.take_due(Instant::now());
+        due.sort_unstable();
+        assert_eq!(due, [(7, 1, 5)], "five were held back, said once");
+        assert!(t.take_due(Instant::now()).is_empty());
+        // The next window starts with a clean slate.
+        assert!(t.admit(7, 1));
+        // A window that rolls over inside `admit` keeps what it held back.
+        let t = Throttle::new(1, window);
+        assert!(t.admit(1, 1));
+        assert!(!t.admit(1, 1));
+        std::thread::sleep(window * 2);
+        assert!(t.admit(1, 1), "a new window");
+        assert_eq!(t.take_due(Instant::now()), [(1, 1, 1)]);
+        // No cap, no throttle.
+        let none = Throttle::new(0, window);
+        assert!((0..100).all(|_| none.admit(1, 1)));
     }
 }

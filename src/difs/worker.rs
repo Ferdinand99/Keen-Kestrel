@@ -2,7 +2,8 @@
 //! has a debug file for one of their images) leave ingest's hot path here.
 //! Ingest answers the SDK at once; a few workers symbolicate, group and
 //! hand the envelope's jobs to the writer in order. A full queue makes
-//! ingest answer 429, like a full writer queue.
+//! ingest answer 429, like a full writer queue; it is full when it holds
+//! `queue_capacity` envelopes or `queue_max_bytes` of their payloads.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -32,6 +33,9 @@ pub struct QueueFull;
 pub struct WorkerSettings {
     /// Envelopes waiting at most.
     pub queue_capacity: usize,
+    /// Bytes of event payloads waiting at most (the parsed events are a few
+    /// times as big).
+    pub queue_max_bytes: usize,
     pub workers: usize,
 }
 
@@ -39,6 +43,7 @@ impl Default for WorkerSettings {
     fn default() -> Self {
         WorkerSettings {
             queue_capacity: 256,
+            queue_max_bytes: 32 * 1024 * 1024,
             workers: 2,
         }
     }
@@ -53,13 +58,22 @@ pub struct Stats {
 
 struct InFlight {
     n: AtomicUsize,
+    /// Payload bytes of the envelopes waiting or being worked on.
+    bytes: AtomicUsize,
     idle: Notify,
+}
+
+/// One envelope's work and what it weighs.
+struct Queued {
+    items: Vec<Work>,
+    bytes: usize,
 }
 
 /// The handle ingest submits through.
 #[derive(Clone)]
 pub struct Symbolicator {
-    tx: mpsc::Sender<Vec<Work>>,
+    tx: mpsc::Sender<Queued>,
+    max_bytes: usize,
     in_flight: Arc<InFlight>,
     stats: Arc<Stats>,
 }
@@ -71,6 +85,7 @@ impl Symbolicator {
         let rx = Arc::new(Mutex::new(rx));
         let in_flight = Arc::new(InFlight {
             n: AtomicUsize::new(0),
+            bytes: AtomicUsize::new(0),
             idle: Notify::new(),
         });
         let stats = Arc::new(Stats::default());
@@ -85,15 +100,29 @@ impl Symbolicator {
         }
         Symbolicator {
             tx,
+            max_bytes: settings.queue_max_bytes.max(1),
             in_flight,
             stats,
         }
     }
 
-    /// Queues one envelope's items.
-    pub fn submit(&self, items: Vec<Work>) -> Result<(), QueueFull> {
+    /// Whether the queue has room for another envelope.
+    pub fn has_room(&self) -> bool {
+        self.tx.capacity() > 0 && self.in_flight.bytes.load(Ordering::Acquire) < self.max_bytes
+    }
+
+    /// Queues one envelope's items, which hold `bytes` of event payloads.
+    /// Refused when the queue is full or would go over its byte budget (an
+    /// empty queue takes any envelope).
+    pub fn submit(&self, items: Vec<Work>, bytes: usize) -> Result<(), QueueFull> {
+        let before = self.in_flight.bytes.fetch_add(bytes, Ordering::AcqRel);
+        if before > 0 && before + bytes > self.max_bytes {
+            self.in_flight.bytes.fetch_sub(bytes, Ordering::AcqRel);
+            return Err(QueueFull);
+        }
         self.in_flight.n.fetch_add(1, Ordering::SeqCst);
-        if self.tx.try_send(items).is_err() {
+        if self.tx.try_send(Queued { items, bytes }).is_err() {
+            self.in_flight.bytes.fetch_sub(bytes, Ordering::AcqRel);
             self.done();
             return Err(QueueFull);
         }
@@ -127,7 +156,7 @@ fn done(in_flight: &InFlight) {
 }
 
 async fn run(
-    rx: Arc<Mutex<mpsc::Receiver<Vec<Work>>>>,
+    rx: Arc<Mutex<mpsc::Receiver<Queued>>>,
     difs: Difs,
     writer: Writer,
     in_flight: Arc<InFlight>,
@@ -135,7 +164,7 @@ async fn run(
 ) {
     loop {
         let next = rx.lock().await.recv().await;
-        let Some(items) = next else {
+        let Some(Queued { items, bytes }) = next else {
             return;
         };
         let (d, s) = (difs.clone(), stats.clone());
@@ -147,6 +176,7 @@ async fn run(
             }
             Err(err) => tracing::error!(%err, "symbolication panicked; dropped an envelope"),
         }
+        in_flight.bytes.fetch_sub(bytes, Ordering::AcqRel);
         done(&in_flight);
     }
 }

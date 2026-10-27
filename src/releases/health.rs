@@ -19,8 +19,15 @@
 //! over several days the daily user counts add up (a device seen on two
 //! days counts twice, as in the analytics' unique visitors).
 //!
+//! The release and environment of a session come from whoever holds the
+//! public key, and a release is kept for good, so a project takes at most
+//! [`MAX_VALUES_PER_DAY`] different releases and as many environments from
+//! sessions per day; the sessions of any others are dropped.
+//!
 //! It runs on the writer's connection, every minute with the retention
 //! job's tick.
+
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
@@ -28,12 +35,17 @@ use sha2::{Digest, Sha256};
 
 /// Session items rolled up per transaction.
 pub const BATCH: i64 = 2000;
+/// Different releases (and, separately, environments) one project takes from
+/// sessions per day.
+pub const MAX_VALUES_PER_DAY: usize = 1000;
 
 /// What one rollup did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Report {
     /// Session items read (and deleted).
     pub items: usize,
+    /// Of those, dropped for a project's cap on releases or environments.
+    pub dropped: usize,
 }
 
 /// A day's or a release's counts.
@@ -286,6 +298,8 @@ pub fn rollup(c: &mut Connection, now: &str) -> rusqlite::Result<Report> {
         })?
         .collect::<rusqlite::Result<_>>()?;
     let mut last = 0;
+    let mut dropped = 0;
+    let mut seen: HashMap<(i64, String), Seen> = HashMap::new();
     for (id, project_id, received_at, release, environment, data) in &items {
         last = *id;
         let exists: bool = tx
@@ -297,6 +311,18 @@ pub fn rollup(c: &mut Connection, now: &str) -> rusqlite::Result<Report> {
         let Ok(value) = serde_json::from_str::<Value>(data) else {
             continue;
         };
+        let day = received_at.get(..10).unwrap_or(received_at).to_string();
+        let today = match seen.entry((*project_id, day)) {
+            std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let seed = Seen::of_day(&tx, *project_id, &e.key().1)?;
+                e.insert(seed)
+            }
+        };
+        if !today.take(release, environment) {
+            dropped += 1;
+            continue;
+        }
         let release_id = crate::db::issues::upsert_release(&tx, *project_id, release, received_at)?;
         if value.get("aggregates").is_some() {
             aggregates(
@@ -326,7 +352,112 @@ pub fn rollup(c: &mut Connection, now: &str) -> rusqlite::Result<Report> {
         [now],
     )?;
     tx.commit()?;
-    Ok(Report { items: items.len() })
+    Ok(Report {
+        items: items.len(),
+        dropped,
+    })
+}
+
+/// The releases and environments a project's sessions already brought in on
+/// a day.
+#[derive(Default)]
+struct Seen {
+    releases: HashSet<String>,
+    environments: HashSet<String>,
+}
+
+impl Seen {
+    /// What `release_health` holds for the project's `day` already.
+    fn of_day(c: &Connection, project_id: i64, day: &str) -> rusqlite::Result<Seen> {
+        let mut seen = Seen::default();
+        let mut stmt = c.prepare_cached(
+            "SELECT DISTINCT r.version FROM release_health h JOIN releases r ON r.id = h.release_id
+             WHERE h.project_id = ?1 AND h.day = ?2",
+        )?;
+        for v in stmt.query_map(params![project_id, day], |r| r.get::<_, String>(0))? {
+            seen.releases.insert(v?);
+        }
+        let mut stmt = c.prepare_cached(
+            "SELECT DISTINCT environment FROM release_health WHERE project_id = ?1 AND day = ?2",
+        )?;
+        for v in stmt.query_map(params![project_id, day], |r| r.get::<_, String>(0))? {
+            seen.environments.insert(v?);
+        }
+        Ok(seen)
+    }
+
+    /// Notes a session's release and environment; `false` when either is
+    /// new and the day's cap is reached.
+    fn take(&mut self, release: &str, environment: &str) -> bool {
+        let new_release = !self.releases.contains(release);
+        let new_environment = !self.environments.contains(environment);
+        if (new_release && self.releases.len() >= MAX_VALUES_PER_DAY)
+            || (new_environment && self.environments.len() >= MAX_VALUES_PER_DAY)
+        {
+            return false;
+        }
+        if new_release {
+            self.releases.insert(release.to_string());
+        }
+        if new_environment {
+            self.environments.insert(environment.to_string());
+        }
+        true
+    }
+}
+
+/// Deletes releases last seen before `days` days ago that nothing refers to
+/// any more: no event, no issue, no release-health rollup (what retention
+/// removed was the last of them). Returns how many went.
+///
+/// The references have no index, and the foreign keys would look for them
+/// again for every release deleted, so the check is made once for all
+/// candidates and the keys are off for the delete.
+pub fn prune_releases(c: &mut Connection, now: &str, days: i64) -> rusqlite::Result<usize> {
+    let candidates: Vec<i64> = c
+        .prepare_cached(
+            "SELECT id FROM releases WHERE last_seen < datetime(?1, ?2) ORDER BY id LIMIT 10000",
+        )?
+        .query_map(params![now, format!("-{days} days")], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    if candidates.is_empty() {
+        return Ok(0);
+    }
+    c.execute_batch("PRAGMA foreign_keys = OFF")?;
+    let result = (|| {
+        let tx = c.transaction()?;
+        tx.execute_batch(
+            "CREATE TEMP TABLE IF NOT EXISTS prune_releases (id INTEGER PRIMARY KEY);
+             DELETE FROM temp.prune_releases;",
+        )?;
+        {
+            let mut insert = tx.prepare("INSERT INTO temp.prune_releases (id) VALUES (?1)")?;
+            for id in &candidates {
+                insert.execute([id])?;
+            }
+        }
+        // Kept: whatever an event, an issue or a rollup still names.
+        tx.execute_batch(
+            "DELETE FROM temp.prune_releases WHERE id IN
+                 (SELECT release_id FROM events WHERE release_id IN (SELECT id FROM temp.prune_releases));
+             DELETE FROM temp.prune_releases WHERE id IN
+                 (SELECT first_release_id FROM issues WHERE first_release_id IN (SELECT id FROM temp.prune_releases));
+             DELETE FROM temp.prune_releases WHERE id IN
+                 (SELECT last_release_id FROM issues WHERE last_release_id IN (SELECT id FROM temp.prune_releases));
+             DELETE FROM temp.prune_releases WHERE id IN
+                 (SELECT release_id FROM release_health WHERE release_id IN (SELECT id FROM temp.prune_releases));
+             DELETE FROM release_health_seen WHERE release_id IN (SELECT id FROM temp.prune_releases);",
+        )?;
+        let n = tx.execute(
+            "DELETE FROM releases WHERE id IN (SELECT id FROM temp.prune_releases)",
+            [],
+        )?;
+        tx.execute_batch("DROP TABLE temp.prune_releases")?;
+        tx.commit()?;
+        Ok(n)
+    })();
+    c.execute_batch("PRAGMA foreign_keys = ON")?;
+    result
 }
 
 /// Rolls up everything waiting (in batches).
@@ -335,6 +466,7 @@ pub fn rollup_all(c: &mut Connection, now: &str) -> rusqlite::Result<Report> {
     loop {
         let r = rollup(c, now)?;
         total.items += r.items;
+        total.dropped += r.dropped;
         if (r.items as i64) < BATCH {
             return Ok(total);
         }
@@ -506,5 +638,26 @@ mod tests {
             ..Health::default()
         };
         assert_eq!(odd.crash_free_sessions(), Some(0.0));
+    }
+
+    #[test]
+    fn a_day_takes_a_thousand_releases_and_a_thousand_environments() {
+        let mut seen = Seen::default();
+        for i in 0..MAX_VALUES_PER_DAY {
+            assert!(seen.take(&format!("r@{i}"), "production"));
+        }
+        assert!(!seen.take("one-more@1", "production"), "the 1001st release");
+        assert!(seen.take("r@5", "production"), "a known one still counts");
+        // Environments are counted on their own.
+        let mut seen = Seen::default();
+        for i in 0..MAX_VALUES_PER_DAY {
+            assert!(seen.take("shop@1", &format!("env-{i}")));
+        }
+        assert!(!seen.take("shop@1", "env-new"));
+        assert!(!seen.take("shop@2", "env-new"));
+        assert!(
+            seen.take("shop@2", "env-5"),
+            "a new release with a known environment"
+        );
     }
 }

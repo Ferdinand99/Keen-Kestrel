@@ -103,16 +103,33 @@ transaction every 100 ms or 500 items. A full queue makes ingest answer 429.
 
 ### 4.2 Ingest (Sentry protocol)
 - `POST /api/{project_id}/envelope/` and the legacy `POST /api/{project_id}/store/`.
-- Auth: `X-Sentry-Auth` header, `?sentry_key=` query parameter, or the envelope header `dsn`.
-- Encodings: gzip, deflate, br, zstd. Decompression limits: 20 MB per envelope, 1 MB per event, 10 MB per
-  attachment.
-- Rate limiting: 429 with `Retry-After` and `X-Sentry-Rate-Limits` per category (the SDKs respect it).
+- Auth: `X-Sentry-Auth` header, `?sentry_key=` query parameter, or the envelope header `dsn`. The key is
+  checked before the body is read; with only the `dsn`, the envelope header is read from the first 64 KiB of the
+  body (decoded alone) and the key checked before the rest is read or decoded.
+- Encodings: gzip, deflate, br, zstd (at most two in a `Content-Encoding` list; a zstd frame may ask for a window
+  of at most 8 MiB). Decompression limits, enforced while decoding: 20 MB per envelope, 1 MB per event.
+- Envelope structure: at most 100 items, 20 `event` / `transaction` items, an item header of at most 16 KiB and
+  an envelope header of at most 64 KiB. The first violation answers **413** and nothing of the envelope is
+  kept. (Dropping the extra items instead would still mean reading them, and would hide data loss; the SDKs
+  send one event and a few small items, and treat a 4xx as a final answer for that envelope without retrying.)
+  Payloads are slices of the decoded body until an item is accepted.
+- Rate limiting: 429 with `Retry-After` and `X-Sentry-Rate-Limits` per category (the SDKs respect it). The
+  buckets count **items**: an envelope takes one token per item from the IP's bucket and the key's. An IPv6
+  client's bucket is its /64. A key without a `rate_limit_per_minute` gets a default of **1000 items a
+  minute** (events, sessions, pageviews or signals). A full writer queue (2000 jobs or 256 MiB) or
+  symbolication queue (256 envelopes or 32 MiB of event payloads) answers 429 before the body is read.
 - Envelope items:
-  - **Kept:** `event`, `session` / `sessions` (release health), `user_report` / `feedback`, and
-    `attachment` when it belongs to a kept event (screenshots and view hierarchy are shown inline).
+  - **Kept:** `event`, `session` / `sessions` and `user_report` / `feedback` (4 KiB each at most; larger ones are
+    dropped; release 200 and environment 64 characters, at most 1000 different of each per project and day),
+    and `attachment` when it belongs to a kept event (1 MiB each, 5 per event; more and larger ones are dropped).
   - **Accepted and dropped (200):** `transaction`, `span`, `profile`, `replay_*`, `check_in`,
     `statsd` / `metrics`, `log`, `client_report`, minidumps.
 - Answer `{"id": "<event_id>"}`.
+- A full store: with less than 1 GiB free on the data volume, or `store.sqlite` over `KK_MAX_STORE_MB`
+  (unlimited by default), events are still grouped and counted but keep no payload, attachments and feedback are
+  dropped (the answer carries `X-Sentry-Rate-Limits: 300:attachment:organization` so the SDK leaves them out),
+  and web events and app signals, which are only raw rows, answer 429 with `Retry-After: 60`. Retention, or
+  a higher `KK_MAX_STORE_MB`, brings it back.
 
 ### 4.3 Normalisation and privacy
 Fill defaults; trim breadcrumbs (100) and long strings; derive `in_app` (SDK value, else per-platform
@@ -146,14 +163,18 @@ its v1 hash points at, which keeps `kestrel:v1` and gets the v2 hash as well.
 ### 4.6 Retention
 Event payloads 30 days; at most 1000 stored events per issue per day (counters keep counting); issues are
 removed 90 days after they were last seen; rollups 400 days; debug files for the last N releases or 180
-days. All configurable per project.
+days. All configurable per project. Releases that no event, issue or release-health rollup refers to are
+removed once they have not been seen for 90 days.
 
 ### 4.7 Alerts
 Per-project rules: new issue, regression, spike (events in one hour above
 `max(threshold, k × 7-day hourly baseline)`), first crash in a new release. Per-issue cooldown and a
 digest mode. Delivery through the vole-kit notification providers (the same ~40 as Vigilant Vole). Channels
 are the instance's (Settings → Notifications), each with its message language; rules are evaluated after the writer
-commits and messages are sent by a task of their own, with retries and a per-project history.
+commits and messages are sent by a task of their own, with retries and a per-project history. Anyone with a DSN can
+make new issues, so a new-issue or regression rule sends at most 10 alerts per 10 minutes; the ones held back
+come as one "and N more" alert when the window is over, and a held-back alert doesn't start the issue's cooldown.
+Channels are managed by admins: a channel makes the server send requests to an address of the admin's choosing.
 
 ### 4.8 iOS / macOS symbolication
 - getsentry `symbolic` (`debuginfo` with Mach-O and DWARF, `symcache`, `demangle` with Swift).
@@ -283,8 +304,16 @@ with Vigilant Vole come from vole-kit and follow Vigilant Vole's glossaries. DSN
 
 - DSN public keys are public by design and can only ingest. Legacy secret keys are accepted and ignored.
 - Ingest routes are exempt from CSRF and answer CORS with `*` or the key's allowed origins.
-- Rate limits: a token bucket per key and an in-memory bucket per IP (the IP is never written to disk),
-  body size caps and decompression limits.
+- Rate limits: a token bucket per key (1000 items a minute unless the key has its own limit) and an in-memory
+  bucket per IP address or IPv6 /64 (the IP is never written to disk), both counting items; body size caps,
+  decompression limits, structure limits for envelopes (§4.2), byte-bounded queues, and a stop for payload
+  storage when the data volume is nearly full. The public key allows forged events by design: "Allowed origins"
+  only keeps well-behaved browsers in line.
+- Signals older than 48 hours are dropped: an older one would make the rollup rebuild a whole day.
+- Live pages (issues, Web, App) are server-sent event streams, at most 64 of each open at once and one hour long
+  (the browser reconnects, which checks the session again).
+- MCP: event titles, messages, tags and stack traces are untrusted text from SDKs (the instructions and the
+  tools that return them say so), and every tool that changes something is marked destructive.
 - Ingest can listen on a separate port, so the admin interface can stay on a LAN or VPN.
 - Admin and API authentication, 2FA, token scopes, CSP and security headers come from vole-kit.
 - Passkeys (WebAuthn, from vole-kit 0.4) sign in without a password or code; each user adds them under

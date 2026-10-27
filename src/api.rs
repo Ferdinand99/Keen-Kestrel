@@ -293,7 +293,7 @@ pub static ROUTES: &[RouteDoc] = &[
         .req(r#"{"name": "Production", "rate_limit_per_minute": 600, "allowed_origins": ["https://sylo.app"]}"#)
         .res(KEY_EXAMPLE),
     r("GET", "/api/v1/projects/{id}/keys/{key_id}", "viewer", "Keys", "Get one key.").res(KEY_EXAMPLE),
-    r("PATCH", "/api/v1/projects/{id}/keys/{key_id}", "editor", "Keys", "Change a key: name, enabled, rate_limit_per_minute (null removes the limit) or allowed_origins (an empty list allows any origin).")
+    r("PATCH", "/api/v1/projects/{id}/keys/{key_id}", "editor", "Keys", "Change a key: name, enabled, rate_limit_per_minute (null: the default of 1000 items a minute) or allowed_origins (an empty list allows any origin).")
         .req(r#"{"enabled": false, "rate_limit_per_minute": null}"#)
         .res(KEY_EXAMPLE),
     r("DELETE", "/api/v1/projects/{id}/keys/{key_id}", "editor", "Keys", "Delete a key. SDKs that use its DSN can no longer send."),
@@ -501,7 +501,7 @@ fn markdown_middle(out: &mut String) {
          - `group_id`: the project group it's in (`null`: none). Groups are sections of the project list, in their `sort_order` \
          (then name); a project is in at most one, groups don't nest, and deleting a group leaves its projects in none.\n\
          - A key has a random 32-character hex `public_key` and a `dsn` built from the instance's public URL.\n\
-         - `enabled: false` makes the key's DSN refused; `rate_limit_per_minute` (1–1,000,000 or `null`) caps the events it may send; \
+         - `enabled: false` makes the key's DSN refused; `rate_limit_per_minute` (1–1,000,000 or `null` for the default of 1000) caps the items (events, sessions, pageviews, signals) it may send per minute; \
          `allowed_origins` lists the browser origins (`https://example.com`, or `*`) that may use it, and an empty list allows any.\n\n\
          ## Debug files\n\n\
          - Debug files (dSYMs) let Kestrel symbolicate native crashes: function, file and line instead of image and offset. \
