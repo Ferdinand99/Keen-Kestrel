@@ -11,4 +11,13 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
     { id = "RUSTSEC-2026-0368", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
     { id = "RUSTSEC-2026-0369", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
+    # zstd 0.13 / zstd-safe 7 remain only through symbolic-debuginfo 13.9 (the
+    # newest stable), which calls zstd::bulk::decompress for compressed ELF
+    # sections and nothing else. 0391 needs a reused stream context
+    # (with_context), 0398 the seekable feature and 0403 a streaming decoder;
+    # symbolic uses none of them. Kestrel's own code uses zstd 0.14.3. Drop these
+    # when symbolic moves to zstd 0.14 (14.0 is in alpha).
+    { id = "RUSTSEC-2026-0391", reason = "zstd 0.13 only via symbolic-debuginfo, which uses bulk::decompress, no shared context" },
+    { id = "RUSTSEC-2026-0398", reason = "zstd-safe 7 only via symbolic-debuginfo; seekable feature not enabled" },
+    { id = "RUSTSEC-2026-0403", reason = "zstd-safe 7 only via symbolic-debuginfo, which never streams; bulk decompress only" },
 ]
