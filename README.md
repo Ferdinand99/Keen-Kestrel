@@ -78,4 +78,6 @@ cohorts. See [`docs/design.md`](docs/design.md) for the full scope and the phase
 
 ## License
 
-[GNU AGPL-3.0-only](LICENSE)
+[GNU AGPL-3.0-only](LICENSE), except the web analytics snippet
+[`src/analytics/k.js`](src/analytics/k.js), which is MIT so it can go on any website. The Swift SDK,
+[KestrelKit](https://github.com/Ferdinand99/KestrelKit), is MIT too.
