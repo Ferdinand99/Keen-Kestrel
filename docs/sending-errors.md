@@ -133,8 +133,11 @@ Release builds of Swift apps are stripped, so a crash only has addresses until K
 it with the official `sentry-cli`; the project's **Debug files** page has the commands with this instance's address
 and the project's slug filled in.
 
-1. On the **Debug files** page, **Create an upload token** (or make one under **Settings → API tokens** with
-   **Read and upload debug files**). It may only upload debug files and manage releases.
+1. On the **Debug files** page, **New upload token**, and choose the project it is for. It may only upload debug
+   files and manage releases for that project (uploads to another project are refused with `403`). Administrators
+   can also pick **All projects**, which is discouraged: a leaked token then reaches every project. Tokens made
+   before this existed work for all projects until you replace them. A token made under **Settings → API tokens**
+   has no project and can't upload; use the Debug files page.
 2. Upload the dSYMs after each build:
 
    ```bash

@@ -181,7 +181,7 @@ Channels are managed by admins: a channel makes the server send requests to an a
 - Upload with the official `sentry-cli debug-files upload` (endpoints `GET /api/0/`,
   `/api/0/organizations/{org}/chunk-upload/`, `/api/0/projects/{org}/{project}/files/difs/assemble/`,
   legacy `/api/0/projects/{org}/{project}/files/dsyms/`), with any org/project slug and a Kestrel API
-  token with the `difs:write` scope; also a plain `POST /api/v1/projects/{id}/dsyms` taking a zip.
+  token with the `difs:write` scope, bound to one project (or to all of them, by an administrator); also a plain `POST /api/v1/projects/{id}/dsyms` taking a zip.
 - Each dSYM is converted once to a SymCache per debug id. Frames are mapped through
   `debug_meta.images` (uuid, `image_addr`), inlined frames are expanded and Swift is demangled. System
   frames keep the names sentry-cocoa resolved on the device.

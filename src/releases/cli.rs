@@ -12,7 +12,9 @@
 //! Like sentry-cli's other routes these take API tokens only. Reading needs
 //! any token; creating and changing needs one that may upload debug files
 //! (an editor's read-and-write token, or a token with the `difs:write`
-//! scope), which is what a build machine has.
+//! scope), which is what a build machine has. A `difs:write` token is bound
+//! to one project (or to all of them): it creates and changes releases of
+//! that project only.
 
 use axum::Router;
 use axum::extract::{Extension, Path, State};
@@ -27,7 +29,7 @@ use vole_kit::state::Core;
 
 use crate::db::projects::{self, Project};
 use crate::db::releases as db;
-use crate::difs::upload::may_upload;
+use crate::difs::upload::{bound_project, may_upload};
 
 pub fn router() -> Router<Core> {
     let org = get(org_list).post(org_create);
@@ -84,10 +86,50 @@ fn may_write(user: &CurrentUser, method: Method) -> Option<Response> {
         Ok(()) => None,
         Err(_) => Some(detail(
             StatusCode::FORBIDDEN,
-            "this token can't manage releases: use one with the difs:write scope \
-             (Debug files page) or a read-and-write token of an editor",
+            "this token can't manage releases: use one with the difs:write scope              (Debug files page) or a read-and-write token of an editor",
         )),
     }
+}
+
+/// [`may_write`] for a request that names `named` projects (slugs or ids;
+/// `None`: every project that has the release). Returns the one project a
+/// bound upload token is limited to (`None`: no limit). A token bound to a
+/// project may not name another one, and one with no binding on record is
+/// refused.
+async fn guard(
+    core: &Core,
+    user: &CurrentUser,
+    method: Method,
+    named: Option<&[String]>,
+) -> Result<Option<i64>, Box<Response>> {
+    if let Some(refused) = may_write(user, method) {
+        return Err(Box::new(refused));
+    }
+    let bound = bound_project(core, method.map(|Extension(m)| m))
+        .await
+        .map_err(|d| Box::new(detail(StatusCode::FORBIDDEN, d.message())))?;
+    let (Some(bound), Some(named)) = (bound, named) else {
+        return Ok(bound);
+    };
+    let named = named.to_vec();
+    let others = core
+        .with_conn(move |c| {
+            let mut others = false;
+            for segment in &named {
+                // An unknown project is left to the handler's own answer.
+                others |= project_by(c, segment)?.is_some_and(|p| p.id != bound);
+            }
+            Ok(others)
+        })
+        .await
+        .unwrap_or(true);
+    if others {
+        return Err(Box::new(detail(
+            StatusCode::FORBIDDEN,
+            "this upload token is bound to another project",
+        )));
+    }
+    Ok(Some(bound))
 }
 
 fn iso(time: &str) -> String {
@@ -183,11 +225,13 @@ fn check_version(v: &str) -> Option<String> {
 }
 
 /// Creates or updates `version` in `projects` (slugs or ids; every project
-/// that has it when `None`). Returns the answer.
+/// that has it when `None`, or only `bound` when a token is limited to it).
+/// Returns the answer.
 async fn upsert(
     core: &Core,
     version: String,
     projects: Option<Vec<String>>,
+    bound: Option<i64>,
     released: Option<String>,
     create: bool,
 ) -> Response {
@@ -215,6 +259,7 @@ async fn upsert(
                 None => find(c, &version, None, &now)?
                     .into_iter()
                     .map(|(p, _)| p)
+                    .filter(|p| bound.is_none_or(|b| b == p.id))
                     .collect(),
             };
             if targets.is_empty() {
@@ -256,15 +301,18 @@ async fn org_create(
     method: Method,
     axum::Json(body): axum::Json<ReleaseBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&user, method) {
-        return refused;
-    }
+    let projects = body.projects.unwrap_or_default();
+    let bound = match guard(&core, &user, method, Some(&projects)).await {
+        Ok(bound) => bound,
+        Err(refused) => return *refused,
+    };
     let version = body.version.unwrap_or_default();
     tracing::info!(user = %user.username, %version, "release created (sentry-cli)");
     upsert(
         &core,
         version,
-        Some(body.projects.unwrap_or_default()),
+        Some(projects),
+        bound,
         body.date_released,
         true,
     )
@@ -280,10 +328,19 @@ async fn org_update(
     Path((_org, version)): Path<(String, String)>,
     axum::Json(body): axum::Json<ReleaseBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&user, method) {
-        return refused;
-    }
-    upsert(&core, version, body.projects, body.date_released, false).await
+    let bound = match guard(&core, &user, method, body.projects.as_deref()).await {
+        Ok(bound) => bound,
+        Err(refused) => return *refused,
+    };
+    upsert(
+        &core,
+        version,
+        body.projects,
+        bound,
+        body.date_released,
+        false,
+    )
+    .await
 }
 
 /// `GET /api/0/organizations/{org}/releases/{version}/` (`releases info`).
@@ -372,13 +429,16 @@ async fn project_create(
     Path((_org, project)): Path<(String, String)>,
     axum::Json(body): axum::Json<ReleaseBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&user, method) {
-        return refused;
-    }
+    let projects = vec![project];
+    let bound = match guard(&core, &user, method, Some(&projects)).await {
+        Ok(bound) => bound,
+        Err(refused) => return *refused,
+    };
     upsert(
         &core,
         body.version.unwrap_or_default(),
-        Some(vec![project]),
+        Some(projects),
+        bound,
         body.date_released,
         true,
     )
@@ -400,13 +460,16 @@ async fn project_update(
     Path((_org, project, version)): Path<(String, String, String)>,
     axum::Json(body): axum::Json<ReleaseBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&user, method) {
-        return refused;
-    }
+    let projects = vec![project];
+    let bound = match guard(&core, &user, method, Some(&projects)).await {
+        Ok(bound) => bound,
+        Err(refused) => return *refused,
+    };
     upsert(
         &core,
         version,
-        Some(vec![project]),
+        Some(projects),
+        bound,
         body.date_released,
         false,
     )
@@ -441,8 +504,8 @@ async fn deploy_create(
     Path((_org, version)): Path<(String, String)>,
     axum::Json(body): axum::Json<DeployBody>,
 ) -> Response {
-    if let Some(refused) = may_write(&user, method) {
-        return refused;
+    if let Err(refused) = guard(&core, &user, method, None).await {
+        return *refused;
     }
     let exists = core
         .with_conn(move |c| {

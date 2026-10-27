@@ -92,12 +92,13 @@
   <div class="card card-flush">
     <div class="table-wrap">
       <table class="table table-stack">
-        <thead><tr><th>{{ tr("common.name") }}</th><th>{{ tr("tokens.owner") }}</th><th>{{ tr("common.created") }}</th><th>{{ tr("tokens.last_used") }}</th><th>{{ tr("detail.expires") }}</th></tr></thead>
+        <thead><tr><th>{{ tr("common.name") }}</th><th>{{ tr("tokens.owner") }}</th><th>{{ tr("difs.token_project") }}</th><th>{{ tr("common.created") }}</th><th>{{ tr("tokens.last_used") }}</th><th>{{ tr("detail.expires") }}</th></tr></thead>
         <tbody>
           {%- for t in tokens %}
           <tr>
             <td class="td-primary">{{ t.name }} <span class="mono muted">{{ t.prefix }}…</span></td>
             <td data-label="{{ tr("tokens.owner") }}">{{ t.username }}</td>
+            <td data-label="{{ tr("difs.token_project") }}">{% if t.all_projects %}<span class="badge status-warning">{{ t.project }}</span>{% else %}{{ t.project }}{% endif %}</td>
             <td data-label="{{ tr("common.created") }}">{{ m::time_ago(&t.created_at) }}</td>
             <td data-label="{{ tr("tokens.last_used") }}">{% match t.last_used_at %}{% when Some(at) %}{{ m::time_ago(at) }}{% when None %}{{ tr("common.never") }}{% endmatch %}</td>
             <td data-label="{{ tr("detail.expires") }}">{% match t.expires_at %}{% when Some(at) %}{{ m::time_ago(at) }}{% when None %}{{ tr("common.never") }}{% endmatch %}</td>
@@ -121,6 +122,18 @@
   <div class="sheet-body">
     <form id="new-upload-token-form" class="form" method="post" action="/projects/{{ project.id }}/debug-files/tokens">
       {{ m::field_text("name", tr("common.name"), placeholder=tr("difs.token_name_placeholder"), help=tr("difs.token_name_help"), sfx="-upload-token") }}
+      <div class="field">
+        <label class="label" for="f-project-upload-token">{{ tr("difs.token_project") }}</label>
+        <select id="f-project-upload-token" name="project" aria-describedby="f-project-upload-token-help">
+          {%- for p in project_choices %}
+          <option value="{{ p.id }}"{% if p.selected %} selected{% endif %}>{{ p.name }}</option>
+          {%- endfor %}
+          {%- if can_bind_all %}
+          <option value="all">{{ tr("difs.token_all_option") }}</option>
+          {%- endif %}
+        </select>
+        <p class="help" id="f-project-upload-token-help">{{ tr("difs.token_project_help") }}</p>
+      </div>
     </form>
   </div>
   <footer class="sheet-foot">

@@ -231,15 +231,57 @@ pub fn expired(
     .collect()
 }
 
-/// The tokens with the `difs:write` scope, newest first: `user_id`'s, or
-/// everyone's.
-pub fn upload_tokens(c: &Connection, user_id: Option<i64>) -> rusqlite::Result<Vec<ApiToken>> {
+/// Which projects a `difs:write` token may upload to (migration 0010).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Binding {
+    /// No binding on record: the token is refused. A binding is never
+    /// guessed, so this never widens access.
+    Unbound,
+    /// Every project (tokens from before the binding existed, and the ones
+    /// an administrator made so on purpose).
+    AllProjects,
+    /// This project only.
+    Project(i64),
+}
+
+/// What `token_id` is bound to.
+pub fn binding(c: &Connection, token_id: i64) -> rusqlite::Result<Binding> {
+    let row = c
+        .query_row(
+            "SELECT project_id FROM difs_token_projects WHERE token_id = ?1",
+            params![token_id],
+            |r| r.get::<_, Option<i64>>(0),
+        )
+        .optional()?;
+    Ok(match row {
+        None => Binding::Unbound,
+        Some(None) => Binding::AllProjects,
+        Some(Some(id)) => Binding::Project(id),
+    })
+}
+
+/// Binds `token_id` to `project_id` (`None`: every project). Call it in the
+/// transaction that makes the token.
+pub fn bind(c: &Connection, token_id: i64, project_id: Option<i64>) -> rusqlite::Result<()> {
+    c.execute(
+        "INSERT OR REPLACE INTO difs_token_projects (token_id, project_id) VALUES (?1, ?2)",
+        params![token_id, project_id],
+    )?;
+    Ok(())
+}
+
+/// The tokens with the `difs:write` scope and what each is bound to, newest
+/// first: `user_id`'s, or everyone's.
+pub fn upload_tokens(
+    c: &Connection,
+    user_id: Option<i64>,
+) -> rusqlite::Result<Vec<(ApiToken, Binding)>> {
     let mut tokens = Vec::new();
     for id in api_tokens::with_scope(c, crate::product::DIFS_WRITE)? {
         if let Some(token) = api_tokens::get(c, id)?
             && user_id.is_none_or(|u| u == token.user_id)
         {
-            tokens.push(token);
+            tokens.push((token, binding(c, id)?));
         }
     }
     Ok(tokens)

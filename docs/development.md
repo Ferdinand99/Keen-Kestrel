@@ -337,10 +337,24 @@ The `/api/0/` routes take API tokens only (no sessions, so they are exempt from 
 upload when it has the `difs:write` token scope and its owner is an editor or admin
 (`user.has_scope("difs:write") && user.may_act_as(Role::Editor)`); a read-and-write token has every scope.
 `difs:write` is a kit token scope (`KitConfig::token_scopes`, stored in the kit's `api_token_scopes`): a
-read-only token that also uploads, so a build machine's token can't change anything else. Upload tokens are made
-on a project's Debug files page or on the API tokens page ("Read and upload debug files", which is also the
-token's access there). `migrations/0008_token_scopes.sql` moved the grants of Kestrel 0.2 (`token_grants`) into
-the kit's table, so existing upload tokens kept working. The zip endpoint also takes an editor's session.
+read-only token that also uploads, so a build machine's token can't change anything else. The zip endpoint also
+takes an editor's session. `migrations/0008_token_scopes.sql` moved the grants of Kestrel 0.2 (`token_grants`)
+into the kit's table, so existing upload tokens kept working.
+
+**An upload token is bound to a project** (`migrations/0010_difs_token_projects.sql`, table
+`difs_token_projects`, keyed by the token's id: the kit's token model has no place for product fields). The
+binding is `project_id`, or `NULL` for "all projects". A bound token uploads to that project only and creates
+and changes releases there only: every route that names a project (`assemble`, the legacy dSYM routes, the
+zip endpoint, `releases new/finalize` with `projects`, and the per-project release routes) answers `403` for
+another one, and `finalize` without a project list touches the bound project's release. The chunk-upload
+routes name no project and are not limited (chunks are content-addressed and only `assemble` stores them).
+A read-and-write token and an editor's session have every scope and are not bound. Tokens that existed when
+0010 ran became "all projects" tokens, so nothing breaks; a `difs:write` token without a row (one made on the
+API tokens page, which has no project field, or one whose project was deleted, which removes the row) is
+refused with `403`, so a missing binding never widens access. Make upload tokens on a project's Debug files
+page: the sheet has a project picker (this project by default; "All projects" is offered to administrators
+only and is discouraged, and a post without the field binds to the page's project), and the list shows each
+token's project ("All projects" in a warning badge, "Not bound to a project" for a refused one).
 
 Limits: chunks of at most 8 MiB (after gzip too), 64 per request, request bodies of 33 MiB; files of at most
 1 GiB; zip uploads of at most 1 GiB with at most 10,000 entries and 2 GiB unpacked in all, and no entry over

@@ -1150,6 +1150,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "api_token_scopes",
             "api_tokens",
             "dif_files",
+            "difs_token_projects",
             "environments",
             "events",
             "issue_activity",
@@ -1193,7 +1194,8 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "0006_analytics.sql",
             "0007_app_analytics.sql",
             "0008_token_scopes.sql",
-            "0009_project_groups.sql"
+            "0009_project_groups.sql",
+            "0010_difs_token_projects.sql"
         ]
     );
     assert!(app.dir.join("store.sqlite").exists());
