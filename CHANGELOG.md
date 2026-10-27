@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.7.0...v0.8.0) (2026-10-27)
+
+
+### Features
+
+* vole-kit 0.6.0 and project-bound debug-file tokens ([#44](https://github.com/Ferdinand99/Keen-Kestrel/issues/44)) ([c7628f1](https://github.com/Ferdinand99/Keen-Kestrel/commit/c7628f193aaf2e01c6c3b6d6876429a4bbf2a8b2))
+
+
+### Bug Fixes
+
+* ingest and alert hardening from the October review ([#42](https://github.com/Ferdinand99/Keen-Kestrel/issues/42)) ([7ac8fed](https://github.com/Ferdinand99/Keen-Kestrel/commit/7ac8fed281676e91e1e2ddcb302a0331799ed4e0))
+
 ## [0.7.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.6.2...v0.7.0) (2026-10-25)
 
 
