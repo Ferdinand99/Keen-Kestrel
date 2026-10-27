@@ -17,7 +17,7 @@ path = "src/main.rs"
 # The shared product kit (auth, i18n, db, HTTP, API docs, MCP, notifications,
 # design system). Locally, a .cargo/config.toml [patch] can point it at a
 # checkout of the Vigilant Vole repository (docs/development.md).
-vole-kit = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.5.0" }
+vole-kit = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.6.0" }
 # The versions below match vole-kit's, so both use one copy of each crate.
 askama = "0.16.1"
 # multipart: sentry-cli's chunk upload and the legacy dSYM endpoint.
@@ -70,9 +70,12 @@ rustix = { version = "1.1.5", default-features = false, features = ["fs", "std"]
 
 [build-dependencies]
 # Copies the kit's templates into templates/kit/ for askama (build.rs).
-vole-kit-build = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.5.0" }
+vole-kit-build = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.6.0" }
 
 [dev-dependencies]
+# Opens /setup without a setup token in the in-process tests (since 0.5.1 the
+# page needs one), and brings the software passkey authenticator.
+vole-kit = { git = "https://github.com/Ferdinand99/Vigilant-Vole", tag = "vole-kit-v0.6.0", features = ["test-support"] }
 # Grouping snapshots (tests/snapshots); review changes with `cargo insta review`.
 insta = "1.43"
 tower = "0.5.3"

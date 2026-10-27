@@ -2,7 +2,7 @@
 
 Keen Kestrel is one Rust crate (`keen-kestrel`, binary `kestrel`) on top of
 [vole-kit](https://github.com/Ferdinand99/Vigilant-Vole/blob/main/docs/vole-kit.md), the shared kit that lives in the
-Vigilant Vole repository (tag `vole-kit-v0.3.0`). The kit brings sign-in, users, API tokens (with Kestrel's
+Vigilant Vole repository (tag `vole-kit-v0.6.0`). The kit brings sign-in, users, API tokens (with Kestrel's
 `difs:write` scope), Security, General settings, the API reference, i18n, the database plumbing, request budgets,
 live updates, the notification channels' forms and the design system; Kestrel adds its own pages, API, migrations
 and strings, the
@@ -74,7 +74,11 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-The first start opens `/setup`, which creates the admin account.
+The first start opens `/setup`, which creates the admin account. It needs a setup token (vole-kit 0.5.1): set
+`KK_SETUP_TOKEN`, or take the random one that is logged once at the first start (`/setup?token=…`).
+`KK_SETUP_OPEN=1` keeps the page open without a token, for scripted installs, the load checks and end-to-end
+runs. The in-process tests need no variable: they build with vole-kit's `test-support` feature (a
+`[dev-dependencies]` entry), which opens `/setup` by default.
 
 | Flag | Variable | Default | What |
 |---|---|---|---|
@@ -87,7 +91,8 @@ The first start opens `/setup`, which creates the admin account.
 | `--max-store-mb` | `KK_MAX_STORE_MB` | `0` | size in MB that `store.sqlite` may reach before ingest stops keeping payloads, attachments, feedback and raw analytics (errors are still counted; web events and app signals get 429); `0`: no limit. Ingest does the same when the data volume has less than 1 GiB free |
 | `--capture-dir` | `KESTREL_CAPTURE_DIR` | (none) | write every ingest request to this directory ([capture mode](#capture-mode-and-sdk-fixtures)); test instances only |
 | | `KK_TRUST_PROXY` | off | honour `X-Forwarded-*` from a reverse proxy (also for the ingest IP limit) |
-| | `KK_SETUP_TOKEN` | (none) | `/setup` opens only with `?token=…` |
+| | `KK_SETUP_TOKEN` | (random, logged at the first start) | `/setup` opens only with `?token=…` until the first user exists |
+| | `KK_SETUP_OPEN` | off | `1`: `/setup` needs no token (scripted installs, tests of a running instance) |
 | | `RUST_LOG` | `info` | log filter |
 
 The public URL is the kit's `base_url` setting, which admins set on Settings → General (the kit's page: site name,
@@ -703,7 +708,8 @@ filters, test signals), the explorer, the settings; release adoption; the API, t
 
 ### Load check (app signals)
 
-`tools/loadtest/signals.py` (standard library only; open loop; batches of 50–100 signals built like KestrelKit's and
+`tools/loadtest/signals.py` (standard library only; start Kestrel with `KK_SETUP_OPEN=1`, or pass
+`--setup-token` with the setup token; open loop; batches of 50–100 signals built like KestrelKit's and
 gzip-compressed, from 20,000 installs on five versions, 20 types, payloads on a third, 5 % TestFlight; `--setup` makes
 the admin and a project on a fresh instance and checks the rollup afterwards) against the release image limited to 2
 CPUs and 2 GB, data on tmpfs, `KK_TRUST_PROXY=1` and `KK_INGEST_IP_RATE_LIMIT=0` (`--setup` raises the key's rate

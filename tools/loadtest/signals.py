@@ -12,7 +12,8 @@ versions, with sessions, 20 signal types, payloads on a third of them and
 (start Kestrel with KK_TRUST_PROXY=1 and KK_INGEST_IP_RATE_LIMIT=0). `--rate`
 counts signals per second.
 
-`--setup` makes the admin account and a project on a fresh instance, lifts the
+`--setup` makes the admin account and a project on a fresh instance (start Kestrel with KK_SETUP_OPEN=1, or
+pass its setup token with `--setup-token`), lifts the
 key's rate limit to its maximum (a key without a limit gets 1,000 items a
 minute, signals counting one each) and uses it (otherwise pass `--key` of a key
 with a high limit); afterwards, once the rollup has run, it
@@ -157,10 +158,13 @@ class Browser:
         return self.opener.open(req, timeout=30).read().decode()
 
 
-def setup(url: str) -> tuple[Browser, int, str]:
+def setup(url: str, token: str | None = None) -> tuple[Browser, int, str]:
     b = Browser(url)
     password = "Quiet-Harbor-Lamp-7319!"
-    b.post("/setup", {"username": "bench", "password": password, "confirm": password, "site_name": "Load", "timezone": "UTC"})
+    form = {"username": "bench", "password": password, "confirm": password, "site_name": "Load", "timezone": "UTC"}
+    if token:
+        form["token"] = token
+    b.post("/setup", form)
     b.post("/login", {"username": "bench", "password": password})
     b.post("/projects", {"name": "Load app", "platform": "apple"})
     projects = b.get("/projects")
@@ -177,6 +181,7 @@ def main():
     p.add_argument("--url", required=True)
     p.add_argument("--key")
     p.add_argument("--setup", action="store_true", help="make the admin and a project on a fresh instance")
+    p.add_argument("--setup-token", help="the instance's setup token (not needed with KK_SETUP_OPEN=1)")
     p.add_argument("--rate", type=float, default=3000, help="signals per second")
     p.add_argument("--seconds", type=float, default=30)
     p.add_argument("--connections", type=int, default=16, help="per process")
@@ -185,7 +190,7 @@ def main():
     args = p.parse_args()
     browser = pid = None
     if args.setup:
-        browser, pid, args.key = setup(args.url)
+        browser, pid, args.key = setup(args.url, args.setup_token)
     if not args.key:
         p.error("--key or --setup")
     q = multiprocessing.Queue()
