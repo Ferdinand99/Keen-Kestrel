@@ -16,7 +16,9 @@
 //!
 //! then the store's rows of deleted projects go, release-health rollups
 //! older than 400 days go (docs/design.md §4.6), the alert history older
-//! than 90 days, new and regressed issues that have been so for a week
+//! than 90 days, releases nothing refers to (no event, issue or rollup) that
+//! have not been seen for 90 days, new and regressed issues that have been so
+//! for a week
 //! become ongoing, and `store.sqlite` gives freed pages back (incremental
 //! vacuum).
 //!
@@ -61,6 +63,9 @@ const VACUUM_PAGES: i64 = 10_000;
 pub const ROLLUPS_KEPT_DAYS: i64 = 400;
 /// The alert history is kept this long.
 pub const ALERT_LOG_KEPT_DAYS: i64 = 90;
+/// A release that nothing refers to is removed once it has not been seen for
+/// this long.
+pub const RELEASES_KEPT_DAYS: i64 = 90;
 
 /// What one run did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -71,6 +76,8 @@ pub struct Report {
     pub settled: usize,
     pub rollups_deleted: usize,
     pub alerts_deleted: usize,
+    /// Releases nothing refers to any more.
+    pub releases_deleted: usize,
     /// Raw analytics events removed.
     pub analytics_events_deleted: usize,
     /// Analytics rollup rows (hours, days, breakdowns) removed.
@@ -262,6 +269,10 @@ pub async fn run_once(writer: &Writer, now: &str) -> Result<Report, WriterError>
     (report.rollups_deleted, report.alerts_deleted) =
         writer.run(move |c| prune_rollups_and_alerts(c, &n)).await?;
     let n = now.to_string();
+    report.releases_deleted = writer
+        .run(move |c| crate::releases::health::prune_releases(c, &n, RELEASES_KEPT_DAYS))
+        .await?;
+    let n = now.to_string();
     report.settled = writer.run(move |c| triage::settle_substatus(c, &n)).await?;
     writer.run(|c| vacuum(c)).await?;
     tracing::info!(
@@ -272,6 +283,7 @@ pub async fn run_once(writer: &Writer, now: &str) -> Result<Report, WriterError>
         analytics_rollups = report.analytics_rollups_deleted,
         rollups = report.rollups_deleted,
         alerts = report.alerts_deleted,
+        releases = report.releases_deleted,
         settled = report.settled,
         elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         "retention run finished"

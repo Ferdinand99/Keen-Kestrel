@@ -116,8 +116,8 @@ enabled_help = "A letiltott kulccsal küldött eseményeket a rendszer elutasít
 none_enabled = "Nincs engedélyezett kulcs"
 rate_limit = "Eseménykorlát"
 rate_limit_unit = "percenként"
-rate_limit_help = "Legfeljebb ennyi eseményt fogad a kulcs percenként. Üresen hagyva nincs korlát."
-no_limit = "Nincs korlát"
+rate_limit_help = "Legfeljebb ennyi eseményt fogad a kulcs percenként. Üresen hagyva az alapértelmezett korlát érvényes."
+no_limit = "Alapértelmezett"
 per_minute = "{n} percenként"
 origins = "Engedélyezett eredetek"
 origins_help = "Böngészőben futó SDK esetén: soronként egy eredet (origin), például https://example.com. Üresen hagyva bármely eredet engedélyezett."
@@ -528,7 +528,7 @@ empty_viewer = "Riasztási szabályt szerkesztő vagy admin adhat hozzá."
 no_channels = "Nincs csatorna"
 no_channels_title = "Még nincs értesítési csatorna"
 no_channels_text = "A riasztások a példány értesítési csatornáira mennek: Slack, Discord, Teams, Telegram, ntfy, e-mail, webhookok és mások. Először adjon hozzá egyet."
-no_channels_viewer = "Még nincs értesítési csatorna. Szerkesztő vagy admin adhat hozzá a Beállítások → Értesítések alatt."
+no_channels_viewer = "Még nincs értesítési csatorna. Admin adhat hozzá a Beállítások → Értesítések alatt."
 add_channel = "Csatorna hozzáadása"
 manage_channels = "Értesítési csatornák kezelése"
 history_title = "Elküldött riasztások"
@@ -850,7 +850,7 @@ site_name_placeholder = "Acme hibák…"
 tz_after = ". Ez a Beállításokban módosítható."
 
 [users]
-roles_help = "A megtekintők nézhetnek, de nem módosíthatnak semmit. A szerkesztők kezelik a projekteket, kulcsokat, problémákat, riasztásokat és értesítési csatornákat. Az adminok mindent tehetnek, a felhasználókat is beleértve."
+roles_help = "A megtekintők nézhetnek, de nem módosíthatnak semmit. A szerkesztők kezelik a projekteket, kulcsokat, problémákat és riasztásokat. Az adminok mindent tehetnek, az értesítési csatornákat és a felhasználókat is beleértve."
 
 [tokens]
 sub = "Szkriptek, buildgépek és MI-asszisztensek olvashatják vagy módosíthatják a projekteket, problémákat, verziókat és riasztási szabályokat."

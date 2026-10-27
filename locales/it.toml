@@ -119,8 +119,8 @@ enabled_help = "Gli eventi inviati con una chiave disattivata vengono rifiutati.
 none_enabled = "Nessuna chiave attiva"
 rate_limit = "Limite di frequenza"
 rate_limit_unit = "al minuto"
-rate_limit_help = "Il numero massimo di eventi al minuto accettati da questa chiave. Lascia vuoto per nessun limite."
-no_limit = "Nessun limite"
+rate_limit_help = "Il numero massimo di eventi al minuto accettati da questa chiave. Lascia vuoto per il limite predefinito."
+no_limit = "Predefinito"
 per_minute = "{n} al minuto"
 origins = "Origini consentite"
 origins_help = "Per gli SDK per browser: un’origine per riga, come https://example.com. Lascia vuoto per consentire qualsiasi origine."
@@ -549,7 +549,7 @@ empty_viewer = "Un editor o un admin può aggiungere regole di avviso."
 no_channels = "Nessun canale"
 no_channels_title = "Ancora nessun canale di notifica"
 no_channels_text = "Gli avvisi vanno ai canali di notifica di questa istanza: Slack, Discord, Teams, Telegram, ntfy, email, webhook e altro. Aggiungine prima uno."
-no_channels_viewer = "Non ci sono ancora canali di notifica. Un editor o un admin può aggiungerli in Impostazioni → Notifiche."
+no_channels_viewer = "Non ci sono ancora canali di notifica. Un admin può aggiungerli in Impostazioni → Notifiche."
 add_channel = "Aggiungi un canale"
 manage_channels = "Gestisci canali di notifica"
 history_title = "Avvisi inviati"
@@ -876,7 +876,7 @@ site_name_placeholder = "Errori Acme…"
 tz_after = ". Si può cambiare nelle Impostazioni."
 
 [users]
-roles_help = "I lettori possono guardare ma non modificare nulla. Gli editor gestiscono progetti, chiavi, problemi, avvisi e canali di notifica. Gli admin possono fare tutto, inclusi gli utenti."
+roles_help = "I lettori possono guardare ma non modificare nulla. Gli editor gestiscono progetti, chiavi, problemi e avvisi. Gli admin possono fare tutto, inclusi i canali di notifica e gli utenti."
 
 [tokens]
 sub = "Permetti a script, macchine di build e assistenti IA di leggere o modificare i tuoi progetti, problemi, versioni e regole di avviso."

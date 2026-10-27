@@ -157,13 +157,14 @@ fn history_row(project_id: i64, e: &LogEntry) -> HistoryRow {
         time: e.sent_at.clone().unwrap_or_else(|| e.created_at.clone()),
         kind_label: message::kind_label(&e.kind),
         headline: message::headline(&e.data),
-        issue_title: e
-            .data
-            .get("issue")
-            .and_then(|i| i.get("title"))
-            .and_then(|t| t.as_str())
-            .unwrap_or("")
-            .to_string(),
+        issue_title: message::overflow_text(&e.data).unwrap_or_else(|| {
+            e.data
+                .get("issue")
+                .and_then(|i| i.get("title"))
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string()
+        }),
         issue_href: e
             .issue_id
             .map(|i| format!("/projects/{project_id}/issues/{i}"))

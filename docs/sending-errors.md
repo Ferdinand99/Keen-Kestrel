@@ -117,6 +117,16 @@ are replaced by keyed hashes. Paths from build machines (`/Users/<name>/…`, CI
 user name. Event details are kept 30 days and issues 90 days after they were last seen, which each project can
 change under **Settings → Retention**.
 
+### Limits
+
+A project key is public (it ships in your app), so Kestrel limits what one key can send. A key accepts 1000 items
+a minute (events, sessions, pageviews or signals) unless you set its own limit under **Settings → Keys**; a client
+address (an IPv6 prefix counts as one) 6000. An envelope counts for each of its items. Over a limit Kestrel
+answers 429, which the SDKs honour. An envelope may hold 100 items and 20 events; attachments are kept up to 1 MiB
+each and 5 per event, sessions and user feedback up to 4 KiB each; the rest is accepted and dropped. An envelope
+over the limits gets 413. When the server's disk is nearly full (under 1 GiB) or `KK_MAX_STORE_MB` is reached,
+Kestrel still counts events but keeps no new details, attachments or feedback until retention has made room.
+
 ## 3. Readable iOS and macOS crashes: upload dSYMs
 
 Release builds of Swift apps are stripped, so a crash only has addresses until Kestrel has the build's dSYM. Upload
@@ -162,7 +172,7 @@ Alerts go to **notification channels**, which belong to the whole instance: Slac
 Google Chat, Mattermost, Telegram, Signal, ntfy, Pushover, Gotify, email, PagerDuty, Opsgenie, webhooks and about
 25 more.
 
-1. **Settings → Notifications → Add channel** (editors and admins): pick the service, fill in its form, choose the
+1. **Settings → Notifications → Add channel** (admins): pick the service, fill in its form, choose the
    language its messages are written in, and press **Send test** to check it arrives. Saved secrets (tokens,
    webhook URLs, passwords) are never shown again.
 2. In a project, open the **Alerts** tab and add a rule:

@@ -59,8 +59,12 @@
   <section class="form-section" aria-labelledby="sec-where">
     <h2 class="form-section-title" id="sec-where">{{ tr("alerts.where") }}</h2>
     {%- if form.channels.is_empty() %}
+    {%- if ctx.is_admin() %}
     {{ m::callout("info", tr("alerts.no_channels_text"), tr("alerts.no_channels_title")) }}
     <p><a class="btn btn-secondary btn-sm" href="/settings/notifications">{{ m::icon("bell") }}<span>{{ tr("alerts.add_channel") }}</span></a></p>
+    {%- else %}
+    {{ m::callout("info", tr("alerts.no_channels_viewer")) }}
+    {%- endif %}
     {%- else %}
     <div class="card{% if !form.error("channels").is_empty() %} is-invalid{% endif %}">
       <fieldset class="stack-sm">
@@ -77,7 +81,9 @@
       </fieldset>
       {%- if !form.error("channels").is_empty() %}<p class="field-error">{{ m::icon("alert-circle") }}{{ form.error("channels") }}</p>{% endif %}
     </div>
+    {%- if ctx.is_admin() %}
     <p class="form-section-sub"><a href="/settings/notifications">{{ tr("alerts.manage_channels") }}</a></p>
+    {%- endif %}
     {%- endif %}
   </section>
 

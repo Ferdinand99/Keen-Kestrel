@@ -16,6 +16,7 @@ services:
       # - KK_PUBLIC_URL=https://kestrel.example.com  # the address in DSNs; without it, each request's own
       # - KK_TRUST_PROXY=1               # behind a reverse proxy (Caddy/Traefik/nginx) that sets X-Forwarded-*
       # - KK_SETUP_TOKEN=change-me       # /setup only opens with ?token=change-me
+      # - KK_MAX_STORE_MB=2048           # stop keeping event details, attachments and raw analytics at this size
       # - TZ=Europe/Oslo                 # log timestamps
       # - RUST_LOG=info,keen_kestrel=debug
       # Run the app as another uid:gid, e.g. Unraid's nobody:users.

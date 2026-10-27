@@ -385,6 +385,75 @@ async fn a_full_queue_answers_503_and_the_ip_limit_429() {
     assert!(res.header("retry-after").parse::<u64>().unwrap() >= 1);
 }
 
+/// A signal's time is the client's word, and a signal for a day before
+/// yesterday makes the rollup rebuild that whole day (KK-04): beyond 48 hours
+/// back a signal is dropped, whatever the raw retention; the future is
+/// clamped to the arrival.
+#[tokio::test]
+async fn signals_older_than_48_hours_are_dropped() {
+    assert_eq!(app::MAX_BACKDATE_SECS, 48 * 3600);
+    let app = App::new().await;
+    let now = now_ms();
+    let hours = |h: i64| now - h * 3_600_000;
+    let body = json!({"signals": [
+        {"type": "Fresh.one", "install_id": "i", "time": ts(hours(1))},
+        {"type": "Offline.day", "install_id": "i", "time": ts(hours(30))},
+        {"type": "Offline.edge", "install_id": "i", "time": ts(hours(47))},
+        {"type": "Too.old.49h", "install_id": "i", "time": ts(hours(49))},
+        {"type": "Too.old.5d", "install_id": "i", "time": ts(hours(120))},
+        {"type": "Too.old.25d", "install_id": "i", "time": ts(hours(25 * 24))},
+        {"type": "From.future", "install_id": "i", "time": ts(now + 7 * 86_400_000)},
+    ]});
+    let res = app
+        .send(request(Some(&app.key), body.to_string().into_bytes(), None))
+        .await;
+    assert_eq!(res.status, StatusCode::ACCEPTED, "{}", res.body);
+    assert_eq!(res.json(), json!({"accepted": 4, "dropped": 3}));
+    let rows = raw_rows(&app).await;
+    let kinds: BTreeSet<String> = rows
+        .iter()
+        .map(|r| r["type"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        kinds,
+        BTreeSet::from(
+            ["Fresh.one", "Offline.day", "Offline.edge", "From.future"].map(String::from)
+        )
+    );
+    let future = rows.iter().find(|r| r["type"] == "From.future").unwrap();
+    assert!(
+        (future["ts"].as_i64().unwrap() - now / 1000).abs() <= 2,
+        "clamped to now"
+    );
+
+    // Clock correction doesn't bring a back-dated signal back in: a device
+    // whose clock is 3 days behind and says so reports 3-day-old times that
+    // are right once corrected.
+    let mut s = Sig::new("Clock.behind.fresh", "i");
+    s.time = now - 3 * 86_400_000 - 60_000;
+    let res = app
+        .send(request(
+            Some(&app.key),
+            batch(now - 3 * 86_400_000, &[s]),
+            None,
+        ))
+        .await;
+    assert_eq!(res.json(), json!({"accepted": 1}));
+    // The window itself is a function of the raw retention too.
+    assert_eq!(
+        app::oldest_accepted(1_000_000_000_000, 30),
+        1_000_000_000 - 172_800
+    );
+    assert_eq!(
+        app::oldest_accepted(1_000_000_000_000, 1),
+        1_000_000_000 - 86_400
+    );
+    assert_eq!(
+        app::oldest_accepted(1_000_000_000_000, 0),
+        1_000_000_000 - 86_400
+    );
+}
+
 #[tokio::test]
 async fn clocks_are_corrected_with_sent_at() {
     let app = App::new().await;

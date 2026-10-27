@@ -34,10 +34,19 @@ pub struct Config {
     #[arg(long, env = "KK_INGEST_PORT")]
     pub ingest_port: Option<u16>,
 
-    /// Requests per minute one IP address may send to ingest (0: no limit).
-    /// Kept in memory only.
+    /// Items per minute one IP address may send to ingest (0: no limit): an
+    /// envelope counts for each of its items, and an IPv6 address stands for
+    /// its /64. Kept in memory only.
     #[arg(long, env = "KK_INGEST_IP_RATE_LIMIT", default_value_t = 6000)]
     pub ingest_ip_rate_limit: u32,
+
+    /// Size in MB that store.sqlite (event details, attachments, raw
+    /// analytics) may reach before ingest stops keeping new details and
+    /// answers web events and app signals with 429; errors are still counted
+    /// (0: no limit). Ingest does the same when the data volume has less
+    /// than 1 GiB free.
+    #[arg(long, env = "KK_MAX_STORE_MB", default_value_t = 0)]
+    pub max_store_mb: u64,
 
     /// Write every ingest request (headers and body, as sent) to this
     /// directory, to record SDK fixtures. For test instances only: the files
@@ -62,6 +71,11 @@ impl Config {
         crate::ingest::Settings {
             capture_dir: self.capture_dir.clone(),
             ip_rate_limit_per_minute: self.ingest_ip_rate_limit,
+            writer: crate::writer::WriterSettings {
+                max_store_bytes: (self.max_store_mb > 0)
+                    .then(|| self.max_store_mb.saturating_mul(1024 * 1024)),
+                ..crate::writer::WriterSettings::default()
+            },
             ..crate::ingest::Settings::default()
         }
     }
@@ -91,6 +105,12 @@ mod tests {
         assert_eq!(c.bind_addr().to_string(), "0.0.0.0:3002");
         assert_eq!(c.ingest_addr(), None);
         assert_eq!(c.ingest_settings().ip_rate_limit_per_minute, 6000);
+        assert_eq!(c.ingest_settings().writer.max_store_bytes, None);
+        let capped = Config::try_parse_from(["kestrel", "--max-store-mb", "512"]).unwrap();
+        assert_eq!(
+            capped.ingest_settings().writer.max_store_bytes,
+            Some(512 * 1024 * 1024)
+        );
         let c = Config::try_parse_from([
             "kestrel",
             "--port",

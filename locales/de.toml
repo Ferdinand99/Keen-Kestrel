@@ -116,8 +116,8 @@ enabled_help = "Ereignisse, die mit einem deaktivierten Schlüssel gesendet werd
 none_enabled = "Keine aktivierten Schlüssel"
 rate_limit = "Ratenlimit"
 rate_limit_unit = "pro Minute"
-rate_limit_help = "Die maximale Anzahl Ereignisse pro Minute, die dieser Schlüssel annimmt. Leer lassen für kein Limit."
-no_limit = "Kein Limit"
+rate_limit_help = "Die maximale Anzahl Ereignisse pro Minute, die dieser Schlüssel annimmt. Leer lassen für das Standardlimit."
+no_limit = "Standard"
 per_minute = "{n} pro Minute"
 origins = "Erlaubte Ursprünge"
 origins_help = "Für Browser-SDKs: ein Ursprung pro Zeile, etwa https://example.com. Leer lassen, um jeden Ursprung zu erlauben."
@@ -528,7 +528,7 @@ empty_viewer = "Bearbeiter oder Admins können Alarmregeln hinzufügen."
 no_channels = "Kein Kanal"
 no_channels_title = "Noch keine Benachrichtigungskanäle"
 no_channels_text = "Alarme gehen an die Benachrichtigungskanäle dieser Instanz: Slack, Discord, Teams, Telegram, ntfy, E-Mail, Webhooks und mehr. Füge zuerst einen hinzu."
-no_channels_viewer = "Es gibt noch keine Benachrichtigungskanäle. Bearbeiter oder Admins können sie unter Einstellungen → Benachrichtigungen hinzufügen."
+no_channels_viewer = "Es gibt noch keine Benachrichtigungskanäle. Admins können sie unter Einstellungen → Benachrichtigungen hinzufügen."
 add_channel = "Kanal hinzufügen"
 manage_channels = "Benachrichtigungskanäle verwalten"
 history_title = "Gesendete Alarme"
@@ -850,7 +850,7 @@ site_name_placeholder = "Acme-Fehler …"
 tz_after = ". Das lässt sich in den Einstellungen ändern."
 
 [users]
-roles_help = "Betrachter können nur ansehen, aber nichts ändern. Bearbeiter verwalten Projekte, Schlüssel, Probleme, Alarme und Benachrichtigungskanäle. Admins können alles, auch Benutzer."
+roles_help = "Betrachter können nur ansehen, aber nichts ändern. Bearbeiter verwalten Projekte, Schlüssel, Probleme und Alarme. Admins können alles, auch Benachrichtigungskanäle und Benutzer."
 
 [tokens]
 sub = "Lass Skripte, Build-Maschinen und KI-Assistenten deine Projekte, Probleme, Releases und Alarmregeln lesen oder ändern."

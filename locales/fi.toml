@@ -116,8 +116,8 @@ enabled_help = "Käytöstä poistetulla avaimella lähetetyt tapahtumat hylätä
 none_enabled = "Ei käytössä olevia avaimia"
 rate_limit = "Nopeusrajoitus"
 rate_limit_unit = "minuutissa"
-rate_limit_help = "Suurin määrä tapahtumia minuutissa, jonka tämä avain ottaa vastaan. Jätä tyhjäksi, jos rajaa ei tarvita."
-no_limit = "Ei rajaa"
+rate_limit_help = "Suurin määrä tapahtumia minuutissa, jonka tämä avain ottaa vastaan. Jätä tyhjäksi, niin käytetään oletusrajaa."
+no_limit = "Oletus"
 per_minute = "{n} minuutissa"
 origins = "Sallitut alkuperät"
 origins_help = "Selaimen SDK:ille: yksi alkuperä riviä kohden, esimerkiksi https://example.com. Jätä tyhjäksi, niin kaikki alkuperät sallitaan."
@@ -528,7 +528,7 @@ empty_viewer = "Muokkaaja tai ylläpitäjä voi lisätä hälytyssääntöjä."
 no_channels = "Ei kanavaa"
 no_channels_title = "Ei vielä ilmoituskanavia"
 no_channels_text = "Hälytykset menevät tämän instanssin ilmoituskanaville: Slack, Discord, Teams, Telegram, ntfy, sähköposti, webhookit ja muut. Lisää ensin kanava."
-no_channels_viewer = "Ilmoituskanavia ei ole vielä. Muokkaaja tai ylläpitäjä voi lisätä niitä kohdassa Asetukset → Ilmoitukset."
+no_channels_viewer = "Ilmoituskanavia ei ole vielä. Ylläpitäjä voi lisätä niitä kohdassa Asetukset → Ilmoitukset."
 add_channel = "Lisää kanava"
 manage_channels = "Hallitse ilmoituskanavia"
 history_title = "Lähetetyt hälytykset"
@@ -850,7 +850,7 @@ site_name_placeholder = "Acme-virheet…"
 tz_after = ". Tätä voi muuttaa asetuksissa."
 
 [users]
-roles_help = "Katselijat voivat vain katsoa, ei muuttaa mitään. Muokkaajat hallinnoivat projekteja, avaimia, ongelmia, hälytyksiä ja ilmoituskanavia. Ylläpitäjät voivat tehdä kaiken, myös käyttäjien hallinnan."
+roles_help = "Katselijat voivat vain katsoa, ei muuttaa mitään. Muokkaajat hallinnoivat projekteja, avaimia, ongelmia ja hälytyksiä. Ylläpitäjät voivat tehdä kaiken, myös ilmoituskanavien ja käyttäjien hallinnan."
 
 [tokens]
 sub = "Anna skriptien, koontikoneiden ja tekoälyavustajien lukea tai muuttaa projekteja, ongelmia, versioita ja hälytyssääntöjä."

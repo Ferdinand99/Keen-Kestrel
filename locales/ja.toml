@@ -113,8 +113,8 @@ enabled_help = "無効なキーで送信されたイベントは拒否されま�
 none_enabled = "有効なキーなし"
 rate_limit = "レート制限"
 rate_limit_unit = "件/分"
-rate_limit_help = "このキーが1分間に受け付けるイベントの上限です。空欄なら無制限です。"
-no_limit = "無制限"
+rate_limit_help = "このキーが1分間に受け付けるイベントの上限です。空欄ならデフォルトの上限になります。"
+no_limit = "デフォルト"
 per_minute = "{n}件/分"
 origins = "許可するオリジン"
 origins_help = "ブラウザ用SDK向けです。1行に1つずつ、https://example.comのようにオリジンを入力します。空欄ならすべてのオリジンを許可します。"
@@ -507,7 +507,7 @@ empty_viewer = "アラートルールは編集者または管理者が追加で�
 no_channels = "チャンネルなし"
 no_channels_title = "通知チャンネルはまだありません"
 no_channels_text = "アラートはこのインスタンスの通知チャンネル（Slack、Discord、Teams、Telegram、ntfy、メール、Webhookなど）に送られます。まずチャンネルを追加してください。"
-no_channels_viewer = "通知チャンネルはまだありません。編集者または管理者が「設定 → 通知」で追加できます。"
+no_channels_viewer = "通知チャンネルはまだありません。管理者が「設定 → 通知」で追加できます。"
 add_channel = "チャンネルを追加"
 manage_channels = "通知チャンネルを管理"
 history_title = "送信済みのアラート"
@@ -824,7 +824,7 @@ site_name_placeholder = "Acmeのエラー…"
 tz_after = "で表示されます。設定で変更できます。"
 
 [users]
-roles_help = "閲覧者は表示のみで、変更はできません。編集者はプロジェクト、キー、問題、アラート、通知チャンネルを管理できます。管理者はユーザーを含むすべての操作ができます。"
+roles_help = "閲覧者は表示のみで、変更はできません。編集者はプロジェクト、キー、問題、アラートを管理できます。管理者は通知チャンネルやユーザーを含むすべての操作ができます。"
 
 [tokens]
 sub = "スクリプト、ビルドマシン、AIアシスタントから、プロジェクト、問題、リリース、アラートルールの参照や変更ができるようにします。"

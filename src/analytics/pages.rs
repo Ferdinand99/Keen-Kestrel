@@ -26,7 +26,7 @@ use vole_kit::i18n::{self, Tr as _};
 use vole_kit::page::{PageCtx, flash};
 use vole_kit::state::Core;
 
-use super::live::{Change, LiveChanges};
+use super::live::{Change, LiveChanges, MAX_LIFETIME, STREAMS};
 use super::query::{self, Filters, Period, Point, Row, Totals};
 use super::{Dim, day_number};
 use crate::db::projects::{self as db, Project};
@@ -742,7 +742,10 @@ async fn live(
     RawQuery(q): RawQuery,
 ) -> ApiResult<Response> {
     load_project(&core, id).await?;
-    let changes = LiveChanges::new(ingest.writer(), id, COALESCE, TICK);
+    let Some(slot) = STREAMS.acquire() else {
+        return Ok(live::busy());
+    };
+    let changes = LiveChanges::new(ingest.writer(), id, COALESCE, TICK, MAX_LIFETIME);
     let state = Live {
         core,
         ingest,
@@ -751,8 +754,8 @@ async fn live(
         lang: i18n::current(),
     };
     Ok(live::sse(futures_util::stream::unfold(
-        (changes, state),
-        |(mut changes, st)| async move {
+        (changes, state, slot),
+        |(mut changes, st, slot)| async move {
             loop {
                 let event = match changes.next().await? {
                     Change::Rollup => match st.summary().await {
@@ -764,7 +767,7 @@ async fn live(
                         None => continue,
                     },
                 };
-                return Some((event, (changes, st)));
+                return Some((event, (changes, st, slot)));
             }
         },
     )))

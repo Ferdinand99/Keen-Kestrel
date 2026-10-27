@@ -28,7 +28,7 @@ use super::AppDim;
 use super::query::{self, Adoption, AppFilters, AppPoint, AppTotals, Payload};
 use super::rollup::OTHER;
 use crate::analytics::day_string;
-use crate::analytics::live::{Change, LiveChanges};
+use crate::analytics::live::{Change, LiveChanges, MAX_LIFETIME, STREAMS};
 use crate::analytics::pages::{Bar, Card, Choice, FilterChip, Panel, today};
 use crate::analytics::query::{Period, Row};
 use crate::db::projects::{self as db, Project};
@@ -1296,7 +1296,10 @@ async fn live(
     RawQuery(q): RawQuery,
 ) -> ApiResult<Response> {
     load_project(&core, id).await?;
-    let changes = LiveChanges::new(ingest.writer(), id, COALESCE, TICK);
+    let Some(slot) = STREAMS.acquire() else {
+        return Ok(live::busy());
+    };
+    let changes = LiveChanges::new(ingest.writer(), id, COALESCE, TICK, MAX_LIFETIME);
     let state = Live {
         core,
         ingest,
@@ -1305,8 +1308,8 @@ async fn live(
         lang: i18n::current(),
     };
     Ok(live::sse(futures_util::stream::unfold(
-        (changes, state),
-        |(mut changes, st)| async move {
+        (changes, state, slot),
+        |(mut changes, st, slot)| async move {
             loop {
                 let event = match changes.next().await? {
                     Change::Rollup => match st.summary().await {
@@ -1318,7 +1321,7 @@ async fn live(
                         None => continue,
                     },
                 };
-                return Some((event, (changes, st)));
+                return Some((event, (changes, st, slot)));
             }
         },
     )))

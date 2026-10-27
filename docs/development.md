@@ -83,7 +83,8 @@ The first start opens `/setup`, which creates the admin account.
 | `--port` | `KK_PORT` | `3002` | listen port |
 | `--public-url` | `KK_PUBLIC_URL` | (none) | the address in DSNs and API examples, e.g. `https://kestrel.example.com`; stored as the public URL at every start (Settings → General otherwise); without either, each request's own address is used |
 | `--ingest-port` | `KK_INGEST_PORT` | (none) | a second port that serves only ingest and `/healthz`, so the admin interface can stay on a LAN or VPN; ingest stays on the main port too |
-| `--ingest-ip-rate-limit` | `KK_INGEST_IP_RATE_LIMIT` | `6000` | ingest requests per minute from one IP address, counted in memory only; `0` turns the limit off |
+| `--ingest-ip-rate-limit` | `KK_INGEST_IP_RATE_LIMIT` | `6000` | ingest items per minute from one IP address (an envelope counts for each item, an IPv6 address for its /64), counted in memory only; `0` turns the limit off |
+| `--max-store-mb` | `KK_MAX_STORE_MB` | `0` | size in MB that `store.sqlite` may reach before ingest stops keeping payloads, attachments, feedback and raw analytics (errors are still counted; web events and app signals get 429); `0`: no limit. Ingest does the same when the data volume has less than 1 GiB free |
 | `--capture-dir` | `KESTREL_CAPTURE_DIR` | (none) | write every ingest request to this directory ([capture mode](#capture-mode-and-sdk-fixtures)); test instances only |
 | | `KK_TRUST_PROXY` | off | honour `X-Forwarded-*` from a reverse proxy (also for the ingest IP limit) |
 | | `KK_SETUP_TOKEN` | (none) | `/setup` opens only with `?token=…` |
@@ -111,20 +112,32 @@ printf '{}\n{"type":"event"}\n{"message":"Hello from curl","level":"warning"}\n'
 
 What happens to a request (docs/design.md §4):
 
-1. **Checks**, cheapest first: the per-IP bucket (`KK_INGEST_IP_RATE_LIMIT`), the project id, the body size, the
-   key, the browser's `Origin` against the key's allowed origins, the key's own bucket (`rate_limit_per_minute`).
-   The buckets are the kit's token buckets (`vole_kit::http::ratelimit::TokenBuckets`, in memory, per IP address
-   and per key); rate limits answer 429 with `Retry-After` and `X-Sentry-Rate-Limits` and Kestrel's Sentry-style
-   body. The ingest routes are exempt from the CSRF check (`csrf_exempt_prefixes` in `src/product.rs`:
+1. **Checks**, cheapest first: the per-IP bucket (`KK_INGEST_IP_RATE_LIMIT`), the project id, the announced body
+   size, the writer's queue (full: 429 before anything is read), the key (header or query; else the envelope's
+   `dsn`, from the first 64 KiB of the body), the browser's `Origin` against the key's allowed origins, the key's
+   own bucket (`rate_limit_per_minute`, else 1000 a minute). Only then is the body read, decoded and scanned.
+   The buckets are the kit's token buckets (`vole_kit::http::ratelimit::TokenBuckets`, in memory, per IPv4
+   address or IPv6 /64 and per key and limit) and count items: a request takes one token up front and an
+   envelope the rest once its items are counted (`Inner::charge`), before any payload is looked at. Rate limits
+   answer 429 with `Retry-After` and `X-Sentry-Rate-Limits` and Kestrel's Sentry-style body. The ingest routes are exempt from the CSRF check (`csrf_exempt_prefixes` in `src/product.rs`:
    `/api/*/envelope`, `/api/*/store`, `/ingest/v1/event`, `/ingest/v1/signals`), carry the kit's machine header
    policy (`headers::machine`: a CSP that allows nothing, no frame rules) and answer CORS with `*` or the key's
    allowed origins. `GET /js/k.js` is a public asset (`headers::public_asset`: no CSP, `Cross-Origin-Resource-Policy:
    cross-origin`).
-2. **Decoding**: gzip, deflate, br or zstd, at most 20 MB per envelope, 1 MB per event and 10 MB per attachment
-   once decompressed (413 when larger, 400 when broken). Larger attachments are dropped, the event is kept.
-3. **Items**: `event` is normalised and grouped; `session`/`sessions` are kept for the release-health rollup
-   ([below](#releases-and-release-health)); `user_report`/`feedback` and the attachments of stored events are kept; `transaction`, `span`, `profile`, `replay_*`,
-   `check_in`, `statsd`, `metrics`, `log`, `client_report`, minidumps and unknown types are accepted and dropped.
+2. **Decoding**: gzip, deflate, br or zstd (at most two encodings; a zstd window over 8 MiB is refused), at most
+   20 MB per envelope and 1 MB per event once decompressed, checked while decoding (413 when larger, 400 when
+   broken). `src/ingest/body.rs`.
+3. **Items** (`src/ingest/envelope.rs`: a `Scanner` that reads the item headers and borrows the payloads): at most
+   100 items, 20 `event`/`transaction` items and 16 KiB per item header, else 413 at the first violation.
+   `event` is normalised and grouped; `session`/`sessions` are kept for the release-health rollup
+   ([below](#releases-and-release-health)), `user_report`/`feedback` too, each up to 4 KiB (larger ones are accepted
+   and dropped), with the release cut to 200 and the environment to 64 characters like an event's; the attachments of
+   stored events are kept, 1 MiB each and 5 per event (the rest accepted and dropped); `transaction`, `span`,
+   `profile`, `replay_*`, `check_in`, `statsd`, `metrics`, `log`, `client_report`, minidumps and unknown types are
+   accepted and dropped. The writer's queue holds 2000 jobs and 256 MiB (`Job::weight`), the symbolication queue 256
+   envelopes and 32 MiB; either one full is a 429. When the store is full (`store::Guard`: under 1 GiB free, or
+   `KK_MAX_STORE_MB` reached) events are counted without payload, attachments and feedback are dropped (the answer
+   carries `X-Sentry-Rate-Limits: 300:attachment:organization`).
 4. **Normalisation and privacy** (`src/event/normalize.rs`, `scrub.rs`): defaults, at most 100 breadcrumbs, 250
    frames per stack and 8 KB per string, `in_app` from the SDK or per-platform rules. No IP address is ever kept
    (`{{auto}}` included). `Authorization` and `Cookie` headers, values under keys matching
@@ -228,7 +241,9 @@ Everyone signed in reads them; editors and admins act.
   with htmx and push the URL; the status chips come back out of band. While the list is open it listens on
   `/projects/{id}/issues/live` (server-sent events with the same query string, built on the kit's `http::live`):
   the writer says which project changed after each batch and each action, and the list is rendered again at most
-  about once a second; lists open on the same view share one render. Select
+  about once a second; lists open on the same view share one render. At most 64 such streams are open at once (the
+  next gets 503 with `Retry-After: 30`) and each ends after an hour, when the browser reconnects and the session is
+  checked again; the Web and App tabs' streams have their own cap of 64 and lifetime of an hour. Select
   mode (`?select=1`, editors) resolves, ignores, unresolves or merges the ticked issues.
 - **Search** (`src/issues/search.rs`): `is:unresolved|resolved|ignored|all|new|regressed|ongoing|unsymbolicated`,
   `level:`, `release:` (as sent, or only the version: `release:1.4` matches `shop@1.4` and `shop@1.4+12`; `*` is
@@ -268,7 +283,9 @@ Everyone signed in reads them; editors and admins act.
 
 then rows in `store.sqlite` of projects that no longer exist go, new issues first seen (and regressed ones last
 regressed) more than 7 days ago become `ongoing`, release-health rollups older than 400 days go, so does the
-alert history older than 90 days, and `store.sqlite` gives up to 10,000 freed pages back (`incremental_vacuum`).
+alert history older than 90 days, releases that no event, issue or rollup refers to any more and that were last seen
+more than 90 days ago go (checked once for all of them, with the foreign keys off for the delete: the references have
+no index), and `store.sqlite` gives up to 10,000 freed pages back (`incremental_vacuum`).
 Every minute the same task ends ignoring that ran out by time, so an issue ignored for an hour comes back without
 a new event, and rolls the session items up into release health (which deletes them). Debug files follow their
 own rule ([below](#debug-files-and-symbolication)).
@@ -387,7 +404,8 @@ then send the sentry-cocoa fixtures with the project's key and open the issues.
 
 docs/design.md §4.7. `src/alerts/`, tables in `migrations/0005_alerts_releases.sql`.
 
-**Channels** (Settings → Notifications, `/settings/notifications`, editors and admins) are the instance's, with
+**Channels** (Settings → Notifications, `/settings/notifications`, admins only: a channel makes the server send
+requests to an address of the admin's choosing; editors choose among the channels for their rules) are the instance's, with
 vole-kit's ~40 providers: the provider picker, the provider's form rendered from its schema, secrets never shown
 again (an empty secret keeps the stored one; changing a destination asks for its secrets again), "Send test",
 pause and delete. Each channel has a message language ("" means the instance's: the site language from Settings →
@@ -468,7 +486,8 @@ The REST API v1 (`src/api.rs`, `src/api/`; reference at `/api-docs`, `/api-docs.
 - events: an issue's events, its latest event with the payload, an event by its id;
 - releases with their all-time health and 7-day adoption, a release's health per day (`?days=&environment=`);
 - alert rules (list, create, change, delete, with validation per field), the alerts sent, and the notification
-  channels by name and kind (never their settings, editors only);
+  channels by name and kind (never their settings, editors and admins: rules need their ids; managing channels is
+  for admins on the pages only);
 - web analytics: a time series with totals and a breakdown by one dimension ([below](#web-analytics));
 - app analytics: a time series, breakdowns, signal types, a type's payload and version adoption
   ([below](#app-analytics)), and each release's share of the app's users;
@@ -522,7 +541,8 @@ script, headless or automated browser; `Sec-Purpose: prefetch`; client hints nam
 dropped, the media type (`text/plain`, `application/json` or none, else 415), the body (64 KB, 413), JSON (400), the key
 (`X-Kestrel-Key`, the body's `k`/`key` or `?key=`: 401 when missing or unknown, 403 when disabled), the project's
 `web_analytics` switch (403 when off), the key's allowed origins against `Origin`, else the `Referer`'s origin (a key
-limited to origins needs one; 403), the key's bucket (`rate_limit_per_minute`, 429 with `Retry-After`). The event name
+limited to origins needs one; 403), the key's bucket (`rate_limit_per_minute`, else 1000 a minute; 429 with
+`Retry-After`), a full store (429, `Retry-After: 60`). The event name
 is `pageview` or a custom name (400 when it can't be one), the page URL is required (http or https, 400). Then one job
 goes to the writer (429 when the queue is full) and the answer is `202 Accepted`, empty, `Cache-Control: no-store`, no
 cookie. Web analytics is on by default for every project and can be switched off in the project's settings (Settings →
@@ -584,7 +604,8 @@ email address, phone and card number. Unit tests cover parsing, scrubbing, user 
 
 `tools/loadtest/web.py` (standard library only; open loop, k.js-style pageviews with 400 paths, 10 referrers, 12
 user agents and a random client address each, 3 % custom events) against the release image limited to 2 CPUs and
-2 GB, data on tmpfs, `KK_TRUST_PROXY=1` and `KK_INGEST_IP_RATE_LIMIT=0`:
+2 GB, data on tmpfs, `KK_TRUST_PROXY=1` and `KK_INGEST_IP_RATE_LIMIT=0`, and the key's rate limit raised to its
+maximum (a key without a limit takes 1000 pageviews a minute):
 
 | Rate | Accepted | p50 | p99 | Max |
 |---|---|---|---|---|
@@ -611,13 +632,15 @@ format and what a signal keeps, `rollup.rs`, `query.rs`, `pages.rs`), `src/inges
 `POST /ingest/v1/signals` (also on the ingest port; exempt from the CSRF check) with the project's public key in
 `X-Kestrel-Key`. In order: the per-IP bucket (429), the key (401 missing or unknown, 403 disabled), the project's
 `app_analytics` switch (403 when off), the key's allowed origins when the request has an `Origin` (apps send none; 403),
-a project secret (503 without), the key's bucket (`rate_limit_per_minute`, per request, 429), the body (256 KB, 413),
+a project secret (503 without), the key's bucket (`rate_limit_per_minute`, else 1000 a minute; one token per request and
+one per further signal, 429), a full store (429, `Retry-After: 60`), the body (256 KB, 413),
 `Content-Encoding` (gzip, also deflate, br, zstd) undone with the same 256 KB cap (413; 400 when broken), JSON with a
 `signals` array (400), at most 100 signals (413). Unknown fields are ignored; `sent_at` and `sdk` are optional. Each
 signal on its own: an object with a valid `type` (1–100 characters from `[A-Za-z0-9._-]`, longer ones cut) and an
 `install_id` (cut to 64 characters), else dropped; `time` corrected by `now − sent_at` when they are more than 5
-seconds apart, the arrival time without a readable `time`, never in the future, dropped when older than the project's
-raw retention. The text fields are cut to 200 characters without control characters; an unknown platform is kept as
+seconds apart, the arrival time without a readable `time`, never in the future, dropped when older than 48 hours (or the
+project's raw retention, if that is shorter: `analytics::app::oldest_accepted`; a signal for an older day would make the
+rollup rebuild that whole day). The text fields are cut to 200 characters without control characters; an unknown platform is kept as
 sent; flags that aren't `true` are false; the payload keeps at most 20 string, number or boolean values (40-character
 keys, 200-character values, scrubbed like web events: email addresses, phone and card numbers, credentials, IP
 addresses), without keys that name an IP address or user agent. The answer is `202 {"accepted": n}` (with
@@ -683,7 +706,8 @@ filters, test signals), the explorer, the settings; release adoption; the API, t
 `tools/loadtest/signals.py` (standard library only; open loop; batches of 50–100 signals built like KestrelKit's and
 gzip-compressed, from 20,000 installs on five versions, 20 types, payloads on a third, 5 % TestFlight; `--setup` makes
 the admin and a project on a fresh instance and checks the rollup afterwards) against the release image limited to 2
-CPUs and 2 GB, data on tmpfs, `KK_TRUST_PROXY=1` and `KK_INGEST_IP_RATE_LIMIT=0`. Latency is per request (one batch):
+CPUs and 2 GB, data on tmpfs, `KK_TRUST_PROXY=1` and `KK_INGEST_IP_RATE_LIMIT=0` (`--setup` raises the key's rate
+limit, which is 1000 signals a minute for a key without one). Latency is per request (one batch):
 
 | Rate | Accepted | p50 | p99 | Max |
 |---|---|---|---|---|

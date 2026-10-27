@@ -12,12 +12,14 @@
 //!
 //! The key is the project's public key in `X-Kestrel-Key`. Checked in this
 //! order: the per-IP bucket (429), the key (401 missing or unknown, 403
-//! disabled, or app analytics off for its project), the key's bucket (429),
-//! the body (256 KB at most, also once gzip is undone: 413), JSON with a
+//! disabled, or app analytics off for its project), the key's bucket (429; a
+//! key without a limit of its own gets the default), a full store (429), the
+//! body (256 KB at most, also once gzip is undone: 413), JSON with a
 //! `signals` array (400), at most 100 signals (413). Signals that break a
-//! limit on their own are cut or dropped, not the batch (P5); `accepted`
-//! counts the stored ones. A full queue answers 503. 429 and 503 carry
-//! `Retry-After` in seconds (P8). The user agent and IP address only feed
+//! limit on their own are cut or dropped, not the batch (P5), among them the
+//! ones more than 48 hours old; `accepted` counts the stored ones, and each
+//! of them takes one token from the IP's and the key's bucket. A full queue
+//! answers 503. 429 and 503 carry `Retry-After` in seconds (P8). The user agent and IP address only feed
 //! the in-memory rate limit; nothing here sets a cookie.
 
 use std::net::SocketAddr;
@@ -84,11 +86,8 @@ impl Ingest {
     ) -> Result<(usize, usize), Reject> {
         let inner = &self.inner;
         let now = Instant::now();
-        inner.take_ip(
-            session::client_ip(headers, peer, session::trust_proxy()),
-            "ip",
-            now,
-        )?;
+        let ip = session::client_ip(headers, peer, session::trust_proxy());
+        inner.take_ip(ip, 1, "ip", now)?;
         let given = headers
             .get("x-kestrel-key")
             .and_then(|v| v.to_str().ok())
@@ -124,7 +123,10 @@ impl Ingest {
                 detail: "the project has no secret for user hashes",
             });
         }
-        inner.take_key(key.id, key.rate_limit_per_minute, now)?;
+        inner.take_key(key.id, key.rate_limit_per_minute, 1, now)?;
+        if inner.writer.store_full() {
+            return Err(super::store_full());
+        }
 
         let raw = axum::body::to_bytes(raw_body, MAX_BODY)
             .await
@@ -139,7 +141,9 @@ impl Ingest {
             .clone()
             .map(|dir| (dir, headers.clone()));
         let now_ms = jiff::Timestamp::now().as_millisecond();
+        let cleaning = key.clone();
         let (signals, dropped) = tokio::task::spawn_blocking(move || {
+            let key = cleaning;
             if let Some((dir, headers)) = capture
                 && let Err(err) =
                     super::capture::write(&dir, "POST", "/ingest/v1/signals", &headers, &raw)
@@ -161,7 +165,7 @@ impl Ingest {
                 secret: &key.app_secret,
                 strict: key.app_strict,
                 now_ms,
-                oldest: now_ms.div_euclid(1000) - key.raw_days.max(1) * 86_400,
+                oldest: app::oldest_accepted(now_ms, key.raw_days),
             };
             Ok::<_, Reject>(app::clean_batch(&batch, &ctx))
         })
@@ -180,6 +184,13 @@ impl Ingest {
             );
         }
         let accepted = signals.len();
+        // The request paid for one signal; the others are paid for now.
+        if let Some(more) = u32::try_from(accepted.saturating_sub(1))
+            .ok()
+            .filter(|n| *n > 0)
+        {
+            inner.charge(ip, &key, more, "ip", now)?;
+        }
         if accepted > 0 {
             inner
                 .writer

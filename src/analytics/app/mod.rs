@@ -52,6 +52,12 @@ pub const MAX_VALUE: usize = 200;
 pub const MAX_ID: usize = 64;
 /// A device clock this far off (milliseconds) is corrected (P10).
 pub const SKEW_TOLERANCE_MS: i64 = 5_000;
+/// Signals older than this (seconds, 48 hours) are dropped, whatever the
+/// raw retention. A signal for a day before yesterday makes the rollup
+/// recompute that whole day for the project; with the clock taken from the
+/// client, a few signals a minute for the last 30 days would keep the
+/// writer busy with nothing else. Offline devices catch up within two days.
+pub const MAX_BACKDATE_SECS: i64 = 48 * 3600;
 
 /// `flags` bits.
 pub const FLAG_DEBUG: i64 = 1;
@@ -385,9 +391,17 @@ pub struct Ctx<'a> {
     pub strict: bool,
     /// The server's clock, Unix milliseconds.
     pub now_ms: i64,
-    /// Signals older than this (Unix seconds) are dropped: the project's raw
-    /// retention (P10).
+    /// Signals older than this (Unix seconds) are dropped
+    /// ([`oldest_accepted`]).
     pub oldest: i64,
+}
+
+/// The oldest time (Unix seconds) a signal may have at `now_ms` for a project
+/// that keeps raw events `raw_days` days: [`MAX_BACKDATE_SECS`] back, and
+/// never further than the retention. Later times are clamped to the arrival
+/// ([`clean_signal`]).
+pub fn oldest_accepted(now_ms: i64, raw_days: i64) -> i64 {
+    now_ms.div_euclid(1000) - (raw_days.max(1) * 86_400).min(MAX_BACKDATE_SECS)
 }
 
 /// The clock correction for a batch: `server_now − sent_at` when the two

@@ -100,8 +100,59 @@ fn link(base: Option<&str>, path: &str) -> Option<String> {
     (!base.is_empty() && !path.is_empty()).then(|| format!("{base}{path}"))
 }
 
+/// "and 37 more" when the entry stands for alerts a rule held back (its
+/// cap), else `None`.
+pub fn overflow_text(data: &Value) -> Option<String> {
+    let count = data.get("overflow")?.as_i64()?;
+    Some(i18n::tn("alert_msg.digest_more", count))
+}
+
+/// The one alert for the new issues or regressions a rule held back
+/// ("New issue in Shop", "and 37 more").
+fn overflow_alert(data: &Value, text: String, base_url: Option<&str>) -> Alert {
+    let kind_name = s(data, &["kind"]).to_string();
+    let project = s(data, &["project", "name"]);
+    let lvl = Level::Warning;
+    let url = link(base_url, s(data, &["path"]));
+    let mut facts = vec![(
+        i18n::t("alert_msg.fact_project").to_string(),
+        project.to_string(),
+    )];
+    if url.is_none() {
+        facts.push((
+            i18n::t("alert_msg.fact_link").to_string(),
+            i18n::t("alert_msg.no_link").to_string(),
+        ));
+    }
+    Alert {
+        kind: AlertKind::Problem,
+        event: kind_name.clone(),
+        event_label: kind_label(&kind_name).to_string(),
+        status: kind_name,
+        level: lvl,
+        colour: lvl.colour(),
+        emoji: emoji(AlertKind::Problem, lvl).to_string(),
+        title: headline(data),
+        detail: Some(text.clone()),
+        facts,
+        link_label: i18n::t("alert_msg.view_alerts").to_string(),
+        subject_id: None,
+        subject: text.clone(),
+        subject_type: "project".to_string(),
+        target: project.to_string(),
+        message: Some(text),
+        duration: None,
+        expires_in_days: None,
+        url,
+        occurred_at: OffsetDateTime::now_utc(),
+    }
+}
+
 /// The alert for one log entry's data.
 pub fn alert(data: &Value, base_url: Option<&str>) -> Alert {
+    if let Some(text) = overflow_text(data) {
+        return overflow_alert(data, text, base_url);
+    }
     let kind_name = s(data, &["kind"]).to_string();
     let kind = match kind_name.as_str() {
         "spike" => AlertKind::Escalation,
@@ -230,13 +281,11 @@ pub fn digest(entries: &[(String, Value)], base_url: Option<&str>) -> Alert {
         .iter()
         .take(DIGEST_FACTS)
         .map(|(kind, data)| {
+            let what =
+                overflow_text(data).unwrap_or_else(|| s(data, &["issue", "title"]).to_string());
             (
                 kind_label(kind).to_string(),
-                format!(
-                    "{}: {}",
-                    s(data, &["project", "name"]),
-                    s(data, &["issue", "title"])
-                ),
+                format!("{}: {what}", s(data, &["project", "name"])),
             )
         })
         .collect();
@@ -388,6 +437,37 @@ mod tests {
         let a = alert(&c, None);
         assert_eq!(a.level, Level::Critical);
         assert_eq!(a.title, "First crash in shop@1.3.0 (Shop)");
+    }
+
+    #[test]
+    fn held_back_alerts_come_as_one_message() {
+        crate::product::install();
+        let d = json!({
+            "kind": "new_issue",
+            "project": {"id": 3, "name": "Shop"},
+            "overflow": 37,
+            "path": "/projects/3/alerts",
+        });
+        let a = alert(&d, Some("https://kestrel.example"));
+        assert_eq!(a.title, "New issue in Shop");
+        assert_eq!(a.detail.as_deref(), Some("and 37 more"));
+        assert_eq!(
+            a.url.as_deref(),
+            Some("https://kestrel.example/projects/3/alerts")
+        );
+        assert_eq!(a.level, Level::Warning);
+        let digest = digest(
+            &[
+                ("new_issue".to_string(), d),
+                ("new_issue".to_string(), data("new_issue")),
+            ],
+            None,
+        );
+        assert!(
+            digest.facts.iter().any(|(_, v)| v == "Shop: and 37 more"),
+            "{:?}",
+            digest.facts
+        );
     }
 
     #[test]

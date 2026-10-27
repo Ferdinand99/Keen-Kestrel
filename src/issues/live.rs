@@ -4,7 +4,9 @@
 //! which project changed after each batch and each action; bursts are
 //! merged, so a busy project re-renders at most about once a second per
 //! view, and lists open on the same view share one render (the kit's
-//! `http::live`).
+//! `http::live`). At most [`MAX_STREAMS`] lists are open at once, and one
+//! stays open for [`MAX_LIFETIME`] at most; the browser's `EventSource`
+//! then reconnects, which checks the session (and the role) again.
 
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -13,7 +15,7 @@ use askama::Template;
 use axum::extract::{Extension, Path, Query as UrlQuery, State};
 use axum::response::Response;
 use vole_kit::auth::CurrentUser;
-use vole_kit::http::live::{self, Changes, SharedRenders};
+use vole_kit::http::live::{self, Changes, SharedRenders, StreamLimit};
 use vole_kit::http::{ApiError, ApiResult};
 use vole_kit::i18n::{self, Lang};
 use vole_kit::state::Core;
@@ -23,6 +25,13 @@ use crate::ingest::Ingest;
 
 /// Quiet time that merges a burst of changes into one render.
 const COALESCE: Duration = Duration::from_millis(1000);
+
+/// Issue streams open at once.
+const MAX_STREAMS: usize = 64;
+/// How long one stream stays open.
+const MAX_LIFETIME: Duration = Duration::from_secs(3600);
+
+static STREAMS: StreamLimit = StreamLimit::new(MAX_STREAMS);
 
 /// One view of a list: project, query string, whether the reader may edit
 /// (bulk actions), language.
@@ -69,8 +78,12 @@ pub async fn stream(
     UrlQuery(form): UrlQuery<ListForm>,
 ) -> ApiResult<Response> {
     load_project(&core, id).await?;
-    let changes =
-        Changes::new(ingest.writer().subscribe(), move |p: &i64| *p == id).quiet(COALESCE);
+    let Some(slot) = STREAMS.acquire() else {
+        return Ok(live::busy());
+    };
+    let changes = Changes::new(ingest.writer().subscribe(), move |p: &i64| *p == id)
+        .quiet(COALESCE)
+        .lifetime(MAX_LIFETIME);
     let live = Live {
         core,
         project_id: id,
@@ -80,16 +93,31 @@ pub async fn stream(
         lang: i18n::current(),
     };
     Ok(live::sse(futures_util::stream::unfold(
-        (changes, live),
-        |(mut changes, live)| async move {
+        (changes, live, slot),
+        |(mut changes, live, slot)| async move {
             loop {
                 let since = changes.next().await?;
                 let render = RENDERS.get(live.key(), since, || live.render());
                 if let Ok(html) = i18n::scope(live.lang, render).await {
                     let event = live::html_event("issues-updated", &html);
-                    return Some((event, (changes, live)));
+                    return Some((event, (changes, live, slot)));
                 }
             }
         },
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_issue_streams_are_capped() {
+        let held: Vec<_> = (0..MAX_STREAMS).filter_map(|_| STREAMS.acquire()).collect();
+        assert_eq!(held.len(), MAX_STREAMS);
+        assert!(STREAMS.acquire().is_none(), "the next one is turned away");
+        drop(held);
+        assert!(STREAMS.acquire().is_some());
+        assert_eq!(MAX_LIFETIME, Duration::from_secs(3600));
+    }
 }

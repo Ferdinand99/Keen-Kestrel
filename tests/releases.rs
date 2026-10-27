@@ -251,6 +251,172 @@ async fn release_pages_list_new_issues_and_regressions_and_issues_link_to_them()
     assert!(event_page.body.contains(&href));
 }
 
+/// Session items as the writer stores them, straight into the store:
+/// `(release, environment)` for each.
+async fn queue_sessions(app: &App, sessions: Vec<(String, String)>) {
+    app.kestrel
+        .ingest
+        .writer()
+        .run(move |c| {
+            let now = keen_kestrel::issues::now();
+            for (release, environment) in &sessions {
+                let data = json!({"sid": new_id(), "did": "d", "init": true, "status": "exited",
+                    "errors": 0, "attrs": {"release": release, "environment": environment}});
+                c.execute(
+                    "INSERT INTO store.session_items (project_id, received_at, release, environment, data)
+                     VALUES (1, ?1, ?2, ?3, ?4)",
+                    rusqlite::params![now, release, environment, data.to_string()],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+async fn roll_up(app: &App) -> keen_kestrel::releases::health::Report {
+    let now = keen_kestrel::issues::now();
+    app.kestrel
+        .ingest
+        .writer()
+        .run(move |c| keen_kestrel::releases::health::rollup_all(c, &now))
+        .await
+        .unwrap()
+}
+
+/// The release and environment of a session are whatever the sender says, and
+/// a release lives for good (KK-05): a project takes 1000 of each a day.
+#[tokio::test]
+async fn sessions_take_at_most_a_thousand_releases_and_environments_a_day() {
+    let max = keen_kestrel::releases::health::MAX_VALUES_PER_DAY;
+    assert_eq!(max, 1000);
+    let app = App::new().await;
+    let p = app.project_id;
+    assert_eq!(p, 1);
+    // 1100 releases: the first 1000 count.
+    let sessions: Vec<_> = (0..1100)
+        .map(|i| (format!("junk@{i}"), "production".to_string()))
+        .collect();
+    queue_sessions(&app, sessions).await;
+    let report = roll_up(&app).await;
+    assert_eq!((report.items, report.dropped), (1100, 100));
+    assert_eq!(app.count("SELECT COUNT(*) FROM releases").await, 1000);
+    assert_eq!(
+        app.count("SELECT COUNT(DISTINCT release_id) FROM release_health")
+            .await,
+        1000
+    );
+    // Later the same day: new releases are dropped, known ones still count.
+    queue_sessions(
+        &app,
+        vec![
+            ("junk@5000".to_string(), "production".to_string()),
+            ("junk@7".to_string(), "production".to_string()),
+        ],
+    )
+    .await;
+    let report = roll_up(&app).await;
+    assert_eq!((report.items, report.dropped), (2, 1));
+    assert_eq!(app.count("SELECT COUNT(*) FROM releases").await, 1000);
+    assert_eq!(
+        app.count(
+            "SELECT SUM(h.sessions) FROM release_health h JOIN releases r ON r.id = h.release_id
+             WHERE r.version = 'junk@7'"
+        )
+        .await,
+        2
+    );
+
+    // Environments are counted on their own.
+    let app = App::new().await;
+    let sessions: Vec<_> = (0..1100)
+        .map(|i| ("shop@1.0".to_string(), format!("env-{i}")))
+        .collect();
+    queue_sessions(&app, sessions).await;
+    let report = roll_up(&app).await;
+    assert_eq!((report.items, report.dropped), (1100, 100));
+    assert_eq!(
+        app.count("SELECT COUNT(DISTINCT environment) FROM release_health")
+            .await,
+        1000
+    );
+    assert_eq!(app.count("SELECT COUNT(*) FROM releases").await, 1);
+}
+
+/// Releases that nothing refers to any more go after 90 days unseen; any
+/// event, issue or health rollup that still names one keeps it.
+#[tokio::test]
+async fn releases_nothing_refers_to_are_pruned() {
+    let app = App::new().await;
+    let p = app.project_id;
+    // Kept by an issue (and its event), kept by a rollup, and two nothing
+    // refers to: one old, one recent.
+    let event = json!({"event_id": new_id(), "message": "m", "release": "by-issue@1"});
+    assert_eq!(
+        app.send(envelope_request(p, &app.key, envelope_with(&event)))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.send(session_request(
+            &app,
+            &json!({"sid": new_id(), "did": "d", "init": true, "status": "exited",
+                    "attrs": {"release": "by-health@1", "environment": "production"}})
+        ))
+        .await
+        .status,
+        StatusCode::OK
+    );
+    app.flush().await;
+    rollup(&app).await;
+    app.exec(format!(
+        "INSERT INTO releases (project_id, version, first_seen, last_seen) VALUES
+            ({p}, 'unused-old@1', '2025-01-01 00:00:00', '2025-01-01 00:00:00'),
+            ({p}, 'unused-old@2', '2025-01-01 00:00:00', '2025-01-02 00:00:00'),
+            ({p}, 'unused-new@1', datetime('now'), datetime('now'));
+         UPDATE releases SET last_seen = '2025-01-01 00:00:00'
+            WHERE version IN ('by-issue@1', 'by-health@1');"
+    ))
+    .await;
+    let now = keen_kestrel::issues::now();
+    let report = keen_kestrel::retention::run_once(app.kestrel.ingest.writer(), &now)
+        .await
+        .unwrap();
+    assert_eq!(report.releases_deleted, 2);
+    let versions: Vec<String> = app
+        .kestrel
+        .core
+        .with_conn(|c| {
+            c.prepare("SELECT version FROM releases ORDER BY version")?
+                .query_map([], |r| r.get(0))?
+                .collect()
+        })
+        .await
+        .unwrap();
+    assert_eq!(versions, ["by-health@1", "by-issue@1", "unused-new@1"]);
+    // What they name is intact, and the foreign keys are back on.
+    assert_eq!(
+        app.count("SELECT COUNT(*) FROM events WHERE release_id IS NOT NULL")
+            .await,
+        1
+    );
+    assert_eq!(app.count("SELECT COUNT(*) FROM release_health").await, 1);
+    let fks: i64 = app
+        .kestrel
+        .ingest
+        .writer()
+        .run(|c| c.query_row("PRAGMA foreign_keys", [], |r| r.get(0)))
+        .await
+        .unwrap();
+    assert_eq!(fks, 1);
+    // Nothing left to prune.
+    let report = keen_kestrel::retention::run_once(app.kestrel.ingest.writer(), &now)
+        .await
+        .unwrap();
+    assert_eq!(report.releases_deleted, 0);
+}
+
 #[tokio::test]
 async fn rollups_older_than_400_days_go() {
     let app = App::new().await;

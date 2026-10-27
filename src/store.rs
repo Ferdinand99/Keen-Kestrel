@@ -8,7 +8,9 @@
 //! settings. Pages are given back to the file system with incremental
 //! auto-vacuum, set by the pool before the first table exists.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use deadpool_sqlite::Pool;
 use rusqlite::Connection;
@@ -86,10 +88,84 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
 pub fn decompress(data: &[u8], limit: usize) -> std::io::Result<Vec<u8>> {
     use std::io::Read as _;
     let mut out = Vec::new();
-    zstd::stream::read::Decoder::new(data)?
-        .take(limit as u64)
-        .read_to_end(&mut out)?;
+    let mut decoder = zstd::stream::read::Decoder::new(data)?;
+    // Kestrel's own frames use the default 2 MiB window.
+    decoder.window_log_max(crate::ingest::body::ZSTD_WINDOW_LOG_MAX)?;
+    decoder.take(limit as u64).read_to_end(&mut out)?;
     Ok(out)
+}
+
+/// Free space the data volume must keep (1 GiB) before the store takes new
+/// payloads.
+pub const MIN_FREE_BYTES: u64 = 1 << 30;
+
+/// How long a measurement of the volume is reused.
+const GUARD_TTL: Duration = Duration::from_secs(5);
+
+/// Watches the data volume (docs/design.md §7): when it has less than
+/// `min_free` bytes free, or `store.sqlite` (with its write-ahead log) is
+/// over `max_store`, the store is "full". Ingest then still counts events,
+/// but stops keeping what takes room: event payloads, attachments, feedback
+/// and raw analytics. The answer is cached for a few seconds, so asking is
+/// cheap.
+pub struct Guard {
+    dir: PathBuf,
+    min_free: u64,
+    max_store: Option<u64>,
+    last: Mutex<Option<(Instant, bool)>>,
+}
+
+impl Guard {
+    /// `min_free`: 0 turns the free-space check off; `max_store`: `None` for
+    /// no limit on the store's size.
+    pub fn new(dir: &Path, min_free: u64, max_store: Option<u64>) -> Self {
+        Guard {
+            dir: dir.to_path_buf(),
+            min_free,
+            max_store,
+            last: Mutex::new(None),
+        }
+    }
+
+    /// Whether the store takes no new payloads now.
+    pub fn full(&self) -> bool {
+        let mut last = self.last.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some((at, full)) = *last
+            && at.elapsed() < GUARD_TTL
+        {
+            return full;
+        }
+        let full = self.measure();
+        *last = Some((Instant::now(), full));
+        full
+    }
+
+    fn measure(&self) -> bool {
+        if let Some(max) = self.max_store {
+            let size: u64 = [STORE_FILE, "store.sqlite-wal"]
+                .iter()
+                .filter_map(|f| std::fs::metadata(self.dir.join(f)).ok())
+                .map(|m| m.len())
+                .sum();
+            if size > max {
+                return true;
+            }
+        }
+        self.min_free > 0 && free_bytes(&self.dir).is_some_and(|free| free < self.min_free)
+    }
+}
+
+/// Bytes available to unprivileged writers on the volume of `dir`, where the
+/// platform can tell.
+#[cfg(unix)]
+fn free_bytes(dir: &Path) -> Option<u64> {
+    let st = rustix::fs::statvfs(dir).ok()?;
+    Some(st.f_bavail.saturating_mul(st.f_frsize))
+}
+
+#[cfg(not(unix))]
+fn free_bytes(_: &Path) -> Option<u64> {
+    None
 }
 
 #[cfg(test)]
@@ -149,5 +225,29 @@ mod tests {
         assert!(packed.len() < json.len() / 4);
         assert_eq!(decompress(&packed, 1 << 20).unwrap(), json);
         assert_eq!(decompress(&packed, 10).unwrap().len(), 10);
+    }
+
+    #[test]
+    fn the_guard_trips_on_free_space_or_store_size() {
+        let dir = std::env::temp_dir().join(format!("kk-guard-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(STORE_FILE), vec![0u8; 4096]).unwrap();
+        // Nothing to trip on.
+        assert!(!Guard::new(&dir, 0, None).full());
+        // The store is over its limit (its WAL counts too).
+        assert!(!Guard::new(&dir, 0, Some(10_000)).full());
+        std::fs::write(dir.join("store.sqlite-wal"), vec![0u8; 8192]).unwrap();
+        assert!(Guard::new(&dir, 0, Some(10_000)).full());
+        // No volume has an exabyte free.
+        if cfg!(unix) {
+            assert!(Guard::new(&dir, u64::MAX, None).full());
+        }
+        assert!(!Guard::new(&dir, 1, None).full(), "one byte is free");
+        // The answer is reused for a few seconds.
+        let g = Guard::new(&dir, 0, Some(10_000));
+        assert!(g.full());
+        std::fs::remove_file(dir.join("store.sqlite-wal")).unwrap();
+        assert!(g.full(), "cached");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

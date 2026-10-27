@@ -60,7 +60,7 @@
     {% endcall %}
     {{ m::copy_field(&k.dom_id, &k.dsn) }}
     <dl class="dl">
-      <div class="dl-row"><dt>{{ tr("keys.rate_limit") }}</dt><dd>{% match k.rate_limit %}{% when Some(n) %}{{ tr1("keys.per_minute", "n", num(n)) }}{% when None %}{{ tr("keys.no_limit") }}{% endmatch %}</dd></div>
+      <div class="dl-row"><dt>{{ tr("keys.rate_limit") }}</dt><dd>{% match k.rate_limit %}{% when Some(n) %}{{ tr1("keys.per_minute", "n", num(n)) }}{% when None %}{{ tr("keys.no_limit") }} ({{ tr1("keys.per_minute", "n", num(k.default_limit)) }}){% endmatch %}</dd></div>
       <div class="dl-row"><dt>{{ tr("keys.origins") }}</dt><dd class="break">{% if k.origins.is_empty() %}{{ tr("keys.any_origin") }}{% else %}{{ k.origins.join(", ") }}{% endif %}</dd></div>
       <div class="dl-row"><dt>{{ tr("common.created") }}</dt><dd>{{ m::time_ago(&k.created_at) }}</dd></div>
     </dl>

@@ -1,7 +1,9 @@
 //! The one writer (docs/design.md §4.1): ingest hands it jobs through a
 //! bounded channel, and it writes them in batches, each in one IMMEDIATE
 //! transaction, every 100 ms or every 500 jobs, whichever comes first.
-//! When the channel is full, ingest answers 429 instead of waiting.
+//! When the channel is full, ingest answers 429 instead of waiting. The queue
+//! is bounded by the bytes it holds as well as by its length, so a burst of
+//! large jobs can't fill the memory ([`Job::weight`]).
 //!
 //! The writer has its own connection to `kestrel.sqlite` with `store.sqlite`
 //! attached as `store`, so an event's index row and its payload are written
@@ -18,7 +20,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use rusqlite::{Connection, TransactionBehavior, params};
@@ -26,6 +28,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 
 use crate::alerts::{Sink, Trigger};
 use crate::db::issues::{self, EventRecord, Outcome, Written};
+use crate::store::Guard;
 
 /// A session update or aggregate (release health, later).
 #[derive(Debug, Clone)]
@@ -85,6 +88,24 @@ pub enum Job {
     App(Vec<crate::analytics::app::AppSignal>),
 }
 
+impl Job {
+    /// What the job holds in memory, about: the queue's byte budget counts
+    /// these.
+    pub fn weight(&self) -> usize {
+        /// What a row costs besides its payload (strings, the box).
+        const ROW: usize = 512;
+        match self {
+            Job::Event(e) => ROW + e.payload.len() + e.title.len() + e.culprit.len(),
+            Job::Session(s) => ROW + s.data.len(),
+            Job::Feedback(f) => ROW + f.data.len(),
+            Job::Attachment(a) => ROW + a.data.len(),
+            Job::DifUse(u) => ROW + 40 * u.debug_ids.len(),
+            Job::Web(_) => ROW,
+            Job::App(signals) => ROW * (signals.len() + 1),
+        }
+    }
+}
+
 /// Work for the writer's connection besides ingest jobs.
 type Exec = Box<dyn FnOnce(&mut Connection) + Send>;
 
@@ -92,6 +113,15 @@ enum Msg {
     Job(Job),
     Flush(oneshot::Sender<()>),
     Exec(Exec),
+}
+
+impl Msg {
+    fn weight(&self) -> usize {
+        match self {
+            Msg::Job(job) => job.weight(),
+            Msg::Flush(_) | Msg::Exec(_) => 0,
+        }
+    }
 }
 
 /// Why [`Writer::run`] failed.
@@ -118,16 +148,28 @@ impl std::error::Error for WriterError {}
 pub struct WriterSettings {
     /// Jobs waiting at most; more makes ingest answer 429.
     pub queue_capacity: usize,
+    /// Bytes the waiting jobs hold at most ([`Job::weight`]); more makes
+    /// ingest answer 429.
+    pub queue_max_bytes: usize,
     pub batch_size: usize,
     pub batch_interval: Duration,
+    /// Free space the data volume must keep before the store takes new
+    /// payloads (0: no check; [`crate::store::Guard`]).
+    pub min_free_bytes: u64,
+    /// Size `store.sqlite` may grow to before it takes no new payloads
+    /// (`KK_MAX_STORE_MB`); `None`: no limit.
+    pub max_store_bytes: Option<u64>,
 }
 
 impl Default for WriterSettings {
     fn default() -> Self {
         WriterSettings {
             queue_capacity: 2000,
+            queue_max_bytes: 256 * 1024 * 1024,
             batch_size: 500,
             batch_interval: Duration::from_millis(100),
+            min_free_bytes: crate::store::MIN_FREE_BYTES,
+            max_store_bytes: None,
         }
     }
 }
@@ -151,6 +193,10 @@ pub struct QueueFull;
 #[derive(Clone)]
 pub struct Writer {
     tx: mpsc::Sender<Msg>,
+    /// Bytes of the jobs in the queue ([`Job::weight`]).
+    queued_bytes: Arc<AtomicUsize>,
+    max_bytes: usize,
+    guard: Arc<Guard>,
     stats: Arc<Stats>,
     changes: broadcast::Sender<i64>,
     web: broadcast::Sender<WebChange>,
@@ -175,6 +221,12 @@ impl Writer {
     ) -> Result<Writer, crate::StartError> {
         let conn = open(main, store)?;
         let (tx, rx) = mpsc::channel(settings.queue_capacity.max(1));
+        let queued_bytes = Arc::new(AtomicUsize::new(0));
+        let guard = Arc::new(Guard::new(
+            store.parent().unwrap_or(Path::new(".")),
+            settings.min_free_bytes,
+            settings.max_store_bytes,
+        ));
         let stats = Arc::new(Stats::default());
         let (changes, _) = broadcast::channel(64);
         let (web, _) = broadcast::channel(64);
@@ -184,27 +236,51 @@ impl Writer {
             conn,
             paths,
             settings,
-            stats.clone(),
+            (stats.clone(), queued_bytes.clone(), guard.clone()),
             (changes.clone(), web.clone()),
             alerts,
         ));
         Ok(Writer {
             tx,
+            queued_bytes,
+            max_bytes: settings.queue_max_bytes.max(1),
+            guard,
             stats,
             changes,
             web,
         })
     }
 
-    /// Queues `jobs`, all or none.
+    /// Whether the queue has room for more: a place, and bytes under the
+    /// budget. Ingest asks before it does any work for a request.
+    pub fn has_room(&self) -> bool {
+        self.tx.capacity() > 0 && self.queued_bytes.load(Ordering::Acquire) < self.max_bytes
+    }
+
+    /// Whether the store takes no new payloads now: the data volume is low
+    /// on space or `store.sqlite` is over its limit. Events are still
+    /// counted; attachments, feedback and raw analytics are not kept.
+    pub fn store_full(&self) -> bool {
+        self.guard.full()
+    }
+
+    /// Queues `jobs`, all or none. Refused when the queue is full or the
+    /// jobs would take it over its byte budget (an empty queue takes any
+    /// batch, so one bigger than the budget still goes through alone).
     pub fn submit(&self, jobs: Vec<Job>) -> Result<(), QueueFull> {
         if jobs.is_empty() {
             return Ok(());
         }
-        let permits = self
-            .tx
-            .try_reserve_many(jobs.len())
-            .map_err(|_| QueueFull)?;
+        let bytes: usize = jobs.iter().map(Job::weight).sum();
+        let before = self.queued_bytes.fetch_add(bytes, Ordering::AcqRel);
+        if before > 0 && before + bytes > self.max_bytes {
+            self.queued_bytes.fetch_sub(bytes, Ordering::AcqRel);
+            return Err(QueueFull);
+        }
+        let Ok(permits) = self.tx.try_reserve_many(jobs.len()) else {
+            self.queued_bytes.fetch_sub(bytes, Ordering::AcqRel);
+            return Err(QueueFull);
+        };
         for (permit, job) in permits.zip(jobs) {
             permit.send(Msg::Job(job));
         }
@@ -217,11 +293,13 @@ impl Writer {
         if jobs.is_empty() {
             return Ok(());
         }
+        let bytes: usize = jobs.iter().map(Job::weight).sum();
         let permits = self
             .tx
             .reserve_many(jobs.len())
             .await
             .map_err(|_| WriterError::Stopped)?;
+        self.queued_bytes.fetch_add(bytes, Ordering::AcqRel);
         for (permit, job) in permits.zip(jobs) {
             permit.send(Msg::Job(job));
         }
@@ -298,7 +376,7 @@ async fn run(
     conn: Connection,
     paths: (PathBuf, PathBuf),
     settings: WriterSettings,
-    stats: Arc<Stats>,
+    (stats, queued_bytes, guard): (Arc<Stats>, Arc<AtomicUsize>, Arc<Guard>),
     (changes, web): (broadcast::Sender<i64>, broadcast::Sender<WebChange>),
     alerts: Option<Sink>,
 ) {
@@ -314,6 +392,7 @@ async fn run(
                 Ok(None) | Err(_) => break,
             }
         }
+        let bytes: usize = batch.iter().map(Msg::weight).sum();
         let c = match conn.take() {
             Some(c) => c,
             None => match open(&paths.0, &paths.1) {
@@ -323,19 +402,22 @@ async fn run(
                     stats
                         .failed
                         .fetch_add(batch.len() as u64, Ordering::Relaxed);
+                    queued_bytes.fetch_sub(bytes, Ordering::AcqRel);
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             },
         };
         let stats2 = stats.clone();
-        match tokio::task::spawn_blocking(move || {
+        let store_full = guard.full();
+        let written = tokio::task::spawn_blocking(move || {
             let mut c = c;
-            let (acks, projects, triggers) = write_batch(&mut c, batch, &stats2);
+            let (acks, projects, triggers) = write_batch(&mut c, batch, &stats2, store_full);
             (c, acks, projects, triggers)
         })
-        .await
-        {
+        .await;
+        queued_bytes.fetch_sub(bytes, Ordering::AcqRel);
+        match written {
             Ok((c, acks, (projects, web_projects), triggers)) => {
                 conn = Some(c);
                 for project in projects {
@@ -361,7 +443,7 @@ async fn run(
 type BatchOut = (Vec<oneshot::Sender<()>>, (Vec<i64>, Vec<i64>), Vec<Trigger>);
 
 /// Writes a batch's jobs, then runs its other work.
-fn write_batch(c: &mut Connection, batch: Vec<Msg>, stats: &Stats) -> BatchOut {
+fn write_batch(c: &mut Connection, batch: Vec<Msg>, stats: &Stats, store_full: bool) -> BatchOut {
     let mut acks = Vec::new();
     let mut execs = Vec::new();
     let mut jobs = Vec::with_capacity(batch.len());
@@ -393,7 +475,7 @@ fn write_batch(c: &mut Connection, batch: Vec<Msg>, stats: &Stats) -> BatchOut {
     let triggers = if jobs.is_empty() {
         Vec::new()
     } else {
-        write_all(c, &mut jobs, stats)
+        write_all(c, &mut jobs, stats, store_full)
     };
     for f in execs {
         f(c);
@@ -403,17 +485,22 @@ fn write_batch(c: &mut Connection, batch: Vec<Msg>, stats: &Stats) -> BatchOut {
 
 /// Writes the jobs (trying once more if the transaction fails). Returns
 /// what may alert, from the transaction that committed.
-fn write_all(c: &mut Connection, jobs: &mut [Job], stats: &Stats) -> Vec<Trigger> {
+fn write_all(
+    c: &mut Connection,
+    jobs: &mut [Job],
+    stats: &Stats,
+    store_full: bool,
+) -> Vec<Trigger> {
     // Events first: attachments need their event's row.
     jobs.sort_by_key(|j| match j {
         Job::Event(_) => 0,
         Job::Attachment(_) => 2,
         _ => 1,
     });
-    let mut result = write_jobs(c, jobs, stats);
+    let mut result = write_jobs(c, jobs, stats, store_full);
     if let Err(err) = &result {
         tracing::warn!(%err, jobs = jobs.len(), "a batch failed; trying once more");
-        result = write_jobs(c, jobs, stats);
+        result = write_jobs(c, jobs, stats, store_full);
     }
     match result {
         Ok(triggers) => {
@@ -477,13 +564,18 @@ struct Counts {
     failed: u64,
 }
 
-fn write_jobs(c: &mut Connection, jobs: &[Job], stats: &Stats) -> rusqlite::Result<Vec<Trigger>> {
+fn write_jobs(
+    c: &mut Connection,
+    jobs: &[Job],
+    stats: &Stats,
+    store_full: bool,
+) -> rusqlite::Result<Vec<Trigger>> {
     let mut tx = c.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let mut counts = Counts::default();
     let mut triggers = Vec::new();
     for job in jobs {
         let sp = tx.savepoint()?;
-        match write_job(&sp, job) {
+        match write_job(&sp, job, store_full) {
             Ok(written) => {
                 sp.commit()?;
                 if let (Job::Event(e), Some(w)) = (job, written) {
@@ -518,9 +610,13 @@ fn write_jobs(c: &mut Connection, jobs: &[Job], stats: &Stats) -> rusqlite::Resu
     Ok(triggers)
 }
 
-fn write_job(c: &Connection, job: &Job) -> rusqlite::Result<Option<Written>> {
+/// Writes one job. With `store_full` (the volume is low on space or the
+/// store is over its limit) events are counted but keep no payload, and
+/// attachments and feedback are dropped.
+fn write_job(c: &Connection, job: &Job, store_full: bool) -> rusqlite::Result<Option<Written>> {
     match job {
-        Job::Event(e) => issues::write_event_full(c, e).map(Some),
+        Job::Event(e) => issues::write_event_with(c, e, !store_full).map(Some),
+        Job::Feedback(_) | Job::Attachment(_) if store_full => Ok(None),
         Job::Session(s) => {
             c.prepare_cached(
                 "INSERT INTO store.session_items (project_id, received_at, release, environment, data)
