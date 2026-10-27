@@ -5,7 +5,7 @@ version = "0.7.0"
 edition = "2024"
 rust-version = "1.99"
 description = "Self-hosted error tracking and privacy-friendly analytics in one small binary."
-license = "MIT"
+license = "AGPL-3.0-only"
 repository = "https://github.com/Ferdinand99/Keen-Kestrel"
 publish = false
 

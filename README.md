@@ -8,7 +8,7 @@
 <p align="center"><strong>Self-hosted error tracking and privacy-friendly analytics in one small binary.</strong></p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
   <a href="https://hedgerow.tools/Keen-Kestrel/"><img src="https://img.shields.io/badge/website-hedgerow.tools%2FKeen--Kestrel-black.svg" alt="Website"></a>
 </p>
 
@@ -78,4 +78,6 @@ cohorts. See [`docs/design.md`](docs/design.md) for the full scope and the phase
 
 ## License
 
-[MIT](LICENSE)
+[GNU AGPL-3.0-only](LICENSE), except the web analytics snippet
+[`src/analytics/k.js`](src/analytics/k.js), which is MIT so it can go on any website. The Swift SDK,
+[KestrelKit](https://github.com/Ferdinand99/KestrelKit), is MIT too.

@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: MIT
 // k.js: Keen Kestrel's web analytics snippet (docs/web-analytics.md).
+// Unlike the rest of Keen Kestrel (AGPL-3.0), this file is MIT-licensed so it
+// can go on any website.
 //
 //   <script defer src="https://kestrel.example.com/js/k.js" data-key="<public key>"></script>
 //
