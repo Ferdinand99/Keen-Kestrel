@@ -2,7 +2,7 @@
 
 Keen Kestrel is one Rust crate (`keen-kestrel`, binary `kestrel`) on top of
 [vole-kit](https://github.com/Ferdinand99/Vigilant-Vole/blob/main/docs/vole-kit.md), the shared kit that lives in the
-Vigilant Vole repository (tag `vole-kit-v0.3.0`). The kit brings sign-in, users, API tokens (with Kestrel's
+Vigilant Vole repository (tag `vole-kit-v0.6.0`). The kit brings sign-in, users, API tokens (with Kestrel's
 `difs:write` scope), Security, General settings, the API reference, i18n, the database plumbing, request budgets,
 live updates, the notification channels' forms and the design system; Kestrel adds its own pages, API, migrations
 and strings, the
@@ -74,7 +74,11 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-The first start opens `/setup`, which creates the admin account.
+The first start opens `/setup`, which creates the admin account. It needs a setup token (vole-kit 0.5.1): set
+`KK_SETUP_TOKEN`, or take the random one that is logged once at the first start (`/setup?token=…`).
+`KK_SETUP_OPEN=1` keeps the page open without a token, for scripted installs, the load checks and end-to-end
+runs. The in-process tests need no variable: they build with vole-kit's `test-support` feature (a
+`[dev-dependencies]` entry), which opens `/setup` by default.
 
 | Flag | Variable | Default | What |
 |---|---|---|---|
@@ -87,7 +91,8 @@ The first start opens `/setup`, which creates the admin account.
 | `--max-store-mb` | `KK_MAX_STORE_MB` | `0` | size in MB that `store.sqlite` may reach before ingest stops keeping payloads, attachments, feedback and raw analytics (errors are still counted; web events and app signals get 429); `0`: no limit. Ingest does the same when the data volume has less than 1 GiB free |
 | `--capture-dir` | `KESTREL_CAPTURE_DIR` | (none) | write every ingest request to this directory ([capture mode](#capture-mode-and-sdk-fixtures)); test instances only |
 | | `KK_TRUST_PROXY` | off | honour `X-Forwarded-*` from a reverse proxy (also for the ingest IP limit) |
-| | `KK_SETUP_TOKEN` | (none) | `/setup` opens only with `?token=…` |
+| | `KK_SETUP_TOKEN` | (random, logged at the first start) | `/setup` opens only with `?token=…` until the first user exists |
+| | `KK_SETUP_OPEN` | off | `1`: `/setup` needs no token (scripted installs, tests of a running instance) |
 | | `RUST_LOG` | `info` | log filter |
 
 The public URL is the kit's `base_url` setting, which admins set on Settings → General (the kit's page: site name,
@@ -332,10 +337,24 @@ The `/api/0/` routes take API tokens only (no sessions, so they are exempt from 
 upload when it has the `difs:write` token scope and its owner is an editor or admin
 (`user.has_scope("difs:write") && user.may_act_as(Role::Editor)`); a read-and-write token has every scope.
 `difs:write` is a kit token scope (`KitConfig::token_scopes`, stored in the kit's `api_token_scopes`): a
-read-only token that also uploads, so a build machine's token can't change anything else. Upload tokens are made
-on a project's Debug files page or on the API tokens page ("Read and upload debug files", which is also the
-token's access there). `migrations/0008_token_scopes.sql` moved the grants of Kestrel 0.2 (`token_grants`) into
-the kit's table, so existing upload tokens kept working. The zip endpoint also takes an editor's session.
+read-only token that also uploads, so a build machine's token can't change anything else. The zip endpoint also
+takes an editor's session. `migrations/0008_token_scopes.sql` moved the grants of Kestrel 0.2 (`token_grants`)
+into the kit's table, so existing upload tokens kept working.
+
+**An upload token is bound to a project** (`migrations/0010_difs_token_projects.sql`, table
+`difs_token_projects`, keyed by the token's id: the kit's token model has no place for product fields). The
+binding is `project_id`, or `NULL` for "all projects". A bound token uploads to that project only and creates
+and changes releases there only: every route that names a project (`assemble`, the legacy dSYM routes, the
+zip endpoint, `releases new/finalize` with `projects`, and the per-project release routes) answers `403` for
+another one, and `finalize` without a project list touches the bound project's release. The chunk-upload
+routes name no project and are not limited (chunks are content-addressed and only `assemble` stores them).
+A read-and-write token and an editor's session have every scope and are not bound. Tokens that existed when
+0010 ran became "all projects" tokens, so nothing breaks; a `difs:write` token without a row (one made on the
+API tokens page, which has no project field, or one whose project was deleted, which removes the row) is
+refused with `403`, so a missing binding never widens access. Make upload tokens on a project's Debug files
+page: the sheet has a project picker (this project by default; "All projects" is offered to administrators
+only and is discouraged, and a post without the field binds to the page's project), and the list shows each
+token's project ("All projects" in a warning badge, "Not bound to a project" for a refused one).
 
 Limits: chunks of at most 8 MiB (after gzip too), 64 per request, request bodies of 33 MiB; files of at most
 1 GiB; zip uploads of at most 1 GiB with at most 10,000 entries and 2 GiB unpacked in all, and no entry over
@@ -703,7 +722,8 @@ filters, test signals), the explorer, the settings; release adoption; the API, t
 
 ### Load check (app signals)
 
-`tools/loadtest/signals.py` (standard library only; open loop; batches of 50–100 signals built like KestrelKit's and
+`tools/loadtest/signals.py` (standard library only; start Kestrel with `KK_SETUP_OPEN=1`, or pass
+`--setup-token` with the setup token; open loop; batches of 50–100 signals built like KestrelKit's and
 gzip-compressed, from 20,000 installs on five versions, 20 types, payloads on a third, 5 % TestFlight; `--setup` makes
 the admin and a project on a fresh instance and checks the rollup afterwards) against the release image limited to 2
 CPUs and 2 GB, data on tmpfs, `KK_TRUST_PROXY=1` and `KK_INGEST_IP_RATE_LIMIT=0` (`--setup` raises the key's rate

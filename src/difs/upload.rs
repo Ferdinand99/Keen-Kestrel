@@ -39,13 +39,13 @@ use futures_util::StreamExt as _;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use symbolic_common::DebugId;
-use vole_kit::auth::{AuthMethod, CurrentUser, Role};
+use vole_kit::auth::{AuthMethod, CurrentUser, Role, TokenScope};
 use vole_kit::http::rest::{V1Error, V1Result, json_ok, limit, no_content, paginate, parse_cursor};
 use vole_kit::state::Core;
 
 use super::Difs;
 use super::files::{self, DifError, Stored};
-use crate::db::difs::{self as db, DifFile, NewDif};
+use crate::db::difs::{self as db, Binding, DifFile, NewDif};
 use crate::db::projects::{self, Project};
 use crate::ingest::Ingest;
 
@@ -102,23 +102,32 @@ pub enum Denied {
     NeedsToken,
     /// The token (or its owner) may not upload debug files.
     NotAllowed,
+    /// An upload token with no project binding on record.
+    Unbound,
+    /// An upload token bound to another project.
+    OtherProject,
 }
 
 impl Denied {
-    fn message(self) -> &'static str {
+    pub fn message(self) -> &'static str {
         match self {
             Denied::NeedsToken => "use an API token (Authorization: Bearer kk_…)",
             Denied::NotAllowed => {
                 "this token can't upload debug files: use one with the difs:write scope \
                  (Debug files page) or a read-and-write token of an editor"
             }
+            Denied::Unbound => {
+                "this upload token isn't bound to a project: make a new one on the \
+                 project's Debug files page"
+            }
+            Denied::OtherProject => "this upload token is bound to another project",
         }
     }
 
     fn status(self) -> StatusCode {
         match self {
             Denied::NeedsToken => StatusCode::UNAUTHORIZED,
-            Denied::NotAllowed => StatusCode::FORBIDDEN,
+            Denied::NotAllowed | Denied::Unbound | Denied::OtherProject => StatusCode::FORBIDDEN,
         }
     }
 }
@@ -145,6 +154,42 @@ pub fn may_upload(
     }
 }
 
+/// The one project an upload token is bound to: `Ok(None)` when the request
+/// isn't limited to one (a session, a read-and-write token, or a token bound
+/// to every project). Only `difs:write` tokens (read-only tokens that also
+/// upload) carry a binding; a read-and-write token has every scope and acts
+/// as its owner. Run it after [`may_upload`].
+pub async fn bound_project(core: &Core, method: Option<AuthMethod>) -> Result<Option<i64>, Denied> {
+    let Some(AuthMethod::Token {
+        token_id,
+        scope: TokenScope::Read,
+    }) = method
+    else {
+        return Ok(None);
+    };
+    // A failed lookup refuses: a binding is never assumed.
+    match core.with_conn(move |c| db::binding(c, token_id)).await {
+        Ok(Binding::AllProjects) => Ok(None),
+        Ok(Binding::Project(id)) => Ok(Some(id)),
+        Ok(Binding::Unbound) | Err(_) => Err(Denied::Unbound),
+    }
+}
+
+/// [`may_upload`], and a bound token only for its own project.
+pub async fn may_upload_to(
+    core: &Core,
+    user: &CurrentUser,
+    method: Option<AuthMethod>,
+    session_ok: bool,
+    project_id: i64,
+) -> Result<(), Denied> {
+    may_upload(user, method, session_ok)?;
+    match bound_project(core, method).await? {
+        Some(bound) if bound != project_id => Err(Denied::OtherProject),
+        _ => Ok(()),
+    }
+}
+
 /// The project a sentry-cli path names: its slug or its numeric id.
 async fn project(core: &Core, segment: &str) -> Option<Project> {
     let segment = segment.trim().to_string();
@@ -162,6 +207,19 @@ type Method = Option<Extension<AuthMethod>>;
 
 fn check(user: &CurrentUser, method: Method) -> Option<Response> {
     may_upload(user, method.map(|Extension(m)| m), false)
+        .err()
+        .map(|d| detail(d.status(), d.message()))
+}
+
+/// [`check`], and a token bound to another project is refused.
+async fn check_project(
+    core: &Core,
+    user: &CurrentUser,
+    method: Method,
+    project_id: i64,
+) -> Option<Response> {
+    may_upload_to(core, user, method.map(|Extension(m)| m), false, project_id)
+        .await
         .err()
         .map(|d| detail(d.status(), d.message()))
 }
@@ -486,6 +544,9 @@ async fn assemble(
     let Some(project) = project(&core, &project_segment).await else {
         return detail(StatusCode::NOT_FOUND, "no such project");
     };
+    if let Some(res) = check_project(&core, &user, method, project.id).await {
+        return res;
+    }
     let request: BTreeMap<String, AssembleItem> = match serde_json::from_slice(&body) {
         Ok(r) => r,
         Err(e) => return detail(StatusCode::BAD_REQUEST, format!("invalid request: {e}")),
@@ -738,6 +799,9 @@ async fn legacy_upload(
     let Some(project) = project(&core, &project_segment).await else {
         return detail(StatusCode::NOT_FOUND, "no such project");
     };
+    if let Some(res) = check_project(&core, &user, method, project.id).await {
+        return res;
+    }
     let difs = ingest.difs();
     let (path, name) = match receive(difs, &headers, body).await {
         Ok(r) => r,
@@ -766,6 +830,9 @@ async fn legacy_list(
     let Some(project) = project(&core, &project_segment).await else {
         return detail(StatusCode::NOT_FOUND, "no such project");
     };
+    if let Some(res) = check_project(&core, &user, method, project.id).await {
+        return res;
+    }
     let rows = core
         .with_conn(move |c| db::list(c, project.id))
         .await
@@ -818,10 +885,17 @@ pub async fn v1_upload(
             Denied::NeedsToken => {
                 V1Error::new(StatusCode::UNAUTHORIZED, "unauthorized", d.message())
             }
-            Denied::NotAllowed => V1Error::forbidden_msg(d.message()),
+            Denied::NotAllowed | Denied::Unbound | Denied::OtherProject => {
+                V1Error::forbidden_msg(d.message())
+            }
         });
     }
     let project = v1_project(&core, id).await?;
+    if let Err(d) =
+        may_upload_to(&core, &user, method.map(|Extension(m)| m), true, project.id).await
+    {
+        return Err(V1Error::forbidden_msg(d.message()));
+    }
     let difs = ingest.difs();
     let v1_err = |e: DifError| {
         let status = upload_status(&e);

@@ -52,7 +52,10 @@ curl -fsSLO https://raw.githubusercontent.com/Ferdinand99/Keen-Kestrel/main/dock
 docker compose up -d
 ```
 
-Then open `http://<host>:3002/setup` to create the first admin, create a project and copy its DSN.
+Then open `http://<host>:3002/setup` to create the first admin, create a project and copy its DSN. Until the
+first admin exists, `/setup` asks for a setup token: set `KK_SETUP_TOKEN`, or read the one Kestrel makes up and
+logs at the first start (`docker compose logs keen-kestrel`, a line with `/setup?token=…`). Scripted installs
+that don't want the token set `KK_SETUP_OPEN=1`.
 Set the address your apps use under **Settings → General** (public URL), or as `KK_PUBLIC_URL` in
 `docker-compose.yml`, which is stored there at every start: it goes into the DSNs and alert links. Put Kestrel
 behind HTTPS with `KK_TRUST_PROXY=1` when it's reachable from the internet. Images
@@ -61,6 +64,11 @@ are on GHCR for amd64 and arm64: `ghcr.io/ferdinand99/keen-kestrel:<version>` or
 Back up the data folder as a whole. Notification channel secrets are sealed with the instance key in it
 (`session.key`, since 0.6); a copy of the database without that file loses them, and they must be entered again.
 Upgrading to 0.6 seals existing channels at the first start, after a plaintext copy in `backups/`.
+The release after 0.7.0 (vole-kit 0.6) seals the two-factor secrets of your users the same way. The first start takes
+a copy first (`backups/`, with a `.plaintext-secrets` marker next to it; it is deleted automatically once the database holds
+no plaintext secret, or after 7 days). 0.7.0 can't open a database the new release has started on: restore that copy to
+go back. Creating write or never-expiring API tokens, adding or promoting admins, an admin's password or two-factor
+reset and deleting a passkey now ask for your password.
 
 ## Planned for v1
 

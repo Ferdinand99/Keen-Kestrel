@@ -71,8 +71,30 @@ async fn user(app: &App, name: &'static str, role: &'static str) -> i64 {
         .unwrap()
 }
 
-/// A token of `user_id` with `scope`, and the `difs:write` scope if asked.
+/// A token of `user_id` with `scope`, and the `difs:write` scope (bound to
+/// every project) if asked.
 async fn token(app: &App, user_id: i64, scope: TokenScope, upload: bool) -> String {
+    let binding = upload.then_some(Binding::AllProjects);
+    token_with(app, user_id, scope, binding).await
+}
+
+/// How a test token is bound: not at all (a `difs:write` token as the API
+/// tokens page makes it), to every project, or to one.
+#[derive(Clone, Copy)]
+enum Binding {
+    Unbound,
+    AllProjects,
+    Project(i64),
+}
+
+/// A token with the `difs:write` scope and the given binding (`None`: no
+/// scope at all).
+async fn token_with(
+    app: &App,
+    user_id: i64,
+    scope: TokenScope,
+    binding: Option<Binding>,
+) -> String {
     let token = tokens::generate();
     let (hash, prefix) = (tokens::hash(&token), tokens::display_prefix(&token));
     app.kestrel
@@ -80,14 +102,36 @@ async fn token(app: &App, user_id: i64, scope: TokenScope, upload: bool) -> Stri
         .with_conn(move |c| {
             let id =
                 vole_kit::db::api_tokens::insert(c, user_id, "t", &prefix, &hash, scope, None)?;
-            if upload {
+            if let Some(binding) = binding {
                 vole_kit::db::api_tokens::add_scope(c, id, keen_kestrel::product::DIFS_WRITE)?;
+                match binding {
+                    Binding::Unbound => {}
+                    Binding::AllProjects => keen_kestrel::db::difs::bind(c, id, None)?,
+                    Binding::Project(p) => keen_kestrel::db::difs::bind(c, id, Some(p))?,
+                }
             }
             Ok(())
         })
         .await
         .unwrap();
     token
+}
+
+/// A second project, "Other" (slug `other`); its id.
+async fn other_project(app: &App) -> i64 {
+    app.kestrel
+        .core
+        .with_conn(|c| {
+            keen_kestrel::db::projects::insert(
+                c,
+                "Other",
+                "other",
+                keen_kestrel::project::Platform::Other,
+                "Default",
+            )
+        })
+        .await
+        .unwrap()
 }
 
 /// An editor's upload token (the Debug files page's kind).
@@ -642,9 +686,11 @@ async fn upload_tokens_keep_working_after_the_upgrade() {
     // Back to 0.2.0's schema: no api_token_scopes (kit/0002_token_scopes.sql)
     // and no 0008, but 0004's token_grants with the first token's grant.
     app.exec(format!(
-        "DROP TABLE api_token_scopes;
+        "DROP TABLE difs_token_projects;
+         DROP TABLE api_token_scopes;
          DELETE FROM schema_migrations
-             WHERE name IN ('kit/0002_token_scopes.sql', '0008_token_scopes.sql');
+             WHERE name IN ('kit/0002_token_scopes.sql', '0008_token_scopes.sql',
+                            '0010_difs_token_projects.sql');
          CREATE TABLE token_grants (
              token_id INTEGER NOT NULL REFERENCES api_tokens(id) ON DELETE CASCADE,
              scope TEXT NOT NULL CHECK (scope IN ('difs:write')),
@@ -679,6 +725,19 @@ async fn upload_tokens_keep_working_after_the_upgrade() {
         .unwrap();
     assert_eq!(old_table, 0, "token_grants is gone");
     assert_eq!(scopes, [("t".to_string(), "difs:write".to_string())]);
+    // The token that could upload anywhere keeps doing so: it is bound to
+    // every project. The token without the scope has no binding.
+    let bindings: Vec<(String, Option<i64>)> = upgraded
+        .core
+        .with_conn(|c| {
+            c.prepare("SELECT t.prefix, b.project_id FROM difs_token_projects b JOIN api_tokens t ON t.id = b.token_id")?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()
+        })
+        .await
+        .unwrap();
+    assert_eq!(bindings.len(), 1, "{bindings:?}");
+    assert_eq!(bindings[0].1, None);
     let backups: Vec<String> = std::fs::read_dir(app.dir.join("backups"))
         .unwrap()
         .flatten()
@@ -743,7 +802,15 @@ async fn the_tokens_page_makes_upload_tokens() {
         .unwrap()
         .to_string();
     assert!(token.starts_with("kk_"), "{token}");
-    assert_eq!(upload_zip(&app, &token).await.status, StatusCode::CREATED);
+    // The page has no project field, so the token is bound to none and
+    // uploads nowhere: the Debug files page makes the working kind.
+    let res = upload_zip(&app, &token).await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+    assert!(
+        res.body.contains("isn't bound to a project"),
+        "{}",
+        res.body
+    );
     let res = bearer(
         &app,
         "POST",
@@ -766,6 +833,346 @@ async fn the_tokens_page_makes_upload_tokens() {
         .get(&format!("/projects/{}/debug-files", app.project_id))
         .await;
     assert!(difs.body.contains("Build Mac"), "{}", difs.body);
+    assert!(
+        difs.body.contains("Not bound to a project"),
+        "{}",
+        difs.body
+    );
+}
+
+/// Asserts `res` is a refusal of an upload token for the wrong project.
+fn assert_other_project(res: &Res) {
+    assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+    assert!(
+        res.body.contains("bound to another project"),
+        "{}",
+        res.body
+    );
+}
+
+/// The zip endpoint, with `token`, for `project`.
+async fn zip_to(app: &App, token: &str, project: i64) -> Res {
+    bearer(
+        app,
+        "POST",
+        &format!("/api/v1/projects/{project}/dsyms"),
+        token,
+        Body::from(dsym_zip()),
+        "application/zip",
+    )
+    .await
+}
+
+async fn get_as(app: &App, token: &str, path: &str) -> Res {
+    bearer(app, "GET", path, token, Body::empty(), "").await
+}
+
+/// sentry-cli's assemble request for the project named `slug` (or its id).
+async fn assemble_as(app: &App, token: &str, slug: &str) -> Res {
+    bearer(
+        app,
+        "POST",
+        &format!("/api/0/projects/x/{slug}/files/difs/assemble/"),
+        token,
+        Body::from("{}"),
+        "application/json",
+    )
+    .await
+}
+
+/// The legacy dSYM upload to the project named `slug`.
+async fn legacy_to(app: &App, token: &str, slug: &str) -> Res {
+    let (ct, body) = multipart(&[("file", "KestrelSpike.app.dSYM.zip", dsym_zip())]);
+    bearer(
+        app,
+        "POST",
+        &format!("/api/0/projects/x/{slug}/files/dsyms/"),
+        token,
+        Body::from(body),
+        &ct,
+    )
+    .await
+}
+
+/// A sentry-cli release request with a JSON body.
+async fn release_as(app: &App, token: &str, method: &str, path: &str, body: Value) -> Res {
+    bearer(
+        app,
+        method,
+        path,
+        token,
+        Body::from(body.to_string()),
+        "application/json",
+    )
+    .await
+}
+
+/// The token shown once after it was made.
+fn created_token(res: &Res) -> String {
+    let token = res
+        .body
+        .split("id=\"created-token\">")
+        .nth(1)
+        .and_then(|s| s.split('<').next())
+        .unwrap_or_else(|| panic!("no token in {}", res.body))
+        .to_string();
+    assert!(token.starts_with("kk_"), "{token}");
+    token
+}
+
+/// A token bound to one project uploads there and nowhere else, over every
+/// way sentry-cli and the REST API have; tokens for every project, write
+/// tokens and editors' sessions are unaffected.
+#[tokio::test]
+async fn an_upload_token_is_limited_to_its_project() {
+    let app = App::new().await;
+    let a = app.project_id;
+    let b = other_project(&app).await;
+    let editor = user(&app, "bea", "editor").await;
+    let bound = token_with(&app, editor, TokenScope::Read, Some(Binding::Project(a))).await;
+    let all = token_with(&app, editor, TokenScope::Read, Some(Binding::AllProjects)).await;
+    let unbound = token_with(&app, editor, TokenScope::Read, Some(Binding::Unbound)).await;
+    let write = token(&app, editor, TokenScope::Write, false).await;
+
+    // REST: the zip endpoint.
+    assert_eq!(zip_to(&app, &bound, a).await.status, StatusCode::CREATED);
+    assert_other_project(&zip_to(&app, &bound, b).await);
+    let in_b = format!("SELECT COUNT(*) FROM dif_files WHERE project_id = {b}");
+    let in_b: &'static str = Box::leak(in_b.into_boxed_str());
+    assert_eq!(app.count(in_b).await, 0);
+    assert_eq!(zip_to(&app, &all, b).await.status, StatusCode::CREATED);
+    assert_eq!(zip_to(&app, &write, b).await.status, StatusCode::CREATED);
+    let res = zip_to(&app, &unbound, a).await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+    assert!(
+        res.body.contains("isn't bound to a project"),
+        "{}",
+        res.body
+    );
+
+    // sentry-cli: the chunk options name no project; the listing, assemble
+    // and the legacy upload name it in the path (slug or id).
+    let options = "/api/0/organizations/x/chunk-upload/";
+    assert_eq!(get_as(&app, &bound, options).await.status, StatusCode::OK);
+    let own = "/api/0/projects/x/fixtures/files/dsyms/";
+    let other = "/api/0/projects/x/other/files/dsyms/";
+    assert_eq!(get_as(&app, &bound, own).await.status, StatusCode::OK);
+    assert_other_project(&get_as(&app, &bound, other).await);
+    assert_eq!(get_as(&app, &all, other).await.status, StatusCode::OK);
+    assert_eq!(
+        assemble_as(&app, &bound, "fixtures").await.status,
+        StatusCode::OK
+    );
+    assert_other_project(&assemble_as(&app, &bound, "other").await);
+    assert_other_project(&assemble_as(&app, &bound, &b.to_string()).await);
+    assert_eq!(
+        assemble_as(&app, &all, "other").await.status,
+        StatusCode::OK
+    );
+    assert_other_project(&legacy_to(&app, &bound, "other").await);
+    assert_eq!(
+        legacy_to(&app, &bound, "fixtures").await.status,
+        StatusCode::CREATED
+    );
+
+    // sentry-cli releases: only the bound project, named or not.
+    let orgs = "/api/0/organizations/x/releases/";
+    let new = |version: &str, projects: Value| json!({"version": version, "projects": projects});
+    let res = release_as(&app, &bound, "POST", orgs, new("r@1", json!(["fixtures"]))).await;
+    assert_eq!(res.status, StatusCode::CREATED, "{}", res.body);
+    for projects in [
+        json!(["other"]),
+        json!(["fixtures", "other"]),
+        json!([b.to_string()]),
+    ] {
+        let res = release_as(&app, &bound, "POST", orgs, new("r@2", projects)).await;
+        assert_other_project(&res);
+    }
+    assert_eq!(
+        app.count("SELECT COUNT(*) FROM releases WHERE version = 'r@2'")
+            .await,
+        0
+    );
+    let res = release_as(
+        &app,
+        &unbound,
+        "POST",
+        orgs,
+        new("r@3", json!(["fixtures"])),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+    // A release both projects have: finalizing without a project list
+    // touches the bound project's only.
+    let both = new("r@4", json!(["fixtures", "other"]));
+    let res = release_as(&app, &all, "POST", orgs, both).await;
+    assert_eq!(res.status, StatusCode::CREATED, "{}", res.body);
+    let res = release_as(
+        &app,
+        &bound,
+        "PUT",
+        "/api/0/organizations/x/releases/r@4/",
+        json!({"dateReleased": "2026-01-02T03:04:05Z"}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    assert_eq!(res.json()["projects"].as_array().unwrap().len(), 1);
+    assert_eq!(res.json()["projects"][0]["slug"], "fixtures");
+    assert_eq!(
+        app.count(
+            "SELECT COUNT(*) FROM releases WHERE version = 'r@4' AND date_released IS NOT NULL"
+        )
+        .await,
+        1
+    );
+    // A release only the other project has is not the bound token's to change.
+    let res = release_as(&app, &all, "POST", orgs, new("r@5", json!(["other"]))).await;
+    assert_eq!(res.status, StatusCode::CREATED, "{}", res.body);
+    let release5 = "/api/0/organizations/x/releases/r@5/";
+    let res = release_as(&app, &bound, "PUT", release5, json!({})).await;
+    assert_eq!(res.status, StatusCode::NOT_FOUND, "{}", res.body);
+    // The older per-project routes name the project in the path.
+    let (other_releases, own_releases) = (
+        "/api/0/projects/x/other/releases/",
+        "/api/0/projects/x/fixtures/releases/",
+    );
+    let body = json!({"version": "r@6"});
+    let res = release_as(&app, &bound, "POST", other_releases, body.clone()).await;
+    assert_other_project(&res);
+    let res = release_as(&app, &bound, "POST", own_releases, body).await;
+    assert_eq!(res.status, StatusCode::CREATED, "{}", res.body);
+
+    // An editor's session still uploads to any project.
+    let mut ed = Browser::new(&app, "sess", "editor").await;
+    let req = Request::post(format!("/api/v1/projects/{b}/dsyms"))
+        .header(header::ORIGIN, format!("http://{HOST}"))
+        .header(header::CONTENT_TYPE, "application/zip")
+        .body(Body::from(dsym_zip()))
+        .unwrap();
+    let res = ed.send(req).await;
+    assert_eq!(res.status, StatusCode::CREATED, "{}", res.body);
+}
+
+/// The binding goes with the token, and with its project: deleting the
+/// project leaves a token that is refused, not one that widens.
+#[tokio::test]
+async fn deleting_the_project_leaves_the_token_refused() {
+    let app = App::new().await;
+    let b = other_project(&app).await;
+    let editor = user(&app, "dan", "editor").await;
+    let bound = token_with(&app, editor, TokenScope::Read, Some(Binding::Project(b))).await;
+    let other = "/api/0/projects/x/other/files/dsyms/";
+    let res = get_as(&app, &bound, other).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    app.exec(format!("DELETE FROM projects WHERE id = {b}"))
+        .await;
+    assert_eq!(
+        app.count("SELECT COUNT(*) FROM difs_token_projects").await,
+        0
+    );
+    let res = zip_to(&app, &bound, app.project_id).await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+    assert!(
+        res.body.contains("isn't bound to a project"),
+        "{}",
+        res.body
+    );
+    // Deleting the token takes its binding along.
+    let keep = token_with(&app, editor, TokenScope::Read, Some(Binding::AllProjects)).await;
+    assert_eq!(
+        app.count("SELECT COUNT(*) FROM difs_token_projects").await,
+        1
+    );
+    assert_eq!(upload_zip(&app, &keep).await.status, StatusCode::CREATED);
+    app.exec("DELETE FROM api_tokens".to_string()).await;
+    assert_eq!(
+        app.count("SELECT COUNT(*) FROM difs_token_projects").await,
+        0
+    );
+}
+
+/// The Debug files page binds the token it makes to the project picked in
+/// the sheet (this page's, by default); "all projects" is for administrators
+/// and shows as such; the list says what each token is bound to.
+#[tokio::test]
+async fn the_debug_files_page_binds_the_tokens_it_makes() {
+    let app = App::new().await;
+    let a = app.project_id;
+    let b = other_project(&app).await;
+    let tokens_path = format!("/projects/{a}/debug-files/tokens");
+    let mut ed = Browser::new(&app, "elin", "editor").await;
+    let page = ed.get(&format!("/projects/{a}/debug-files")).await;
+    // The picker lists the projects with this one selected; "all" is for admins.
+    let selected = format!(r#"<option value="{a}" selected>Fixtures</option>"#);
+    assert!(page.body.contains(&selected), "{}", page.body);
+    let listed = format!(r#"<option value="{b}">Other</option>"#);
+    assert!(page.body.contains(&listed));
+    assert!(!page.body.contains(r#"value="all""#));
+    assert!(
+        page.body
+            .contains("Uploads to any other project are refused.")
+    );
+
+    // Picked project B, from page A.
+    let res = ed
+        .post(
+            &tokens_path,
+            &[("name", "For B"), ("project", &b.to_string())],
+        )
+        .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let for_b = created_token(&res);
+    assert_other_project(&zip_to(&app, &for_b, a).await);
+    assert_eq!(zip_to(&app, &for_b, b).await.status, StatusCode::CREATED);
+    // No field (an old form, a script): this page's project.
+    let res = ed.post(&tokens_path, &[("name", "Plain")]).await;
+    let plain = created_token(&res);
+    assert_eq!(zip_to(&app, &plain, a).await.status, StatusCode::CREATED);
+    assert_other_project(&zip_to(&app, &plain, b).await);
+
+    // Refused: all projects for an editor, an unknown project, a word.
+    let before = app.count("SELECT COUNT(*) FROM api_tokens").await;
+    for choice in ["all", "999", "everything", "-1"] {
+        let res = ed
+            .post(&tokens_path, &[("name", "No"), ("project", choice)])
+            .await;
+        assert_eq!(res.status, StatusCode::SEE_OTHER, "{choice}: {}", res.body);
+    }
+    assert_eq!(app.count("SELECT COUNT(*) FROM api_tokens").await, before);
+    let page = ed.get(&format!("/projects/{a}/debug-files")).await;
+    assert!(page.body.contains("For B") && page.body.contains("Plain"));
+    assert!(
+        page.body.contains(r#"<td data-label="Project">Other</td>"#),
+        "{}",
+        page.body
+    );
+    assert!(
+        page.body
+            .contains(r#"<td data-label="Project">Fixtures</td>"#)
+    );
+
+    // An administrator may pick "all projects"; the list marks it.
+    let mut admin = Browser::new(&app, "ada", "admin").await;
+    let page = admin.get(&format!("/projects/{a}/debug-files")).await;
+    assert!(page.body.contains(
+        r#"<option value="all">All projects (administrators only, not recommended)</option>"#
+    ));
+    let res = admin
+        .post(&tokens_path, &[("name", "Everywhere"), ("project", "all")])
+        .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let everywhere = created_token(&res);
+    for p in [a, b] {
+        let res = zip_to(&app, &everywhere, p).await;
+        assert_eq!(res.status, StatusCode::CREATED, "{}", res.body);
+    }
+    let page = admin.get(&format!("/projects/{a}/debug-files")).await;
+    assert!(
+        page.body
+            .contains(r#"<span class="badge status-warning">All projects</span>"#),
+        "{}",
+        page.body
+    );
 }
 
 #[tokio::test]

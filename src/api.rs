@@ -298,7 +298,7 @@ pub static ROUTES: &[RouteDoc] = &[
         .res(KEY_EXAMPLE),
     r("DELETE", "/api/v1/projects/{id}/keys/{key_id}", "editor", "Keys", "Delete a key. SDKs that use its DSN can no longer send."),
     // -- Debug files --
-    r("POST", "/api/v1/projects/{id}/dsyms", "editor", "Debug files", "Upload debug files: a zip of dSYMs (or one object file) as the body (Content-Type: application/zip) or as multipart field `file`. Each object (one per architecture) is stored with a SymCache; files in the zip that aren't debug files are listed in `skipped`. Needs a token with the difs:write scope or a read-and-write token of an editor. At most 1 GB per upload and per file.")
+    r("POST", "/api/v1/projects/{id}/dsyms", "editor", "Debug files", "Upload debug files: a zip of dSYMs (or one object file) as the body (Content-Type: application/zip) or as multipart field `file`. Each object (one per architecture) is stored with a SymCache; files in the zip that aren't debug files are listed in `skipped`. Needs a token with the difs:write scope (bound to this project, or to all projects) or a read-and-write token of an editor; a token bound to another project is refused with 403. At most 1 GB per upload and per file.")
         .req("<zip archive>")
         .res(DIF_UPLOAD_EXAMPLE),
     r("GET", "/api/v1/projects/{id}/debug-files", "viewer", "Debug files", "List a project's debug files, oldest first.")
@@ -510,8 +510,10 @@ fn markdown_middle(out: &mut String) {
          --project <slug or id> <path>`, with `SENTRY_AUTH_TOKEN` (or `--auth-token`) set to an API token. Its endpoints are \
          `GET /api/0/organizations/{org}/chunk-upload/`, `POST` to the same path, `POST /api/0/projects/{org}/{project}/files/difs/assemble/` \
          and the older `POST /api/0/projects/{org}/{project}/files/dsyms/`; any organization slug is accepted.\n\
-         - Uploading needs a token with the scope `difs:write` (made on the project's Debug files page or under Settings → API tokens; it only reads otherwise) or a \
-         read-and-write token, and the token's owner must be an editor or admin.\n\
+         - Uploading needs a token with the scope `difs:write` (made on the project's Debug files page, where it is bound to one project; it only reads otherwise) or a \
+         read-and-write token, and the token's owner must be an editor or admin. A bound token uploads to its own project and creates and changes releases there only; \
+         any other project answers 403. Administrators can also make a token for all projects (discouraged); tokens made before binding existed work for all projects, \
+         and a `difs:write` token without a project (made under Settings → API tokens) is refused.\n\
          - A debug file applies to events that arrive after it; stored events are not symbolicated again.\n\n\
          ## Issues, events and releases\n\n\
          - An issue is a group of events that share a grouping hash (configuration `kestrel:v2`; issues made by `kestrel:v1` keep it). \

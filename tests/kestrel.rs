@@ -1150,6 +1150,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "api_token_scopes",
             "api_tokens",
             "dif_files",
+            "difs_token_projects",
             "environments",
             "events",
             "issue_activity",
@@ -1184,6 +1185,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "kit/0002_token_scopes.sql",
             "kit/0003_passkeys.sql",
             "kit/0004_sealed_secrets.sql",
+            "kit/0005_sealed_totp.sql",
             "0001_projects.sql",
             "0002_errors.sql",
             "0003_triage.sql",
@@ -1192,7 +1194,8 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "0006_analytics.sql",
             "0007_app_analytics.sql",
             "0008_token_scopes.sql",
-            "0009_project_groups.sql"
+            "0009_project_groups.sql",
+            "0010_difs_token_projects.sql"
         ]
     );
     assert!(app.dir.join("store.sqlite").exists());
