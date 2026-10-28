@@ -672,7 +672,6 @@ async fn channels_are_managed_with_their_secrets_kept() {
     );
 }
 
-/// Channel `id`'s config as stored.
 /// The Hedgerow app channel has no fields, and only one can be active: the
 /// forms and the switch refuse a second one and name the first.
 #[tokio::test]
@@ -789,6 +788,7 @@ async fn only_one_hedgerow_channel_can_be_active() {
     assert!(res.header("hx-trigger").contains("Spare"));
 }
 
+/// Channel `id`'s config as stored.
 async fn stored_config(app: &App, id: i64) -> Value {
     let raw: String = app
         .kestrel

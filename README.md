@@ -69,6 +69,9 @@ a copy first (`backups/`, with a `.plaintext-secrets` marker next to it; it is d
 no plaintext secret, or after 7 days). 0.7.0 can't open a database the new release has started on: restore that copy to
 go back. Creating write or never-expiring API tokens, adding or promoting admins, an admin's password or two-factor
 reset and deleting a passkey now ask for your password.
+The release that adds the Hedgerow app channel renames Kestrel's internal slug from `kestrel` to `keen-kestrel` (the push
+relay knows the products by their full names). It shows up as the MCP server name, the API reference download names
+and the source or tag Keep, ClickSend and Opsgenie receive: update a rule that matched `kestrel`.
 
 ## Notifications in the Hedgerow app
 

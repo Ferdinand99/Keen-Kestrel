@@ -76,7 +76,7 @@ KestrelKit (Swift), k.js (web)                          ──►  /ingest/v1/�
   asset serving, the RouteDoc → OpenAPI / Markdown / llms.txt generator, the MCP server scaffold, the
   notification providers (generic `Alert`), and the design system (CSS tokens, `app.js`, icons, Inter,
   layouts and macros).
-- **Kestrel identifiers:** slug `kestrel`, cookie `kk_session`, API token prefix `kk_`, user agent
+- **Kestrel identifiers:** slug `keen-kestrel` (`kestrel` before the Hedgerow app channel), cookie `kk_session`, API token prefix `kk_`, user agent
   `KeenKestrel/<version>`, data directory `/data` in containers.
 
 ## 4. Errors module
