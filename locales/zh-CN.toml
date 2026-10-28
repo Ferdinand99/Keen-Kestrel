@@ -585,6 +585,7 @@ err_digest = "请选择列表中的一个时间。"
 err_channels = "请至少选择一个渠道。"
 
 [channels]
+hedgerow_second = "只能启用一个 Hedgerow 应用渠道，而“{name}”已启用。请先暂停或删除它。"
 sub = "告警的去向。各项目在告警规则中选择渠道。"
 empty_text = "添加一个渠道（例如Slack、ntfy或邮件），然后在项目的告警规则中选择它。"
 foot = "已保存的机密信息不会再次显示。编辑渠道时留空即可保留原值。"

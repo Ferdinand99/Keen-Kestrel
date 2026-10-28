@@ -938,7 +938,7 @@ async fn every_page_is_branded_kestrel() {
     assert_eq!(app.get("/settings").await.location(), "/settings/general");
 
     let docs = app.get("/api-docs").await.body;
-    assert!(docs.contains(r#"download="kestrel-openapi.json""#));
+    assert!(docs.contains(r#"download="keen-kestrel-openapi.json""#));
     assert!(docs.contains("Bearer kk_…"));
     assert!(docs.contains("/api/v1/projects/{id}/keys"));
     let tabs = app.get("/settings/users").await.body;
@@ -1079,7 +1079,7 @@ async fn openapi_and_mcp_report_kestrels_version() {
     assert_eq!(res.status, StatusCode::OK, "{}", res.body);
     let info = &res.json()["result"]["serverInfo"];
     assert_eq!(info["version"], keen_kestrel::VERSION);
-    assert_eq!(info["name"], "kestrel");
+    assert_eq!(info["name"], "keen-kestrel");
     assert_eq!(info["title"], "Keen Kestrel");
 
     let res = app
@@ -1170,6 +1170,9 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "project_groups",
             "project_keys",
             "projects",
+            "push_devices",
+            "push_events",
+            "push_registrations",
             "release_health",
             "release_health_seen",
             "releases",
@@ -1186,6 +1189,7 @@ async fn a_fresh_database_has_the_core_tables_and_kestrels() {
             "kit/0003_passkeys.sql",
             "kit/0004_sealed_secrets.sql",
             "kit/0005_sealed_totp.sql",
+            "kit/0006_push.sql",
             "0001_projects.sql",
             "0002_errors.sql",
             "0003_triage.sql",

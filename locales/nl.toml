@@ -607,6 +607,7 @@ err_digest = "Kies een van de tijden in de lijst."
 err_channels = "Kies minstens één kanaal."
 
 [channels]
+hedgerow_second = "Er kan maar één Hedgerow-appkanaal actief zijn, en “{name}” is het al. Zet het eerst op pauze of verwijder het."
 sub = "Waar meldingen heen gaan. Projecten kiezen kanalen in hun meldingsregels."
 empty_text = "Voeg een kanaal toe, zoals Slack, ntfy of e-mail, en kies het daarna in de meldingsregels van een project."
 foot = "Opgeslagen geheimen worden nooit meer getoond. Laat ze leeg als je een kanaal bewerkt om ze te behouden."

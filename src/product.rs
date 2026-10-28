@@ -51,7 +51,7 @@ pub fn static_paths() -> Vec<String> {
 
 pub static KIT: KitConfig = KitConfig {
     product: NAME,
-    slug: "kestrel",
+    slug: "keen-kestrel",
     short_name: "Kestrel",
     session_cookie: SESSION_COOKIE,
     pending_2fa_cookie: "kk_2fa",

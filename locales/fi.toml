@@ -607,6 +607,7 @@ err_digest = "Valitse jokin luettelon ajoista."
 err_channels = "Valitse vähintään yksi kanava."
 
 [channels]
+hedgerow_second = "Vain yksi Hedgerow-sovelluskanava voi olla käytössä, ja ”{name}” on jo. Keskeytä tai poista se ensin."
 sub = "Minne hälytykset menevät. Projektit valitsevat kanavat hälytyssäännöissään."
 empty_text = "Lisää kanava, esimerkiksi Slack, ntfy tai sähköposti, ja valitse se sitten projektin hälytyssäännöissä."
 foot = "Tallennettuja salaisuuksia ei näytetä enää koskaan. Jätä ne tyhjiksi kanavaa muokatessasi, niin ne säilyvät."

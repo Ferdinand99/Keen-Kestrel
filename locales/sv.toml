@@ -607,6 +607,7 @@ err_digest = "Välj en av tiderna i listan."
 err_channels = "Välj minst en kanal."
 
 [channels]
+hedgerow_second = "Bara en Hedgerow-appkanal kan vara aktiv, och ”{name}” är det redan. Pausa eller ta bort den först."
 sub = "Vart larmen går. Projekten väljer kanaler i sina larmregler."
 empty_text = "Lägg till en kanal, till exempel Slack, ntfy eller e-post, och välj den sedan i ett projekts larmregler."
 foot = "Sparade hemligheter visas aldrig igen. Lämna dem tomma när du redigerar en kanal för att behålla dem."
