@@ -104,6 +104,18 @@ pub fn insert_channel(
 /// same alert twice.
 pub const HEDGEROW: &str = "hedgerow";
 
+/// Whether the channel is active now. `false` when it doesn't exist. Read it
+/// inside the transaction that then changes the channel.
+pub fn channel_active(c: &Connection, id: i64) -> rusqlite::Result<bool> {
+    Ok(c.query_row(
+        "SELECT active FROM notification_channels WHERE id = ?1",
+        params![id],
+        |r| r.get::<_, bool>(0),
+    )
+    .optional()?
+    .unwrap_or(false))
+}
+
 /// The name of an active `hedgerow` channel other than `except`, if there is
 /// one.
 pub fn other_active_hedgerow(
