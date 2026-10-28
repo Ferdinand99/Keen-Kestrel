@@ -673,6 +673,122 @@ async fn channels_are_managed_with_their_secrets_kept() {
 }
 
 /// Channel `id`'s config as stored.
+/// The Hedgerow app channel has no fields, and only one can be active: the
+/// forms and the switch refuse a second one and name the first.
+#[tokio::test]
+async fn only_one_hedgerow_channel_can_be_active() {
+    let app = app().await;
+    let mut ed = Web::new(&app, "ada", "admin").await;
+    let form = ed.get("/settings/notifications/form?kind=hedgerow").await;
+    assert_eq!(form.status, StatusCode::OK, "{}", form.body);
+    assert!(form.body.contains("Hedgerow app"), "{}", form.body);
+    assert_eq!(
+        form.body.matches("class=\"field").count(),
+        2,
+        "the name and the language, no provider fields: {}",
+        form.body
+    );
+    let picker = ed.get("/settings/notifications/providers").await;
+    assert!(picker.body.contains("provider-hedgerow"), "{}", picker.body);
+
+    let add = |name: &'static str| [("kind", "hedgerow"), ("name", name)];
+    let res = ed
+        .post_with("/settings/notifications", &add("Phones"), true)
+        .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let first: i64 = app
+        .count("SELECT id FROM notification_channels WHERE name = 'Phones'")
+        .await;
+    // The edit page works without a card of provider fields.
+    let edit = ed
+        .get(&format!("/settings/notifications/{first}/edit"))
+        .await;
+    assert_eq!(edit.status, StatusCode::OK, "{}", edit.body);
+
+    // Another one: the sheet comes back with the reason, nothing saved.
+    let res = ed
+        .post_with("/settings/notifications", &add("More"), true)
+        .await;
+    assert_eq!(res.status, StatusCode::OK);
+    assert!(res.body.contains("channel-form"), "{}", res.body);
+    assert!(res.body.contains("Phones"), "{}", res.body);
+    assert_eq!(
+        app.count("SELECT COUNT(*) FROM notification_channels")
+            .await,
+        1
+    );
+
+    // A paused one can exist; switching it on is refused and the list
+    // comes back so the switch shows what is stored.
+    let second = app
+        .kestrel
+        .core
+        .with_conn(|c| {
+            let id = db::insert_channel(c, "Spare", "hedgerow", "{}", "")?;
+            db::set_channel_active(c, id, false)?;
+            Ok(id)
+        })
+        .await
+        .unwrap();
+    let res = ed
+        .post_with(
+            &format!("/settings/notifications/{second}/active"),
+            &[("active", "true")],
+            true,
+        )
+        .await;
+    assert_eq!(res.header("hx-retarget"), "#channels");
+    assert!(res.header("hx-trigger").contains("Phones"));
+    assert_eq!(
+        app.count("SELECT active FROM notification_channels WHERE name = 'Spare'")
+            .await,
+        0
+    );
+    // The edit form refuses it too, and keeps the typed values.
+    let res = ed
+        .post_with(
+            &format!("/settings/notifications/{second}"),
+            &[("name", "Spare"), ("active", "on")],
+            false,
+        )
+        .await;
+    assert_eq!(res.status, StatusCode::UNPROCESSABLE_ENTITY, "{}", res.body);
+    assert!(res.body.contains("Phones"), "{}", res.body);
+
+    // Once the first is paused, the second can take over; the first can
+    // not come back while it is on.
+    let res = ed
+        .post_with(
+            &format!("/settings/notifications/{first}/active"),
+            &[("active", "false")],
+            true,
+        )
+        .await;
+    assert_eq!(res.status, StatusCode::OK);
+    let res = ed
+        .post_with(
+            &format!("/settings/notifications/{second}/active"),
+            &[("active", "true")],
+            true,
+        )
+        .await;
+    assert!(res.headers.get("hx-retarget").is_none());
+    assert_eq!(
+        app.count("SELECT active FROM notification_channels WHERE name = 'Spare'")
+            .await,
+        1
+    );
+    let res = ed
+        .post_with(
+            &format!("/settings/notifications/{first}/active"),
+            &[("active", "true")],
+            true,
+        )
+        .await;
+    assert_eq!(res.header("hx-retarget"), "#channels");
+    assert!(res.header("hx-trigger").contains("Spare"));
+}
+
 async fn stored_config(app: &App, id: i64) -> Value {
     let raw: String = app
         .kestrel

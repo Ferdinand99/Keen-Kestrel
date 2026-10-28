@@ -258,8 +258,8 @@ const ERROR_EXAMPLE: &str = r#"{
   }
 }"#;
 
-/// Every documented endpoint, in display order.
-pub static ROUTES: &[RouteDoc] = &[
+/// Kestrel's own documented endpoints, in display order.
+const OWN_ROUTES: &[RouteDoc] = &[
     // -- Projects --
     r("GET", "/api/v1/projects", "viewer", "Projects", "List projects, oldest first.")
         .q(&[LIMIT_Q, CURSOR_Q])
@@ -401,6 +401,31 @@ pub static ROUTES: &[RouteDoc] = &[
     r("GET", "/healthz", "public", "System", "Liveness probe: always \"ok\"."),
 ];
 
+/// The three routes of the Hedgerow app, from the kit.
+const PUSH_ROUTES: [RouteDoc; 3] = vole_kit::push::api::ROUTE_DOCS;
+
+const ROUTE_COUNT: usize = OWN_ROUTES.len() + PUSH_ROUTES.len();
+
+/// Our routes, then the kit's push routes (the "Push" group comes last).
+const fn all_routes() -> [RouteDoc; ROUTE_COUNT] {
+    let mut all = [OWN_ROUTES[0]; ROUTE_COUNT];
+    let mut i = 0;
+    while i < ROUTE_COUNT {
+        all[i] = if i < OWN_ROUTES.len() {
+            OWN_ROUTES[i]
+        } else {
+            PUSH_ROUTES[i - OWN_ROUTES.len()]
+        };
+        i += 1;
+    }
+    all
+}
+
+static ALL_ROUTES: [RouteDoc; ROUTE_COUNT] = all_routes();
+
+/// Every documented route: drives the reference page, OpenAPI and `llms.txt`.
+pub static ROUTES: &[RouteDoc] = &ALL_ROUTES;
+
 /// Machine credentials besides API tokens and sessions.
 const CREDENTIALS: &[Credential] = &[
     Credential {
@@ -446,6 +471,7 @@ fn curl_path_param(_route: &RouteDoc, segment: &str) -> Option<String> {
         "{event_id}" => Some("9ec79c33ec9942ab8353589fcb2e04dc".into()),
         "{release_id}" => Some("7".into()),
         "{rule_id}" => Some("3".into()),
+        "{ref}" => Some("$PUSH_REF".into()),
         "{org}" => Some("any".into()),
         "{version}" => Some("shop@1.4.1".into()),
         _ => None,
@@ -592,13 +618,40 @@ pub static DOCS: DocsSpec = DocsSpec {
     strict_access: true,
 };
 
-/// Kestrel's wording of the kit's `conflict` row: what clashes here.
-const ERROR_CODES: &[ErrorCode] = &[ErrorCode {
-    code: "conflict",
-    status: 409,
-    when: "another project already uses the slug, the project already has 20 keys, another project group has the name, or there are already 100 groups",
-    on_page: true,
-}];
+/// Kestrel's wording of the kit's `conflict` row (what clashes here), and
+/// the codes of the Hedgerow app's routes.
+const ERROR_CODES: &[ErrorCode] = &[
+    ErrorCode {
+        code: "conflict",
+        status: 409,
+        when: "another project already uses the slug, the project already has 20 keys, another project group has the name, or there are already 100 groups",
+        on_page: true,
+    },
+    ErrorCode {
+        code: "push_disabled",
+        status: 409,
+        when: "registering a Hedgerow app device while no active Hedgerow app notification channel exists",
+        on_page: true,
+    },
+    ErrorCode {
+        code: "too_many_devices",
+        status: 409,
+        when: "registering a Hedgerow app device when the user (16) or the server (256) has the most allowed",
+        on_page: false,
+    },
+    ErrorCode {
+        code: "too_many_pending",
+        status: 409,
+        when: "registering a Hedgerow app device while 4 of the user's devices (20 on the server) have not received a push yet",
+        on_page: false,
+    },
+    ErrorCode {
+        code: "rate_limited",
+        status: 429,
+        when: "registering more than 4 new Hedgerow app devices in an hour",
+        on_page: false,
+    },
+];
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -699,7 +752,14 @@ pub fn router() -> Router<Core> {
         .route_layer(middleware::from_fn(
             vole_kit::http::rest::session_write_guard,
         ));
-    Router::new().nest("/api/v1", api)
+    // The Hedgerow app's three routes (devices and push texts), with their
+    // full paths. The kit's handlers serve every signed-in caller, read-only
+    // tokens included; `ROUTES` documents them. A session needs to come
+    // from our own pages for the writes, as for every other route here.
+    let push = vole_kit::push::api::router::<Core>().route_layer(middleware::from_fn(
+        vole_kit::http::rest::session_write_guard,
+    ));
+    Router::new().nest("/api/v1", api).merge(push)
 }
 
 async fn fallback() -> V1Error {

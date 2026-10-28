@@ -651,6 +651,7 @@ err_digest = "Wybierz jeden z podanych czasów."
 err_channels = "Wybierz co najmniej jeden kanał."
 
 [channels]
+hedgerow_second = "Aktywny może być tylko jeden kanał aplikacji Hedgerow, a „{name}” już jest aktywny. Najpierw go wstrzymaj lub usuń."
 sub = "Dokąd trafiają alerty. Projekty wybierają kanały w swoich regułach alertów."
 empty_text = "Dodaj kanał, np. Slack, ntfy lub e-mail, a potem wybierz go w regułach alertów projektu."
 foot = "Zapisane sekrety nie są już nigdy pokazywane. Podczas edycji kanału zostaw je puste, aby je zachować."

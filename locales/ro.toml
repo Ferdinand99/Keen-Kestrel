@@ -629,6 +629,7 @@ err_digest = "Alege unul dintre intervalele din listă."
 err_channels = "Alege cel puțin un canal."
 
 [channels]
+hedgerow_second = "Poate fi activ un singur canal al aplicației Hedgerow, iar „{name}” este deja. Pune-l mai întâi pe pauză sau șterge-l."
 sub = "Unde ajung alertele. Proiectele aleg canalele în regulile lor de alertă."
 empty_text = "Adaugă un canal, de exemplu Slack, ntfy sau e-mail, apoi alege-l în regulile de alertă ale unui proiect."
 foot = "Secretele salvate nu mai sunt afișate niciodată. Ca să le păstrezi când editezi un canal, lasă-le goale."

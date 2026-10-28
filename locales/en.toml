@@ -609,6 +609,7 @@ err_digest = "Choose one of the listed times."
 err_channels = "Choose at least one channel."
 
 [channels]
+hedgerow_second = "Only one Hedgerow app channel can be active, and “{name}” is. Pause or delete it first."
 sub = "Where alerts go. Projects choose channels in their alert rules."
 empty_text = "Add a channel, such as Slack, ntfy or email, then choose it in a project’s alert rules."
 foot = "Saved secrets are never shown again. Leave them empty when you edit a channel to keep them."

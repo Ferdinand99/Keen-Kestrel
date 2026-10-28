@@ -585,6 +585,7 @@ err_digest = "請選擇清單中的時間。"
 err_channels = "請至少選擇一個管道。"
 
 [channels]
+hedgerow_second = "只能啟用一個 Hedgerow 應用程式管道，而「{name}」已啟用。請先暫停或刪除它。"
 sub = "警報的去處。各專案在警報規則中選擇管道。"
 empty_text = "新增管道（例如 Slack、ntfy 或電子郵件），再在專案的警報規則中選擇它。"
 foot = "已儲存的機密資料不會再次顯示。編輯管道時留空即可保留。"

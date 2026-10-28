@@ -607,6 +607,7 @@ err_digest = "Listelenen sürelerden birini seçin."
 err_channels = "En az bir kanal seçin."
 
 [channels]
+hedgerow_second = "Aynı anda yalnızca bir Hedgerow uygulaması kanalı etkin olabilir ve “{name}” zaten etkin. Önce onu duraklat ya da sil."
 sub = "Uyarıların gittiği yerler. Projeler, uyarı kurallarında kanal seçer."
 empty_text = "Slack, ntfy veya e-posta gibi bir kanal ekleyin, ardından bunu bir projenin uyarı kurallarında seçin."
 foot = "Kaydedilen gizli bilgiler bir daha gösterilmez. Bir kanalı düzenlerken bunları korumak için boş bırakın."

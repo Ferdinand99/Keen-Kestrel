@@ -607,6 +607,7 @@ err_digest = "Wähle eine der angebotenen Zeiten."
 err_channels = "Wähle mindestens einen Kanal."
 
 [channels]
+hedgerow_second = "Es kann nur ein Hedgerow-App-Kanal aktiv sein, und „{name}“ ist es bereits. Pausiere oder lösche ihn zuerst."
 sub = "Wohin Alarme gehen. Projekte wählen Kanäle in ihren Alarmregeln."
 empty_text = "Füge einen Kanal hinzu, etwa Slack, ntfy oder E-Mail, und wähle ihn dann in den Alarmregeln eines Projekts."
 foot = "Gespeicherte Geheimnisse werden nie wieder angezeigt. Lass sie beim Bearbeiten eines Kanals leer, um sie zu behalten."

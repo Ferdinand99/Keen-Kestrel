@@ -115,6 +115,9 @@ pub async fn start_with(
         core.with_conn(move |c| settings::set(c, settings::BASE_URL, &url))
             .await?;
     }
+    // The Hedgerow app channel's push client: once per process, before any
+    // alert can fire. (The product's slug names it to the relay.)
+    vole_kit::push::install(&core);
     let alerts = alerts::Alerts::start(core.clone(), settings.alerts.clone());
     let ingest =
         ingest::Ingest::start(core.clone(), data_dir, settings, Some(alerts.sink())).await?;

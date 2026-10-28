@@ -607,6 +607,7 @@ err_digest = "Válasszon a felsorolt időtartamok közül."
 err_channels = "Válasszon legalább egy csatornát."
 
 [channels]
+hedgerow_second = "Egyszerre csak egy Hedgerow-alkalmazáscsatorna lehet aktív, és a(z) „{name}” már az. Előbb szüneteltesd vagy töröld."
 sub = "Hová mennek a riasztások. A projektek a riasztási szabályaikban választanak csatornát."
 empty_text = "Adjon hozzá egy csatornát, például Slack, ntfy vagy e-mail, majd válassza ki egy projekt riasztási szabályaiban."
 foot = "A mentett titkos adatok soha többé nem jelennek meg. Ha egy csatorna szerkesztésekor üresen hagyja őket, megmaradnak."

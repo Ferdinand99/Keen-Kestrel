@@ -33,7 +33,7 @@
 Keen Kestrel answers two questions about the apps and sites you run:
 
 - **What broke?** Errors and crashes from the official Sentry SDKs (iOS/Swift, JavaScript, Rust, Python,
-  Go and more) work unchanged. Issues are grouped, alerts go to the same ~40 channels as
+  Go and more) work unchanged. Issues are grouped, alerts go to the same ~40 channels (and the Hedgerow app) as
   [Vigilant Vole](https://github.com/Ferdinand99/Vigilant-Vole), and iOS crashes are symbolicated from the
   dSYMs that `sentry-cli` uploads.
 - **How is it used?** App signals and website pageviews without cookies or stored IP addresses, with
@@ -69,6 +69,31 @@ a copy first (`backups/`, with a `.plaintext-secrets` marker next to it; it is d
 no plaintext secret, or after 7 days). 0.7.0 can't open a database the new release has started on: restore that copy to
 go back. Creating write or never-expiring API tokens, adding or promoting admins, an admin's password or two-factor
 reset and deleting a passkey now ask for your password.
+
+## Notifications in the Hedgerow app
+
+The Hedgerow app on your iPhone can show Kestrel's alerts as push notifications, with no account and no other
+service to run.
+
+1. Under **Settings → Notifications**, add a channel of the kind **Hedgerow app**. It has no settings. Choose it in
+   the alert rules of your projects like any other channel. Only one Hedgerow app channel can be active at a time.
+2. In the Hedgerow app, open the connection to your server and turn on **Varsler** (notifications). The app
+   registers itself with your server, and nothing is pushed to it before that.
+
+Push is off until an admin adds the channel: with no active Hedgerow app channel the server refuses to register
+devices. A read-only API token is enough for the app. **Send test** on the channel shows an error until at least one
+device has registered. Alerts wait in the alert queue like for every channel, so a failed push is retried after 1, 5
+and 15 minutes; a push that reached at least one device is never repeated.
+
+What leaves your server is only a random reference. Kestrel keeps the text of each alert (“New issue in Shop: …”) for
+24 hours and sends the Hedgerow push relay (`pigeon.hedgerow.tools`, or the one in `KIT_PUSH_RELAY_URL` / the
+`push_relay_url` setting if you run your own) a push that carries that reference and the app's device handles,
+nothing else. The relay and Apple therefore never see project names, errors or messages. When the push arrives, the
+app fetches the text from your own server (`GET /api/v1/push/events/{ref}`) with its token and shows it. The server
+registers itself with the relay the first time the channel fires, so it needs outbound HTTPS to the relay. The upgrade
+to the release that adds the channel creates three empty tables (`push_devices`, `push_events`,
+`push_registrations`) after the usual copy in `backups/`; the release before it refuses a database this one has
+started on, so restore that copy to go back.
 
 ## Planned for v1
 
