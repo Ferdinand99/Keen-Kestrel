@@ -7,7 +7,8 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use axum::http::StatusCode;
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
 use axum_extra::extract::cookie::Key;
 use common::{App, Hook, Web, envelope_request, envelope_with, new_id};
 use keen_kestrel::db::alerts::{self as db, RuleInput, RuleKind};
@@ -971,4 +972,77 @@ async fn project_pages_have_the_releases_and_alerts_tabs() {
     let mut viewer = Web::new(&app, "vera", "viewer").await;
     let settings = viewer.get("/settings/security").await;
     assert!(!settings.body.contains("href=\"/settings/notifications\""));
+}
+
+/// The push routes are session-writable only from Kestrel's own pages, like
+/// every other write: a cross-site form post is refused.
+#[tokio::test]
+async fn a_session_post_to_the_push_routes_needs_the_same_origin() {
+    let app = app().await;
+    let mut viewer = Web::new(&app, "vera", "viewer").await;
+    let body =
+        json!({"handle": "hrh_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}).to_string();
+    // No Origin, a simple content type: what a cross-site form sends.
+    let req = Request::post("/api/v1/push/devices")
+        .header(header::CONTENT_TYPE, "text/plain")
+        .body(Body::from(body.clone()))
+        .unwrap();
+    let res = viewer.send(req).await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN, "{}", res.body);
+    // From Kestrel's own pages it gets past the guard (no channel yet).
+    let req = Request::post("/api/v1/push/devices")
+        .header(header::ORIGIN, "http://kestrel.test:3002")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let res = viewer.send(req).await;
+    assert_eq!(res.status, StatusCode::CONFLICT, "{}", res.body);
+}
+
+/// Two active Hedgerow app channels can exist already (config as code, an
+/// import). Editing one still works; only a paused one can't be switched on.
+#[tokio::test]
+async fn the_one_active_hedgerow_check_runs_only_when_a_channel_becomes_active() {
+    let app = app().await;
+    let mut ed = Web::new(&app, "ada", "admin").await;
+    let (a, spare) = app
+        .kestrel
+        .core
+        .with_conn(|c| {
+            let a = db::insert_channel(c, "Phones", "hedgerow", "{}", "")?;
+            db::insert_channel(c, "Tablets", "hedgerow", "{}", "")?;
+            let spare = db::insert_channel(c, "Spare", "hedgerow", "{}", "")?;
+            db::set_channel_active(c, spare, false)?;
+            Ok((a, spare))
+        })
+        .await
+        .unwrap();
+    let res = ed
+        .post_with(
+            &format!("/settings/notifications/{a}"),
+            &[("name", "Renamed"), ("active", "on")],
+            false,
+        )
+        .await;
+    assert_ne!(res.status, StatusCode::UNPROCESSABLE_ENTITY, "{}", res.body);
+    assert_eq!(
+        app.count(
+            "SELECT COUNT(*) FROM notification_channels WHERE name = 'Renamed' AND active = 1"
+        )
+        .await,
+        1
+    );
+    let res = ed
+        .post_with(
+            &format!("/settings/notifications/{spare}/active"),
+            &[("active", "true")],
+            true,
+        )
+        .await;
+    assert_eq!(res.header("hx-retarget"), "#channels");
+    assert_eq!(
+        app.count("SELECT active FROM notification_channels WHERE name = 'Spare'")
+            .await,
+        0
+    );
 }

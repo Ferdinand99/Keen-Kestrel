@@ -622,8 +622,12 @@ async fn update(
     let saved = core
         .with_conn(move |c| {
             let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            // Only a channel that becomes active needs the check: two active
+            // ones can already exist (config as code, an import), and then
+            // the rest of an edit must still go through.
             if kind == db::HEDGEROW
                 && active
+                && !db::channel_active(&tx, id)?
                 && let Some(other) = db::other_active_hedgerow(&tx, Some(id))?
             {
                 return Ok(Err(other));
@@ -690,8 +694,12 @@ async fn toggle_active(
     let refused = core
         .with_conn(move |c| {
             let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            // Only a channel that becomes active needs the check: two active
+            // ones can already exist (config as code, an import), and then
+            // the rest of an edit must still go through.
             if active
                 && hedgerow
+                && !db::channel_active(&tx, id)?
                 && let Some(other) = db::other_active_hedgerow(&tx, Some(id))?
             {
                 return Ok(Some(other));
