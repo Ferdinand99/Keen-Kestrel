@@ -752,6 +752,28 @@ async fn the_ingest_port_serves_ingest_only() {
 }
 
 #[tokio::test]
+async fn the_ingest_port_does_not_serve_the_push_routes() {
+    let app = App::new().await;
+    let router = keen_kestrel::ingest_router(app.kestrel.clone());
+    for (method, path) in [
+        ("POST", "/api/v1/push/devices"),
+        ("DELETE", "/api/v1/push/devices/1"),
+        ("GET", "/api/v1/push/events/abc"),
+    ] {
+        let mut req = Request::builder()
+            .method(method)
+            .uri(path)
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            common::send_to(&router, &mut req).await.status,
+            StatusCode::NOT_FOUND,
+            "{method} {path}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn transactions_and_other_items_are_accepted_and_dropped() {
     let app = App::new().await;
     let mut body = String::from("{}\n");
