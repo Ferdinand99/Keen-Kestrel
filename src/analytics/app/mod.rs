@@ -837,9 +837,7 @@ mod tests {
 
     #[test]
     fn scrubbing_agrees_with_kestrelkit() {
-        // KestrelKit's LimitsTests: the same inputs and outputs. (KestrelKit also
-        // scrubs shortened IPv6 and card numbers grouped by dots or non-breaking
-        // spaces; the server doesn't yet.)
+        // KestrelKit's LimitsTests: the same inputs and outputs.
         for (input, expected) in [
             ("jane.doe@example.com", "[Filtered]"),
             ("Contact jane@example.co.uk now", "Contact [Filtered] now"),
@@ -852,6 +850,24 @@ mod tests {
                 "Authorization: Bearer abc.def-123",
                 "Authorization: Bearer [Filtered]",
             ),
+            ("4111.1111.1111.1111", "[Filtered]"),
+            ("4111\u{00A0}1111\u{00A0}1111\u{00A0}1111", "[Filtered]"),
+            ("4111\u{202F}1111\u{202F}1111\u{202F}1111", "[Filtered]"),
+            (
+                "paid with 4111-1111.1111 1111 today",
+                "paid with [Filtered] today",
+            ),
+            ("2001:db8::1", "[Filtered]"),
+            ("::1", "[Filtered]"),
+            ("fe80::1", "[Filtered]"),
+            ("FE80::202:B3FF:FE1E:8329", "[Filtered]"),
+            ("2001:db8:0:0:1::", "[Filtered]"),
+            (
+                "from 2001:db8::8a2e:370:7334, then",
+                "from [Filtered], then",
+            ),
+            ("/ip/::1/x", "/ip/[Filtered]/x"),
+            ("[2001:db8::1]:8080", "[[Filtered]]:8080"),
         ] {
             assert_eq!(clean::scrub(input), expected, "{input}");
         }
@@ -865,6 +881,14 @@ mod tests {
             "1792695598",
             "42",
             "true",
+            "::",
+            ":::1",
+            "1::2::3",
+            "std::fmt::Display",
+            "Namespace::Item",
+            "12:30:45",
+            "a:b",
+            "db8::12345",
         ] {
             assert_eq!(clean::scrub(keep), keep);
         }

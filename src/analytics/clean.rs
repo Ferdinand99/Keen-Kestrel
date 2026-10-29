@@ -33,6 +33,11 @@ static IP: LazyLock<Regex> = LazyLock::new(|| {
         .expect("valid regex")
 });
 
+/// A run of hex digits and colons: a shortened IPv6 address when
+/// [`is_compressed_ipv6`] says so and nothing word-like touches it.
+static IPV6_RUN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)[0-9a-f:]{2,}").expect("valid regex"));
+
 /// Phone-number candidates: an optional `+` or `00`, then digits with the
 /// separators people write them with. [`looks_like_phone`] decides.
 static PHONE: LazyLock<Regex> =
@@ -55,12 +60,67 @@ fn looks_like_phone(candidate: &str) -> bool {
     international || groups >= 3
 }
 
+/// Whether `candidate` (hex digits and colons) is an IPv6 address shortened
+/// with one `::`: one to seven groups of one to four hex digits around it.
+fn is_compressed_ipv6(candidate: &str) -> bool {
+    let halves: Vec<&str> = candidate.split("::").collect();
+    if halves.len() != 2 {
+        return false;
+    }
+    let groups: Vec<&str> = halves
+        .iter()
+        .filter(|h| !h.is_empty())
+        .flat_map(|h| h.split(':'))
+        .collect();
+    (1..=7).contains(&groups.len())
+        && groups
+            .iter()
+            .all(|g| (1..=4).contains(&g.len()) && g.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// `text` with shortened IPv6 addresses (`2001:db8::1`, `::1`) replaced.
+/// The address stands on its own: no word character or colon before or after
+/// it, and no `.digit` after it (the tail of `::ffff:1.2.3.4`, which the IPv4
+/// pattern takes).
+fn scrub_compressed_ipv6(text: &str) -> Option<String> {
+    let word = |c: char| c.is_alphanumeric() || c == '_' || c == ':';
+    let mut out = String::new();
+    let mut copied = 0;
+    let mut changed = false;
+    for run in IPV6_RUN.find_iter(text) {
+        let after = &text[run.end()..];
+        let stands_alone = run.len() <= 39
+            && text[..run.start()]
+                .chars()
+                .next_back()
+                .is_none_or(|c| !word(c))
+            && after.chars().next().is_none_or(|c| !word(c))
+            && !(after.starts_with('.') && after[1..].starts_with(|c: char| c.is_ascii_digit()));
+        if stands_alone && is_compressed_ipv6(run.as_str()) {
+            out.push_str(&text[copied..run.start()]);
+            out.push_str(FILTERED);
+            copied = run.end();
+            changed = true;
+        }
+    }
+    if !changed {
+        return None;
+    }
+    out.push_str(&text[copied..]);
+    Some(out)
+}
+
 /// `text` with email addresses, IP addresses, phone numbers, card numbers
 /// and credentials replaced by [`FILTERED`].
 pub fn scrub(text: &str) -> String {
     let mut out = scrub::scrub_text(text).unwrap_or_else(|| text.to_string());
     if EMAIL.is_match(&out) {
         out = EMAIL.replace_all(&out, FILTERED).into_owned();
+    }
+    // Shortened IPv6 first: the full-form pattern would take the groups of
+    // `2001:db8:0:0:1::` and leave the `::`.
+    if let Some(clean) = scrub_compressed_ipv6(&out) {
+        out = clean;
     }
     if IP.is_match(&out) {
         out = IP.replace_all(&out, FILTERED).into_owned();

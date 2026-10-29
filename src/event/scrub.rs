@@ -26,9 +26,11 @@ static SENSITIVE_PAIR: LazyLock<Regex> = LazyLock::new(|| {
     .expect("valid regex")
 });
 
-/// 13 to 19 digits, optionally grouped by single spaces or dashes.
-static CARD: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\b(?:\d[ -]?){12,18}\d\b").expect("valid regex"));
+/// 13 to 19 digits, optionally grouped by single spaces, dashes, dots or
+/// non-breaking spaces (no-break, figure and narrow no-break).
+static CARD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b(?:\d[ .\-\x{00A0}\x{2007}\x{202F}]?){12,18}\d\b").expect("valid regex")
+});
 
 /// `Bearer …` / `Basic …` credentials anywhere in text.
 static CREDENTIAL: LazyLock<Regex> = LazyLock::new(|| {
