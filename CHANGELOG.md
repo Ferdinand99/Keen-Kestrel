@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.9.0...v0.9.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* check for one active Hedgerow app channel only when a channel becomes active ([348ca7b](https://github.com/Ferdinand99/Keen-Kestrel/commit/348ca7b6646540a79832b65a0249677853a69dbb))
+
 ## [0.9.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.8.1...v0.9.0) (2026-10-28)
 
 
