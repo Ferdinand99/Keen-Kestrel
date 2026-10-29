@@ -161,6 +161,7 @@ pub static KIT: KitConfig = KitConfig {
     general: Some(&GeneralSettings::CORE_ONLY),
     // The signed-in footer links the running version to its release notes.
     releases_url: Some("https://github.com/Ferdinand99/Keen-Kestrel/releases/tag/v{version}"),
+    features: &vole_kit::config::KitFeatures::DEFAULT,
 };
 
 /// Every exempt path is a prefix above.
