@@ -47,6 +47,7 @@ Fixes shipped in 0.8.0 (#42, #44) and 0.8.1 (#45).
 | KK-12 | Low | IP rate limit depends on `KK_TRUST_PROXY`; exact IPv6 keys | Partly fixed (IPv6 per /64 in #42; the kit warns about proxy headers without trust). Open: the proxy dependence itself |
 | KK-13 | Low | Debug-file processing memory and time DoS by editors | Open |
 | KK-14 | Info | No timeouts, connection cap or concurrency limit on the public listener | Open |
+| KS-03 (server side) | Low | The server did not scrub shortened IPv6 addresses or card numbers grouped by dots or non-breaking spaces (from the KestrelKit review) | Fixed in #53 |
 | Advisories | n/a | RUSTSEC-2026-0391, -0398, -0403 (zstd 0.13) | Accepted in #41 |
 
 ### What was changed
@@ -131,8 +132,8 @@ Release notes: [0.8.0](https://github.com/Ferdinand99/Keen-Kestrel/releases/tag/
   the generic API tokens page is refused until recreated on the Debug files page.
 - **App payload keys** containing `pass`, `secret`, `token`, `auth`, `key`, `card`, `cookie` or `cvv` (or `ssn` as a
   word) are dropped, for example `api_key` and `author`. Control characters are removed before scrubbing, so values
-  split by a tab or newline are caught. Shortened IPv6 addresses and dotted or non-breaking-space card groupings are
-  still only scrubbed on the device in KestrelKit, not on the server.
+  split by a tab or newline are caught. Since #53 the server also scrubs shortened IPv6 addresses and card numbers
+  grouped by dots or non-breaking spaces, as KestrelKit does on the device (KS-03).
 - **vole-kit 0.6.0 (0.8.0).** A fresh instance asks for a setup token at `/setup` (`KK_SETUP_TOKEN`, or the random one
   logged at first start; `KK_SETUP_OPEN=1` opts out). Two-factor secrets are sealed at rest; the first start takes a
   pre-migration copy, and going back to 0.7.0 needs it. Creating write or never-expiring tokens on the kit's token
