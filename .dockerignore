@@ -10,7 +10,6 @@ captures/
 .gitignore
 .gitattributes
 .github
-.claude
 .cargo
 .vscode
 .idea

@@ -26,8 +26,6 @@ test-results/
 # Load-test output
 /tools/loadtest/results/
 
-# Claude Code local state
-.claude/
 
 # Environment and secrets
 .env
