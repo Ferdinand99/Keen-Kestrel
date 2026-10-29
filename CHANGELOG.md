@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.2](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.9.1...v0.9.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* security review backlog ([#53](https://github.com/Ferdinand99/Keen-Kestrel/issues/53)) ([98bb9ec](https://github.com/Ferdinand99/Keen-Kestrel/commit/98bb9ecf080f159021132bf62f8ca58d78b80036))
+* update vole-kit to 0.8.0 ([#55](https://github.com/Ferdinand99/Keen-Kestrel/issues/55)) ([5f5fd33](https://github.com/Ferdinand99/Keen-Kestrel/commit/5f5fd33fe72154a09130ef39a3735216c799befc))
+
 ## [0.9.1](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.9.0...v0.9.1) (2026-10-29)
 
 
