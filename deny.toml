@@ -12,6 +12,7 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
     { id = "RUSTSEC-2026-0368", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
     { id = "RUSTSEC-2026-0369", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
+    { id = "RUSTSEC-2026-0429", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
     # zstd 0.13 / zstd-safe 7 remain only through symbolic-debuginfo 13.9 (the
     # newest stable), which calls zstd::bulk::decompress for compressed ELF
     # sections and nothing else. 0391 needs a reused stream context
