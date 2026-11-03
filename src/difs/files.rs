@@ -195,6 +195,19 @@ fn convert(o: &Object<'_>) -> Result<Vec<u8>, DifError> {
     Ok(bytes)
 }
 
+/// Whether `head` (the start of a file) is a debug file Kestrel reads. A source
+/// bundle (`SYSB`, a zip inside) is not: Kestrel has no use for one, and
+/// symbolic opens it with the zip crate, whose parser would then see bytes from
+/// an uploader. Refusing it keeps that code out of reach (RUSTSEC-2026-0367 and
+/// the other zip 7 advisories; zip 7 stays in the build only because
+/// symbolic-debuginfo 13.9 cannot be built without its `sourcebundle` feature).
+fn is_debug_file(head: &[u8]) -> bool {
+    !matches!(
+        Archive::peek(head),
+        FileFormat::Unknown | FileFormat::SourceBundle
+    )
+}
+
 /// Stores every object in the file at `path` that has debug information or
 /// symbols (a fat Mach-O has one per architecture): the object and its
 /// SymCache under `project_dir/<debug_id>/`. An object that only has
@@ -206,7 +219,7 @@ pub fn store_objects(
     existing: &HashMap<DebugId, bool>,
 ) -> Result<Vec<Stored>, DifError> {
     let view = ByteView::open(path)?;
-    if Archive::peek(&view) == FileFormat::Unknown {
+    if !is_debug_file(&view) {
         return Err(DifError::NotAnObject);
     }
     let archive = Archive::parse(&view).map_err(|_| DifError::NotAnObject)?;
@@ -327,7 +340,7 @@ pub fn unpack_zip(zip: &Path, tmp: &Path) -> Result<(Vec<Unpacked>, Vec<String>)
             .take(PEEK as u64)
             .read_to_end(&mut head)
             .map_err(|e| DifError::Invalid(format!("a broken zip entry: {e}")))?;
-        if Archive::peek(&head) == FileFormat::Unknown {
+        if !is_debug_file(&head) {
             skipped.push(name);
             continue;
         }
@@ -430,6 +443,23 @@ mod tests {
         // Not an object file.
         let err = store_objects(&path, &d.join("p"), &HashMap::new()).unwrap_err();
         assert!(matches!(err, DifError::NotAnObject), "{err}");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn source_bundles_are_not_parsed() {
+        // The SYSB magic and a zip end record: symbolic would hand this to the
+        // zip crate. It is refused before that.
+        let mut bundle = b"SYSB   ".to_vec();
+        bundle.extend_from_slice(b"PK");
+        bundle.extend_from_slice(&[0u8; 18]);
+        assert!(!is_debug_file(&bundle));
+        let d = dir("sysb");
+        let path = d.join("bundle");
+        std::fs::write(&path, &bundle).unwrap();
+        let err = store_objects(&path, &d.join("p"), &HashMap::new()).unwrap_err();
+        assert!(matches!(err, DifError::NotAnObject), "{err}");
+        assert!(!d.join("p").exists());
         let _ = std::fs::remove_dir_all(&d);
     }
 
