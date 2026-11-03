@@ -7,8 +7,11 @@ ignore = [
     { id = "RUSTSEC-2026-0374", reason = "build-time only, via askama_derive; no untrusted input" },
     # zip < 9: ZipArchive::extract / ZipStreamReader::extract mishandle symlinks
     # and SUID bits. Kestrel's own code uses zip 9. zip 7 remains only through
-    # symbolic-debuginfo 13.9 (the newest), which reads source-bundle entries in
-    # memory and never calls extract(). Drop these when symbolic moves to zip 9.
+    # symbolic-debuginfo 13.9 (the newest), which cannot be built without its
+    # `sourcebundle` feature (and symbolic-symcache turns the default features on
+    # anyway). It uses zip 7 only to open source bundles and never calls
+    # extract(); Kestrel refuses source-bundle uploads before symbolic parses
+    # them (difs::files::is_debug_file). Drop these when symbolic moves to zip 9.
     { id = "RUSTSEC-2026-0367", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
     { id = "RUSTSEC-2026-0368", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
     { id = "RUSTSEC-2026-0369", reason = "zip 7 only via symbolic-debuginfo, which never calls extract()" },
