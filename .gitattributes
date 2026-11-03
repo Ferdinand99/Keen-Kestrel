@@ -30,3 +30,8 @@ Dockerfile text eol=lf
 *.zip      binary
 # Recorded SDK requests (tests/fixtures/sentry): bodies as sent, byte for byte
 *.body     binary
+
+# The notices and the files they are made from are compared byte for byte (hashes, cmp in CI)
+THIRD-PARTY-NOTICES text eol=lf
+legal/* text eol=lf
+LICENSE text eol=lf

@@ -1,0 +1,109 @@
+{
+  "comment": "Read by scripts/third-party-notices.mjs. 'copyright': crates for which no licence file with a real copyright notice exists in the crate or its repository. Their text is the licence template of cargo-about with the placeholder replaced by 'holder'. basis 'authors': holder is the authors field of the crate (checked against cargo metadata at the exact version). basis 'repository': holder named from the upstream repository, see 'source'. An entry is used only for the exact name and version, and an entry that is no longer needed is an error. 'vendored': web files that the program serves to the browser but that come in with the vole-kit crate (a git dependency, static/ in https://github.com/Ferdinand99/Vigilant-Vole at the tag of vole-kit); the licence texts are committed in legal/, and 'lockPackage' pins the vole-kit version in Cargo.lock that they were checked against, so a new version of the kit fails the check until its files and licences are looked at again. 'fontLicenseFile': the licence of the Inter font that the kit serves.",
+  "product": "Keen Kestrel",
+  "intro": [
+    [
+      "The Rust crates are those that the server binary is built from (the static Linux builds",
+      "for x86_64 and aarch64 that the Docker image contains). A crate that only runs while the",
+      "program is built (a build script) is not listed. A crate that is only used at build time",
+      "through a procedural macro may be listed."
+    ],
+    [
+      "The web interface also serves a few third-party files to the browser, which come with the",
+      "vole-kit crate: htmx and the Inter font. They are listed after the Rust crates."
+    ]
+  ],
+  "fontLicenseFile": "legal/Inter-LICENSE.txt",
+  "copyright": [
+    {
+      "name": "binary-merge",
+      "version": "0.1.2",
+      "license": "MIT",
+      "basis": "authors",
+      "authors": [
+        "Rüdiger Klaehn <rklaehn@protonmail.com>"
+      ],
+      "holder": "Rüdiger Klaehn <rklaehn@protonmail.com>"
+    },
+    {
+      "name": "inplace-vec-builder",
+      "version": "0.1.1",
+      "license": "MIT",
+      "basis": "authors",
+      "authors": [
+        "Rüdiger Klaehn <rklaehn@protonmail.com>"
+      ],
+      "holder": "Rüdiger Klaehn <rklaehn@protonmail.com>"
+    },
+    {
+      "name": "symbolic-common",
+      "version": "13.9.0",
+      "license": "MIT",
+      "basis": "repository",
+      "notice": [
+        "Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.",
+        "All rights reserved."
+      ],
+      "source": "https://github.com/getsentry/symbolic at the tag 13.9.0: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
+    },
+    {
+      "name": "symbolic-debuginfo",
+      "version": "13.9.0",
+      "license": "MIT",
+      "basis": "repository",
+      "notice": [
+        "Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.",
+        "All rights reserved."
+      ],
+      "source": "https://github.com/getsentry/symbolic at the tag 13.9.0: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
+    },
+    {
+      "name": "symbolic-ppdb",
+      "version": "13.9.0",
+      "license": "MIT",
+      "basis": "repository",
+      "notice": [
+        "Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.",
+        "All rights reserved."
+      ],
+      "source": "https://github.com/getsentry/symbolic at the tag 13.9.0: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
+    },
+    {
+      "name": "symbolic-symcache",
+      "version": "13.9.0",
+      "license": "MIT",
+      "basis": "repository",
+      "notice": [
+        "Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.",
+        "All rights reserved."
+      ],
+      "source": "https://github.com/getsentry/symbolic at the tag 13.9.0: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
+    },
+    {
+      "name": "wasmparser",
+      "version": "0.243.0",
+      "license": "MIT",
+      "basis": "repository",
+      "holder": "the wasm-tools contributors (https://github.com/bytecodealliance/wasm-tools)",
+      "source": "https://github.com/bytecodealliance/wasm-tools at the commit the crate was published from (d05406062d031ae96146486f58a965d87eefea5e): LICENSE-MIT has the licence text without a copyright line, and the crate lists Yury Delendik as author. The holder is named after the repository."
+    }
+  ],
+  "vendored": [
+    {
+      "title": "htmx (front-end library)",
+      "package": "htmx.org",
+      "version": "2.0.10",
+      "intro": [
+        "The files htmx.min.js (htmx 2.0.10) and sse.js (the htmx extension for server-sent events)",
+        "are served to the browser; they come with the vole-kit crate. htmx is under the Zero-Clause",
+        "BSD licence:"
+      ],
+      "licenseFile": "legal/htmx-LICENSE.txt",
+      "licenseSha256": "d3d2456f76414f2456104660ebd65aff1c04cd7966b942bdabd63f3cdb316a38",
+      "lockPackage": {
+        "name": "vole-kit",
+        "version": "0.8.0"
+      }
+    }
+  ]
+}
