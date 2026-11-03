@@ -121,3 +121,5 @@ The October 2026 security review (what was found, fixed and left open) is in [`d
 [GNU AGPL-3.0-only](LICENSE), except the web analytics snippet
 [`src/analytics/k.js`](src/analytics/k.js), which is MIT so it can go on any website. The Swift SDK,
 [KestrelKit](https://github.com/Ferdinand99/KestrelKit), is MIT too.
+
+The licence texts of the Rust crates and web files inside the binary are in [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES). The Docker image carries the file as `/usr/share/doc/keen-kestrel/THIRD-PARTY-NOTICES` (next to `LICENSE`). The file is made by `scripts/notices.sh` (cargo-about, pinned) and CI fails when it is out of date or when a dependency has a licence that is not on the allowlist in `about.toml`. After changing a dependency, run `scripts/notices.sh` and commit the result.

@@ -70,6 +70,9 @@ RUN apk add --no-cache ca-certificates tzdata su-exec \
     && chown kestrel:kestrel /data
 
 COPY --from=builder /usr/local/bin/kestrel /usr/local/bin/kestrel
+# The licence texts travel with the binary: the AGPL text and the licences of the Rust crates and
+# the web files inside it (made by scripts/notices.sh, checked in CI).
+COPY --chmod=644 LICENSE THIRD-PARTY-NOTICES /usr/share/doc/keen-kestrel/
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 ENV KK_DATA_DIR=/data \

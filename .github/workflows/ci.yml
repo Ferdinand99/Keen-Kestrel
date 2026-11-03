@@ -1,5 +1,6 @@
 # Format, lints and tests for every pull request and every push to main, plus
-# a Docker build of both architectures on pull requests (nothing is pushed).
+# a Docker build of both architectures on pull requests (nothing is pushed; the
+# image is checked for its licence texts).
 # The toolchain matches rust-toolchain.toml and the Dockerfile's RUST_VERSION.
 name: CI
 
@@ -70,9 +71,62 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform }}
+          # Loaded into the local Docker (the runner is native) so the next step can look inside.
+          tags: keen-kestrel:notices-check
           build-args: |
             REVISION=${{ github.sha }}
           # Same cache scopes as docker-publish.yml, so pull requests reuse
           # main's layers.
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
-          outputs: type=cacheonly
+          outputs: type=docker
+
+      # The licence texts must be inside the image a user gets, and be the files of this commit.
+      - name: The image carries the licence texts
+        run: |
+          id="$(docker create keen-kestrel:notices-check)"
+          docker cp "$id:/usr/share/doc/keen-kestrel/THIRD-PARTY-NOTICES" "$RUNNER_TEMP/THIRD-PARTY-NOTICES"
+          docker cp "$id:/usr/share/doc/keen-kestrel/LICENSE" "$RUNNER_TEMP/LICENSE"
+          docker rm "$id" > /dev/null
+          cmp THIRD-PARTY-NOTICES "$RUNNER_TEMP/THIRD-PARTY-NOTICES"
+          cmp LICENSE "$RUNNER_TEMP/LICENSE"
+          echo "ok: the image holds /usr/share/doc/keen-kestrel/THIRD-PARTY-NOTICES and LICENSE"
+
+  # THIRD-PARTY-NOTICES lists the licence texts of the Rust crates and web files in the binary. It is
+  # made from the dependencies (scripts/notices.sh), so a changed dependency makes it stale: this job
+  # fails then. It also fails when a dependency has a licence that is not on the allowlist in
+  # about.toml, or no licence text at all. The Docker image is checked in the docker job above.
+  notices:
+    name: Third-party notices (up to date, licences allowed)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.99
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Pinned version and pinned checksum. Keep the version equal to want_version in
+      # scripts/notices.sh.
+      - name: Install cargo-about
+        env:
+          CARGO_ABOUT_VERSION: "0.9.3"
+          CARGO_ABOUT_SHA256: "3ad1e94ea1e63d69d1961f4fb15ccbbe9575d906111f96d2cb4dce6df48f71b4"
+        run: |
+          name="cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl"
+          curl -fsSL -o "$RUNNER_TEMP/cargo-about.tar.gz" "https://github.com/EmbarkStudios/cargo-about/releases/download/${CARGO_ABOUT_VERSION}/${name}.tar.gz"
+          echo "${CARGO_ABOUT_SHA256}  $RUNNER_TEMP/cargo-about.tar.gz" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/cargo-about.tar.gz" -C "$HOME/.local/bin" --strip-components=1 "${name}/cargo-about"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Tests of the notices scripts
+        run: node --test "scripts/*.test.mjs"
+
+      # --fail is what makes an unreadable licence stop the check; this test proves it.
+      - name: cargo-about stops on a crate with an unreadable licence
+        run: scripts/test-notices-fail.sh
+
+      - name: THIRD-PARTY-NOTICES is up to date
+        run: scripts/notices.sh --check
