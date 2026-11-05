@@ -15,7 +15,7 @@ The web interface also serves a few third-party files to the browser, which come
 vole-kit crate: htmx and the Inter font. They are listed after the Rust crates.
 
 ==============================================================================
-Rust crates (310 packages)
+Rust crates (306 packages)
 ==============================================================================
 
 --- 0BSD ---
@@ -1988,6 +1988,8 @@ Used by:
   pin-project-lite 0.2.17 (https://github.com/taiki-e/pin-project-lite)
   proc-macro2 1.0.107 (https://github.com/dtolnay/proc-macro2)
   quote 1.0.47 (https://github.com/dtolnay/quote)
+  ref-cast 1.0.27 (https://github.com/dtolnay/ref-cast)
+  ref-cast-impl 1.0.27 (https://github.com/dtolnay/ref-cast)
   rustc-hash 2.1.3 (https://github.com/rust-lang/rustc-hash)
   rustix 1.1.6 (https://github.com/bytecodealliance/rustix)
   semver 1.0.28 (https://github.com/dtolnay/semver)
@@ -1999,13 +2001,11 @@ Used by:
   serde_path_to_error 0.1.20 (https://github.com/dtolnay/path-to-error)
   syn 2.0.119 (https://github.com/dtolnay/syn)
   syn 3.0.9 (https://github.com/dtolnay/syn)
-  thiserror 1.0.69 (https://github.com/dtolnay/thiserror)
   thiserror 2.0.21 (https://github.com/dtolnay/thiserror)
-  thiserror-impl 1.0.69 (https://github.com/dtolnay/thiserror)
   thiserror-impl 2.0.21 (https://github.com/dtolnay/thiserror)
-  typed-path 0.12.4 (https://github.com/chipsenkbeil/typed-path)
   typed-path 0.13.0 (https://github.com/chipsenkbeil/typed-path)
   unicode-ident 1.0.27 (https://github.com/dtolnay/unicode-ident)
+  wasmparser 0.262.0 (https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser)
   zmij 1.0.23 (https://github.com/dtolnay/zmij)
 
 Permission is hereby granted, free of charge, to any
@@ -2507,7 +2507,6 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 --- MIT ---
 
 Used by:
-  bitflags 1.3.2 (https://github.com/bitflags/bitflags)
   bitflags 2.13.2 (https://github.com/bitflags/bitflags)
   glob 0.3.4 (https://github.com/rust-lang/glob)
   log 0.4.34 (https://github.com/rust-lang/log)
@@ -3453,7 +3452,6 @@ DEALINGS IN THE SOFTWARE.
 --- MIT ---
 
 Used by:
-  fallible-iterator 0.2.0 (https://github.com/sfackler/rust-fallible-iterator)
   fallible-iterator 0.3.0 (https://github.com/sfackler/rust-fallible-iterator)
 
 Copyright (c) 2015 The rust-openssl-verify Developers
@@ -4887,9 +4885,10 @@ DEALINGS IN THE SOFTWARE.
 --- MIT ---
 
 Used by:
-  pdb 0.8.0 (https://github.com/willglynn/pdb)
+  pdb-addr2line 0.12.1 (https://github.com/mstange/pdb-addr2line)
+  srcsrv 0.2.3 (https://github.com/mstange/srcsrv)
 
-Copyright (c) 2017 pdb Developers
+Copyright (c) 2018 Markus Stange <mstange@themasta.com>
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -4919,10 +4918,9 @@ DEALINGS IN THE SOFTWARE.
 --- MIT ---
 
 Used by:
-  pdb-addr2line 0.10.4 (https://github.com/mstange/pdb-addr2line)
-  srcsrv 0.2.3 (https://github.com/mstange/srcsrv)
+  pdb2 0.10.2 (https://github.com/afranchuk/pdb)
 
-Copyright (c) 2018 Markus Stange <mstange@themasta.com>
+Copyright (c) 2017 pdb Developers
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -5190,7 +5188,7 @@ DEALINGS IN THE SOFTWARE.
 --- MIT ---
 
 Used by:
-  range-collections 0.2.4 (https://github.com/rklaehn/range-collections)
+  range-collections 0.4.6 (https://github.com/rklaehn/range-collections)
 
 MIT License
 
@@ -5394,7 +5392,7 @@ DEALINGS IN THE SOFTWARE.
 --- MIT ---
 
 Used by:
-  scroll 0.11.0 (https://github.com/m4b/scroll)
+  scroll 0.12.0 (https://github.com/m4b/scroll)
   scroll 0.13.0 (https://github.com/m4b/scroll)
 
 The MIT License (MIT)
@@ -5851,10 +5849,10 @@ SOFTWARE.
 --- MIT ---
 
 Used by:
-  symbolic-common 13.9.0 (https://github.com/getsentry/symbolic)
-  symbolic-debuginfo 13.9.0 (https://github.com/getsentry/symbolic)
-  symbolic-ppdb 13.9.0 (https://github.com/getsentry/symbolic)
-  symbolic-symcache 13.9.0 (https://github.com/getsentry/symbolic)
+  symbolic-common 14.0.0-alpha.5 (https://github.com/getsentry/symbolic)
+  symbolic-debuginfo 14.0.0-alpha.5 (https://github.com/getsentry/symbolic)
+  symbolic-ppdb 14.0.0-alpha.5 (https://github.com/getsentry/symbolic)
+  symbolic-symcache 14.0.0-alpha.5 (https://github.com/getsentry/symbolic)
 
 MIT License
 
@@ -5880,7 +5878,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 --- MIT ---
 
 Used by:
-  symbolic-demangle 13.9.0 (https://github.com/getsentry/symbolic)
+  symbolic-demangle 14.0.0-alpha.5 (https://github.com/getsentry/symbolic)
 
 Copyright 2017-2018 Google, Mozilla
 
@@ -6302,31 +6300,6 @@ THE SOFTWARE.
 --- MIT ---
 
 Used by:
-  wasmparser 0.243.0 (https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser)
-
-MIT License
-
-Copyright (c) the wasm-tools contributors (https://github.com/bytecodealliance/wasm-tools)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
-associated documentation files (the "Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the
-following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial
-portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
-LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
-EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-
---- MIT ---
-
-Used by:
   winnow 1.0.4 (https://github.com/winnow-rs/winnow)
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -6412,37 +6385,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
-
-
---- MIT ---
-
-Used by:
-  zip 7.4.0 (https://github.com/zip-rs/zip2.git)
-
-The MIT License (MIT)
-
-Copyright (c) 2014 Mathijs van de Nes
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-Some files in the "tests/data" subdirectory of this repository are under other
-licences; see files named LICENSE.*.txt for details.
 
 
 --- MIT ---

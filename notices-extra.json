@@ -37,55 +37,47 @@
     },
     {
       "name": "symbolic-common",
-      "version": "13.9.0",
+      "version": "14.0.0-alpha.5",
       "license": "MIT",
       "basis": "repository",
       "notice": [
         "Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.",
         "All rights reserved."
       ],
-      "source": "https://github.com/getsentry/symbolic at the tag 13.9.0: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
+      "source": "https://github.com/getsentry/symbolic at the tag 14.0.0-alpha.5: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
     },
     {
       "name": "symbolic-debuginfo",
-      "version": "13.9.0",
+      "version": "14.0.0-alpha.5",
       "license": "MIT",
       "basis": "repository",
       "notice": [
         "Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.",
         "All rights reserved."
       ],
-      "source": "https://github.com/getsentry/symbolic at the tag 13.9.0: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
+      "source": "https://github.com/getsentry/symbolic at the tag 14.0.0-alpha.5: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
     },
     {
       "name": "symbolic-ppdb",
-      "version": "13.9.0",
+      "version": "14.0.0-alpha.5",
       "license": "MIT",
       "basis": "repository",
       "notice": [
         "Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.",
         "All rights reserved."
       ],
-      "source": "https://github.com/getsentry/symbolic at the tag 13.9.0: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
+      "source": "https://github.com/getsentry/symbolic at the tag 14.0.0-alpha.5: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
     },
     {
       "name": "symbolic-symcache",
-      "version": "13.9.0",
+      "version": "14.0.0-alpha.5",
       "license": "MIT",
       "basis": "repository",
       "notice": [
         "Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.",
         "All rights reserved."
       ],
-      "source": "https://github.com/getsentry/symbolic at the tag 13.9.0: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
-    },
-    {
-      "name": "wasmparser",
-      "version": "0.243.0",
-      "license": "MIT",
-      "basis": "repository",
-      "holder": "the wasm-tools contributors (https://github.com/bytecodealliance/wasm-tools)",
-      "source": "https://github.com/bytecodealliance/wasm-tools at the commit the crate was published from (d05406062d031ae96146486f58a965d87eefea5e): LICENSE-MIT has the licence text without a copyright line, and the crate lists Yury Delendik as author. The holder is named after the repository."
+      "source": "https://github.com/getsentry/symbolic at the tag 14.0.0-alpha.5: LICENSE in the root of the repository begins with the two lines \"Copyright (c) 2017 Sentry (https://sentry.io) and individual contributors.\" and \"All rights reserved.\". The published crates carry no licence files."
     }
   ],
   "vendored": [

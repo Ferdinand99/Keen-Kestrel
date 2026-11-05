@@ -51,13 +51,13 @@ hex = "0.4.3"
 jiff = "0.2.38"
 regex = "1.13.1"
 sha2 = "0.11.1"
-symbolic-common = "13.9.0"
-symbolic-demangle = { version = "13.9.0", default-features = false, features = ["swift"] }
+symbolic-common = "14.0.0-alpha.5"
+symbolic-demangle = { version = "14.0.0-alpha.5", default-features = false, features = ["swift"] }
 # Symbolication (docs/design.md §4.8): debug files (Mach-O/DWARF and the other
 # object formats symbolic reads) become one SymCache per debug id. sentry-cli
 # names chunks by SHA-1; dSYM bundles also arrive as zip archives.
-symbolic-debuginfo = "13.9.0"
-symbolic-symcache = "13.9.0"
+symbolic-debuginfo = "14.0.0-alpha.5"
+symbolic-symcache = "14.0.0-alpha.5"
 sha1_smol = "1.0.1"
 # Streams the REST API's multipart uploads to disk (axum's own multipart
 # parser, used directly).
