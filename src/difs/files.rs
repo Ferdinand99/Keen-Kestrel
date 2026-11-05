@@ -198,9 +198,9 @@ fn convert(o: &Object<'_>) -> Result<Vec<u8>, DifError> {
 /// Whether `head` (the start of a file) is a debug file Kestrel reads. A source
 /// bundle (`SYSB`, a zip inside) is not: Kestrel has no use for one, and
 /// symbolic opens it with the zip crate, whose parser would then see bytes from
-/// an uploader. Refusing it keeps that code out of reach (RUSTSEC-2026-0367 and
-/// the other zip 7 advisories; zip 7 stays in the build only because
-/// symbolic-debuginfo 13.9 cannot be built without its `sourcebundle` feature).
+/// an uploader. Refusing it keeps that code out of reach (symbolic-debuginfo
+/// cannot be built without its `sourcebundle` feature, so the zip parser is in
+/// the binary; no uploaded byte may reach it).
 fn is_debug_file(head: &[u8]) -> bool {
     !matches!(
         Archive::peek(head),
