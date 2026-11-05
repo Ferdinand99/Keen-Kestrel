@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.3](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.9.2...v0.9.3) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** move symbolic to 14.0.0-alpha.5 to drop zip 7 ([#62](https://github.com/Ferdinand99/Keen-Kestrel/issues/62)) ([7578ea5](https://github.com/Ferdinand99/Keen-Kestrel/commit/7578ea59acf53347f75f951aeef0ce3e14a349bc))
+* refuse source bundles before symbolic parses them ([#59](https://github.com/Ferdinand99/Keen-Kestrel/issues/59)) ([07b8d17](https://github.com/Ferdinand99/Keen-Kestrel/commit/07b8d178d1b73698f1de1d471abdac6f3b257287))
+
 ## [0.9.2](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.9.1...v0.9.2) (2026-10-29)
 
 
