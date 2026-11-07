@@ -282,10 +282,10 @@ limits). Live updates with SSE and htmx.
 **REST API v1** (documented with OpenAPI, `/api-docs.md` and `/llms.txt`): projects (with their `group_id`), project
 groups (list, create, rename, delete, reorder), keys, issues (list,
 get, update status, merge, delete), issue events, events, releases and health, debug files, alert rules,
-analytics time series, breakdowns and signal types.
+analytics time series, breakdowns and signal types, and `GET /api/v1/summary` (every project at a glance).
 
 **MCP tools:** `list_projects` (with the groups), `list_project_groups`, `list_issues`, `get_issue` (latest event with the stack trace formatted for
-an LLM), `resolve_issue`, `ignore_issue`, `release_health`, `analytics_summary`, `analytics_breakdown`, and for
+an LLM), `resolve_issue`, `ignore_issue`, `release_health`, `analytics_summary`, `analytics_breakdown`, `instance_summary`, and for
 read-and-write tokens of editors the project group tools (`create_project_group`, `rename_project_group`,
 `delete_project_group`, `reorder_project_groups`, `set_project_group`).
 

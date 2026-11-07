@@ -510,6 +510,12 @@ The REST API v1 (`src/api.rs`, `src/api/`; reference at `/api-docs`, `/api-docs.
 - web analytics: a time series with totals and a breakdown by one dimension ([below](#web-analytics));
 - app analytics: a time series, breakdowns, signal types, a type's payload and version adoption
   ([below](#app-analytics)), and each release's share of the app's users;
+- `GET /api/v1/summary?hours=` (1–168, default 24; `src/api/summary.rs`): per project and in total, new and regressed
+  issues in the window, unresolved issues, crash-free sessions (percent, `null` without sessions), today's (UTC) visitors
+  and app users (`null` without that analytics) and the newest unresolved issue. Every figure is what the issue
+  list, release health and the analytics rollups already give, read for all projects at once (five statements in one read transaction, no
+  per-project queries); sessions are rolled up per UTC day, so the window reaches back to the start of the UTC day
+  that holds `now − hours`;
 - the ingest endpoints (group "Ingest", access "a project's DSN key", with `POST /ingest/v1/event`, `GET /js/k.js` and
   `POST /ingest/v1/signals`)
   and sentry-cli's (group "sentry-cli", "any API token").
@@ -520,7 +526,7 @@ issue's activity under the token owner's name.
 The MCP server (`/mcp`) has `list_projects`, `list_issues` (the search syntax), `get_issue` (the issue and its
 latest event as text for a model: the exception chain, in-app frames innermost first with `file:line` and the
 line of code, folded runs of other frames, the last ten breadcrumbs, the request line and tags; never the user
-section), `release_health`, `analytics_summary` and `analytics_breakdown` (web, or app with `source: app`), and for a
+section), `release_health`, `analytics_summary` and `analytics_breakdown` (web, or app with `source: app`), `instance_summary` (the summary above), and for a
 read-and-write token of an editor
 `resolve_issue` and `ignore_issue`.
 

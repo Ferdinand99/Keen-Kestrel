@@ -15,7 +15,7 @@ use crate::db::releases::{self as db, Release};
 use crate::releases::health::{self, Health};
 
 /// A percentage rounded to two decimals (`null` without data).
-fn pct(v: Option<f64>) -> Value {
+pub(crate) fn pct(v: Option<f64>) -> Value {
     v.map_or(Value::Null, |p| json!((p * 100.0).round() / 100.0))
 }
 

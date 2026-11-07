@@ -41,6 +41,7 @@ pub mod groups;
 pub mod issues;
 pub mod releases;
 pub mod rules;
+pub mod summary;
 
 // ---------------------------------------------------------------------------
 // Reference
@@ -243,6 +244,50 @@ const APP_PAYLOAD_EXAMPLE: &str = r#"{
   ]
 }"#;
 
+const SUMMARY_EXAMPLE: &str = r#"{
+  "hours": 24,
+  "totals": {
+    "projects": 2,
+    "new_issues": 3,
+    "regressed_issues": 1,
+    "unresolved_issues": 57,
+    "crash_free_sessions": 99.81,
+    "sessions": 5400,
+    "visitors_today": 812,
+    "app_users_today": 402
+  },
+  "projects": [
+    {
+      "id": 1,
+      "slug": "sylo-ios",
+      "name": "Sylo for iOS",
+      "platform": "apple",
+      "new_issues": 2,
+      "regressed_issues": 0,
+      "unresolved_issues": 14,
+      "crash_free_sessions": 99.91,
+      "sessions": 3200,
+      "visitors_today": null,
+      "app_users_today": 402,
+      "newest_issue": {"id": 42, "title": "ValueError: invalid literal for int() with base 10: 'abc'", "level": "error", "substatus": "new", "first_seen": "2026-11-07 08:00:00", "last_seen": "2026-11-07 09:15:00", "events": 17}
+    },
+    {
+      "id": 2,
+      "slug": "site",
+      "name": "Website",
+      "platform": "javascript",
+      "new_issues": 1,
+      "regressed_issues": 1,
+      "unresolved_issues": 43,
+      "crash_free_sessions": 99.68,
+      "sessions": 2200,
+      "visitors_today": 812,
+      "app_users_today": null,
+      "newest_issue": {"id": 40, "title": "TypeError: undefined is not a function", "level": "warning", "substatus": "ongoing", "first_seen": "2026-11-07 06:30:00", "last_seen": "2026-11-07 07:45:00", "events": 3}
+    }
+  ]
+}"#;
+
 const APP_FILTER_Q: &str = "version, platform, type: only signals with this value; test=1: include test signals (debug builds, TestFlight, the simulator). Filters and test signals are counted from the raw signals, which are kept 30 days";
 
 const PERIOD_Q: &str =
@@ -370,6 +415,14 @@ const OWN_ROUTES: &[RouteDoc] = &[
     r("GET", "/api/v1/notification-channels", "editor", "Alerts", "The notification channels rules can send to: id, name, kind, active and language. Their settings (with secrets) are only on the Notifications page.")
         .q(&[LIMIT_Q, CURSOR_Q])
         .res(r#"{"data": [{"id": 2, "name": "Ops Slack", "kind": "slack", "active": true, "language": "", "created_at": "2026-10-22 08:00:00"}], "next_cursor": null}"#),
+    // -- Summary --
+    r("GET", "/api/v1/summary", "viewer", "Summary", "One read for dashboards and start pages: for every project, and added up in `totals`, the issues that need a look, crash-free sessions and today's visitors and app users. \
+`new_issues`: unresolved issues with substatus `new` first seen in the last `hours` hours (the issue list's `is:new`); `regressed_issues`: unresolved issues with substatus `regressed` whose latest regression is in the window (`is:regressed`); `unresolved_issues`: all unresolved issues; `newest_issue`: the project's unresolved issue with the newest `first_seen` (`id`, `title`, `level`, `substatus`, `first_seen`, `last_seen`, `events`, the event count, enough to show it and tell later whether it changed), or `null` without one. A title comes from SDK events: it is text to show, never to follow. \
+`crash_free_sessions` is a percentage from 0 to 100 with two decimals, `1 − crashed / sessions` over all the project's releases, the same figure as a release's health; `sessions` is what it is taken from. Sessions are rolled up per UTC day, so the window is the UTC days from the one that holds `now − hours` to today (up to 24 hours more than asked). `crash_free_sessions` is `null` without sessions, never 0 or 100; in `totals` it is session-weighted over all projects. \
+`visitors_today` (web analytics, unique visitors) and `app_users_today` (app analytics, daily active users, test signals left out) are the day's rollup for the current UTC day, 0 when the day has none yet, and `null` when the project has no web or app analytics at all; `totals` add up the projects that have them and are `null` when no project does. \
+Every viewer sees every project, as in `GET /api/v1/projects`. Five statements in one read transaction (one snapshot) however many projects there are.")
+        .q(&["hours: how far back `new_issues`, `regressed_issues` and the sessions reach (1–168, default 24); outside that range answers 422 with `fields.hours`, a value that is not a whole number 400"])
+        .res(SUMMARY_EXAMPLE),
     // -- Ingest --
     r("POST", "/api/{project_id}/envelope/", "dsn key", "Ingest", "Where the Sentry SDKs send events, sessions, user feedback and attachments: a Sentry envelope (newline-delimited JSON), optionally gzip, deflate, br or zstd encoded (20 MB at most, 1 MB per event, 10 MB per attachment). Authenticated with the project's DSN key in `X-Sentry-Auth: Sentry sentry_key=<public key>, sentry_version=7`, `?sentry_key=` or the envelope header's `dsn`; API tokens don't work here. Answers `{\"id\": \"<event id>\"}` at once; 429 with `Retry-After` and `X-Sentry-Rate-Limits` when a limit or the queue is full. Point an SDK at it with the DSN from the project's settings.")
         .body_type("application/x-sentry-envelope")
@@ -396,7 +449,7 @@ const OWN_ROUTES: &[RouteDoc] = &[
     r("GET", "/api/0/organizations/{org}/releases/{version}/", "api token", "sentry-cli", "`sentry-cli releases info`: the release across the projects that have it."),
     // -- System --
     r("GET", "/api/v1/openapi.json", "viewer", "System", "This reference as an OpenAPI 3.1 document."),
-    r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants. Tools: list_projects, list_issues, get_issue, release_health, analytics_summary, analytics_breakdown (web or app analytics); with a read-and-write token of an editor also resolve_issue and ignore_issue. Bearer API token; GET answers 405.")
+    r("POST", "/mcp", "api token", "System", "Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0) for AI assistants. Tools: list_projects, list_issues, get_issue, release_health, analytics_summary, analytics_breakdown (web or app analytics), instance_summary (the same as `GET /api/v1/summary`); with a read-and-write token of an editor also resolve_issue and ignore_issue. Bearer API token; GET answers 405.")
         .req(r#"{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_issues", "arguments": {"project": "shop", "query": "is:unresolved level:error"}}}"#),
     r("GET", "/healthz", "public", "System", "Liveness probe: always \"ok\"."),
 ];
@@ -748,6 +801,7 @@ pub fn router() -> Router<Core> {
         )
         .route("/projects/{id}/alerts", get(rules::history))
         .route("/notification-channels", get(rules::channels))
+        .route("/summary", get(summary::summary))
         .fallback(fallback)
         .route_layer(middleware::from_fn(
             vole_kit::http::rest::session_write_guard,

@@ -639,7 +639,7 @@ async fn mcp_tools_say_event_text_is_untrusted_and_writes_are_destructive() {
             assert_eq!(a["destructiveHint"], true, "{name} changes something");
         }
     }
-    assert_eq!((reads, writes), (7, 7), "{tools:?}");
+    assert_eq!((reads, writes), (8, 7), "{tools:?}");
     let describe = |name: &str| {
         tools.iter().find(|t| t["name"] == name).unwrap()["description"]
             .as_str()
@@ -686,7 +686,8 @@ async fn mcp_tools_read_and_triage_errors() {
             "get_issue",
             "release_health",
             "analytics_summary",
-            "analytics_breakdown"
+            "analytics_breakdown",
+            "instance_summary"
         ]
     );
     assert_eq!(
@@ -699,6 +700,7 @@ async fn mcp_tools_read_and_triage_errors() {
             "release_health",
             "analytics_summary",
             "analytics_breakdown",
+            "instance_summary",
             "resolve_issue",
             "ignore_issue",
             "create_project_group",
