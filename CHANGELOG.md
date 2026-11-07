@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.9.3...v0.10.0) (2026-11-07)
+
+
+### Features
+
+* **api:** add GET /api/v1/summary for dashboards ([#65](https://github.com/Ferdinand99/Keen-Kestrel/issues/65)) ([14bf277](https://github.com/Ferdinand99/Keen-Kestrel/commit/14bf27740704300f566898ccbbf5b0d446e5fd72))
+
+
+### Bug Fixes
+
+* **deps:** bump vole-kit to 0.8.1 ([#66](https://github.com/Ferdinand99/Keen-Kestrel/issues/66)) ([edc1b24](https://github.com/Ferdinand99/Keen-Kestrel/commit/edc1b24772c8972df9d045e405e5ed5732b0c153))
+
 ## [0.9.3](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.9.2...v0.9.3) (2026-11-05)
 
 
