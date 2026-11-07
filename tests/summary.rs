@@ -363,7 +363,22 @@ async fn a_wider_window_reaches_older_issues_and_sessions() {
 #[tokio::test]
 async fn hours_must_be_1_to_168() {
     let f = fixture().await;
-    for bad in ["0", "169", "-1", "1000000", "abc", "1.5", ""] {
+    // A whole number outside 1-168 is a validation error on `hours` (422)...
+    for bad in ["0", "169", "-1", "1000000"] {
+        let res = get(&f, &format!("?hours={bad}")).await;
+        assert_eq!(
+            res.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "hours={bad}: {}",
+            res.body
+        );
+        let err = &res.json()["error"];
+        assert_eq!(err["code"], "validation_failed", "hours={bad}");
+        assert!(err["fields"]["hours"].is_string(), "hours={bad}: {err}");
+        assert!(err["message"].is_string(), "hours={bad}");
+    }
+    // ...and a value that is not a whole number never reaches it (400 from the extractor).
+    for bad in ["abc", "1.5", "", "99999999999999999999"] {
         let res = get(&f, &format!("?hours={bad}")).await;
         assert_eq!(
             res.status,
@@ -371,9 +386,7 @@ async fn hours_must_be_1_to_168() {
             "hours={bad}: {}",
             res.body
         );
-        let err = &res.json()["error"];
-        assert_eq!(err["code"], "bad_request", "hours={bad}");
-        assert!(err["message"].is_string(), "hours={bad}");
+        assert_eq!(res.json()["error"]["code"], "bad_request", "hours={bad}");
     }
     for ok in [1, 24, 168] {
         let res = get(&f, &format!("?hours={ok}")).await;

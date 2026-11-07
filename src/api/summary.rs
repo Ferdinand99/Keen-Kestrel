@@ -43,15 +43,16 @@ pub struct SummaryQuery {
     hours: Option<i64>,
 }
 
-/// `hours`, or the default; 400 when it is outside 1–168.
+/// `hours`, or the default; 422 `validation_failed` (field `hours`) when it is outside 1–168.
 pub fn parse_hours(raw: Option<i64>) -> V1Result<i64> {
     let hours = raw.unwrap_or(DEFAULT_HOURS);
     if (1..=MAX_HOURS).contains(&hours) {
         Ok(hours)
     } else {
-        Err(V1Error::bad_request(format!(
-            "hours must be a whole number from 1 to {MAX_HOURS}."
-        )))
+        Err(V1Error::field(
+            "hours",
+            format!("hours must be a whole number from 1 to {MAX_HOURS}."),
+        ))
     }
 }
 
