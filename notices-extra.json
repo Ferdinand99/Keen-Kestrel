@@ -94,7 +94,7 @@
       "licenseSha256": "d3d2456f76414f2456104660ebd65aff1c04cd7966b942bdabd63f3cdb316a38",
       "lockPackage": {
         "name": "vole-kit",
-        "version": "0.8.0"
+        "version": "0.8.1"
       }
     }
   ]
