@@ -513,7 +513,7 @@ The REST API v1 (`src/api.rs`, `src/api/`; reference at `/api-docs`, `/api-docs.
 - `GET /api/v1/summary?hours=` (1–168, default 24; `src/api/summary.rs`): per project and in total, new and regressed
   issues in the window, unresolved issues, crash-free sessions (percent, `null` without sessions), today's (UTC) visitors
   and app users (`null` without that analytics) and the newest unresolved issue. Every figure is what the issue
-  list, release health and the analytics rollups already give, read for all projects at once (five statements, no
+  list, release health and the analytics rollups already give, read for all projects at once (five statements in one read transaction, no
   per-project queries); sessions are rolled up per UTC day, so the window reaches back to the start of the UTC day
   that holds `now − hours`;
 - the ingest endpoints (group "Ingest", access "a project's DSN key", with `POST /ingest/v1/event`, `GET /js/k.js` and

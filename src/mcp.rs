@@ -1373,7 +1373,18 @@ impl Handler for Kestrel {
             "analytics_summary" => Ok(self.analytics_summary(args).await),
             "analytics_breakdown" => Ok(self.analytics_breakdown(args).await),
             "instance_summary" => {
-                let hours = match crate::api::summary::parse_hours(int_arg(&args, "hours")) {
+                // Given but not a whole number (1.5, "abc", true): say so,
+                // don't fall back to the default.
+                let raw = match args.get("hours") {
+                    None | Some(Value::Null) => None,
+                    Some(_) => match int_arg(&args, "hours") {
+                        Some(h) => Some(h),
+                        None => {
+                            return Ok(tool_error("hours must be a whole number from 1 to 168."));
+                        }
+                    },
+                };
+                let hours = match crate::api::summary::parse_hours(raw) {
                     Ok(h) => h,
                     Err(e) => return Ok(tool_error(e.message)),
                 };

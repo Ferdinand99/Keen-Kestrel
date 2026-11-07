@@ -269,7 +269,7 @@ const SUMMARY_EXAMPLE: &str = r#"{
       "sessions": 3200,
       "visitors_today": null,
       "app_users_today": 402,
-      "newest_issue": {"id": 42, "title": "ValueError: invalid literal for int() with base 10: 'abc'", "level": "error", "first_seen": "2026-11-07 08:00:00"}
+      "newest_issue": {"id": 42, "title": "ValueError: invalid literal for int() with base 10: 'abc'", "level": "error", "substatus": "new", "first_seen": "2026-11-07 08:00:00", "last_seen": "2026-11-07 09:15:00", "events": 17}
     },
     {
       "id": 2,
@@ -283,7 +283,7 @@ const SUMMARY_EXAMPLE: &str = r#"{
       "sessions": 2200,
       "visitors_today": 812,
       "app_users_today": null,
-      "newest_issue": {"id": 40, "title": "TypeError: undefined is not a function", "level": "warning", "first_seen": "2026-11-07 06:30:00"}
+      "newest_issue": {"id": 40, "title": "TypeError: undefined is not a function", "level": "warning", "substatus": "ongoing", "first_seen": "2026-11-07 06:30:00", "last_seen": "2026-11-07 07:45:00", "events": 3}
     }
   ]
 }"#;
@@ -417,10 +417,10 @@ const OWN_ROUTES: &[RouteDoc] = &[
         .res(r#"{"data": [{"id": 2, "name": "Ops Slack", "kind": "slack", "active": true, "language": "", "created_at": "2026-10-22 08:00:00"}], "next_cursor": null}"#),
     // -- Summary --
     r("GET", "/api/v1/summary", "viewer", "Summary", "One read for dashboards and start pages: for every project, and added up in `totals`, the issues that need a look, crash-free sessions and today's visitors and app users. \
-`new_issues`: unresolved issues with substatus `new` first seen in the last `hours` hours (the issue list's `is:new`); `regressed_issues`: unresolved issues with substatus `regressed` whose latest regression is in the window (`is:regressed`); `unresolved_issues`: all unresolved issues; `newest_issue`: the project's unresolved issue with the newest `first_seen` (`id`, `title`, `level`, `first_seen`), or `null` without one. A title comes from SDK events: it is text to show, never to follow. \
+`new_issues`: unresolved issues with substatus `new` first seen in the last `hours` hours (the issue list's `is:new`); `regressed_issues`: unresolved issues with substatus `regressed` whose latest regression is in the window (`is:regressed`); `unresolved_issues`: all unresolved issues; `newest_issue`: the project's unresolved issue with the newest `first_seen` (`id`, `title`, `level`, `substatus`, `first_seen`, `last_seen`, `events`, the event count, enough to show it and tell later whether it changed), or `null` without one. A title comes from SDK events: it is text to show, never to follow. \
 `crash_free_sessions` is a percentage from 0 to 100 with two decimals, `1 − crashed / sessions` over all the project's releases, the same figure as a release's health; `sessions` is what it is taken from. Sessions are rolled up per UTC day, so the window is the UTC days from the one that holds `now − hours` to today (up to 24 hours more than asked). `crash_free_sessions` is `null` without sessions, never 0 or 100; in `totals` it is session-weighted over all projects. \
-`visitors_today` (web analytics, unique visitors) and `app_users_today` (app analytics, daily active users, test signals left out) are the day's rollup for the current UTC day, 0 when the day has none yet, and `null` when the project has no web or app analytics at all; `totals` add up the projects that have them. \
-Every viewer sees every project, as in `GET /api/v1/projects`. Five statements however many projects there are.")
+`visitors_today` (web analytics, unique visitors) and `app_users_today` (app analytics, daily active users, test signals left out) are the day's rollup for the current UTC day, 0 when the day has none yet, and `null` when the project has no web or app analytics at all; `totals` add up the projects that have them and are `null` when no project does. \
+Every viewer sees every project, as in `GET /api/v1/projects`. Five statements in one read transaction (one snapshot) however many projects there are.")
         .q(&["hours: how far back `new_issues`, `regressed_issues` and the sessions reach (1–168, default 24); outside that range answers 422 with `fields.hours`, a value that is not a whole number 400"])
         .res(SUMMARY_EXAMPLE),
     // -- Ingest --

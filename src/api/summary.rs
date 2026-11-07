@@ -13,7 +13,8 @@
 //! * visitors and app users today: `analytics_days`, the rollups the
 //!   analytics summary reads for the period `today` (UTC).
 //!
-//! Five statements on one connection, whatever the number of projects.
+//! Five statements in one read transaction (one snapshot), whatever the
+//! number of projects.
 
 use std::collections::HashMap;
 
@@ -81,8 +82,8 @@ const ISSUE_COUNTS: &str = "
 /// Each project's newest unresolved issue by `first_seen`, ties by id: the
 /// first row of the issue list sorted `first_seen`.
 const NEWEST_ISSUE: &str = "
-    SELECT id, project_id, title, level, first_seen FROM (
-        SELECT id, project_id, title, level, first_seen,
+    SELECT id, project_id, title, level, substatus, first_seen, last_seen, times_seen FROM (
+        SELECT id, project_id, title, level, substatus, first_seen, last_seen, times_seen,
                ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY first_seen DESC, id DESC) AS rn
         FROM issues WHERE status = 'unresolved')
     WHERE rn = 1";
@@ -123,11 +124,25 @@ fn today_count(any: bool, today: Option<i64>) -> Option<i64> {
     any.then(|| today.unwrap_or(0))
 }
 
+/// A total that becomes a number once any project has one.
+fn add_some(total: Option<i64>, n: Option<i64>) -> Option<i64> {
+    match (total, n) {
+        (None, n) => n,
+        (t, None) => t,
+        (Some(t), Some(n)) => Some(t + n),
+    }
+}
+
 /// The summary as of `now` (`YYYY-MM-DD HH:MM:SS`, UTC) over the last
 /// `hours` hours. The statements: projects, issue counts, newest issues,
 /// sessions, analytics.
+///
+/// The statements run in one deferred read transaction, so they all see the
+/// same snapshot: a project added or an issue written in between can't make
+/// the totals disagree with the projects.
 pub fn summary_at(c: &Connection, now: &str, hours: i64) -> rusqlite::Result<Value> {
     let back = format!("-{hours} hours");
+    let c = &c.unchecked_transaction()?;
     let projects = db::list(c)?;
 
     let counts: HashMap<i64, IssueCounts> = c
@@ -153,7 +168,10 @@ pub fn summary_at(c: &Connection, now: &str, hours: i64) -> rusqlite::Result<Val
                     "id": r.get::<_, i64>(0)?,
                     "title": r.get::<_, String>(2)?,
                     "level": r.get::<_, String>(3)?,
-                    "first_seen": r.get::<_, String>(4)?,
+                    "substatus": r.get::<_, String>(4)?,
+                    "first_seen": r.get::<_, String>(5)?,
+                    "last_seen": r.get::<_, String>(6)?,
+                    "events": r.get::<_, i64>(7)?,
                 }),
             ))
         })?
@@ -189,7 +207,8 @@ pub fn summary_at(c: &Connection, now: &str, hours: i64) -> rusqlite::Result<Val
 
     let mut total = IssueCounts::default();
     let mut total_health = Health::default();
-    let (mut visitors, mut app_users) = (0, 0);
+    // `None` until a project has that kind of analytics.
+    let (mut visitors, mut app_users): (Option<i64>, Option<i64>) = (None, None);
     let mut rows = Vec::with_capacity(projects.len());
     for p in &projects {
         let n = counts.get(&p.id).copied().unwrap_or_default();
@@ -199,8 +218,8 @@ pub fn summary_at(c: &Connection, now: &str, hours: i64) -> rusqlite::Result<Val
         total.new += n.new;
         total.regressed += n.regressed;
         total_health.add(&health);
-        visitors += web.unwrap_or(0);
-        app_users += app.unwrap_or(0);
+        visitors = add_some(visitors, web);
+        app_users = add_some(app_users, app);
         rows.push(json!({
             "id": p.id,
             "slug": p.slug,
