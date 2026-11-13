@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.10.0...v0.10.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **deps:** bump vole-kit to 0.8.2, rusqlite to 0.41 ([#68](https://github.com/Ferdinand99/Keen-Kestrel/issues/68)) ([71b4e0e](https://github.com/Ferdinand99/Keen-Kestrel/commit/71b4e0e1c814b18f0b926fb2c3d00ce176451d62))
+
 ## [0.10.0](https://github.com/Ferdinand99/Keen-Kestrel/compare/v0.9.3...v0.10.0) (2026-11-07)
 
 
